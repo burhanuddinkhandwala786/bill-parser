@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import openpyxl
 import pandas as pd
 import streamlit as st
@@ -8,6 +9,7 @@ from PIL import Image
 from google import genai
 from google.genai import types
 from rapidfuzz import process, utils
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Enterprise Invoice Engine", page_icon="🛡️", layout="wide")
@@ -78,7 +80,26 @@ def match_sku(raw_name):
             
     return raw_name, "⚠️ New SKU"
 
-# --- MILITARY-GRADE AI PARSING PROMPT ---
+# --- FAIL-SAFE RETRY & FALLBACK AI PARSING SYSTEM ---
+def is_server_error(exception):
+    """Detects 503 Overloaded or 429 Rate Limit server spikes."""
+    err_str = str(exception).lower()
+    return "503" in err_str or "unavailable" in err_str or "overloaded" in err_str or "429" in err_str
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=10),
+    retry=retry_if_exception(is_server_error),
+    reraise=True
+)
+def _call_gemini_with_retry(client, model_name, contents, config):
+    """Executes API request with up to 3 automatic retries on 503 errors."""
+    return client.models.generate_content(
+        model=model_name,
+        contents=contents,
+        config=config
+    )
+
 def extract_invoice_data(image):
     prompt = """
     Analyze this commercial supplier invoice image with 100% precision.
@@ -105,14 +126,22 @@ def extract_invoice_data(image):
     5. Default Unit to 'PCS' or 'LTR' if unspecified.
     """
     
-    response = client.models.generate_content(
-        model='gemini-3.5-flash',
-        contents=[image, prompt],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json"
-        )
-    )
-    return json.loads(response.text)
+    config = types.GenerateContentConfig(response_mime_type="application/json")
+    contents = [image, prompt]
+    
+    # Priority list of models (Primary -> Fallback 1 -> Fallback 2)
+    candidate_models = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.5-pro']
+    
+    last_error = None
+    for model_name in candidate_models:
+        try:
+            response = _call_gemini_with_retry(client, model_name, contents, config)
+            return json.loads(response.text)
+        except Exception as e:
+            last_error = e
+            continue  # Automatically failover to the next candidate model
+            
+    raise Exception(f"Server demand spike across all endpoints. Last Error: {last_error}")
 
 # --- WORKSPACE INTERFACE ---
 col1, col2 = st.columns([1, 1])
@@ -126,7 +155,7 @@ with col1:
         st.image(image, caption="Uploaded Invoice Image", use_column_width=True)
         
         if st.button("🚀 Process & Audit Invoice", type="primary"):
-            with st.spinner("AI Engine auditing invoice rates and tax structures..."):
+            with st.spinner("AI Engine auditing invoice rates and tax structures (with fail-safe protection)..."):
                 try:
                     raw_data = extract_invoice_data(image)
                     processed_items = []
