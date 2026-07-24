@@ -129,8 +129,8 @@ def extract_invoice_data(image):
     config = types.GenerateContentConfig(response_mime_type="application/json")
     contents = [image, prompt]
     
-    # Priority list of models (Primary -> Fallback 1 -> Fallback 2)
-    candidate_models = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.5-pro']
+    # Priority list of high-quota free tier models ONLY
+    candidate_models = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']
     
     last_error = None
     for model_name in candidate_models:
