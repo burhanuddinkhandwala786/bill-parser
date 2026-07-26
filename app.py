@@ -12,7 +12,7 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-# --- ENTERPRISE SAAS PAGE CONFIGURATION & LUXURY LIGHT STYLING ---
+# --- ENTERPRISE SAAS PAGE CONFIGURATION & STYLING ---
 st.set_page_config(
     page_title="Universal OS | Multi-Store AI Ingestion SaaS",
     page_icon="⚡",
@@ -20,209 +20,77 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Executive Light Theme CSS System (Apple / macOS Studio Aesthetic)
+# Custom Clean Executive Light Theme (No intrusive CSS overrides)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
     
-    /* Global Reset & Base Canvas */
-    html, body, [class*="css"] {
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        color: #0F172A !important;
-        -webkit-font-smoothing: antialiased;
-    }
-    
-    .stApp {
-        background-color: #F8FAFC !important;
-    }
-
-    /* Suppress Native Streamlit Header Overlaps */
-    header[data-testid="stHeader"] {
-        display: none !important;
+    html, body, [data-testid="stAppViewContainer"] {
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        background-color: #F8FAFC;
     }
     
     .block-container {
-        padding-top: 1.2rem !important;
+        padding-top: 2rem !important;
         padding-bottom: 2.5rem !important;
         padding-left: 2rem !important;
         padding-right: 2rem !important;
         max-width: 100% !important;
     }
     
-    /* Hero Banner Styling - Sleek Metallic Glass */
+    /* Hero Banner Styling */
     .saas-header {
-        background: linear-gradient(135deg, #FFFFFF 0%, #F1F5F9 100%);
-        padding: 24px 32px;
-        border-radius: 20px;
+        background: #FFFFFF;
+        padding: 20px 28px;
+        border-radius: 16px;
         color: #0F172A;
         margin-bottom: 24px;
         border: 1px solid #E2E8F0;
-        box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05);
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
         display: flex;
         justify-content: space-between;
         align-items: center;
     }
-    .saas-title-box {
-        display: flex;
-        flex-direction: column;
-    }
     .saas-title {
-        font-size: 26px;
+        font-size: 24px;
         font-weight: 700;
-        letter-spacing: -0.5px;
         margin: 0;
         color: #0F172A;
     }
     .saas-subtitle {
-        font-size: 14px;
+        font-size: 13px;
         color: #64748B;
         margin-top: 4px;
         margin-bottom: 0;
     }
-    .badge-container {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 8px;
-    }
     .status-badge {
-        display: inline-block;
         background-color: #DCFCE7;
         color: #15803D;
         font-size: 11px;
         font-weight: 700;
-        padding: 6px 14px;
+        padding: 4px 12px;
         border-radius: 20px;
         border: 1px solid #BBF7D0;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
     }
     .store-badge {
-        display: inline-block;
         background-color: #EEF2FF;
         color: #4338CA;
         font-size: 12px;
         font-weight: 600;
-        padding: 6px 14px;
-        border-radius: 10px;
+        padding: 4px 12px;
+        border-radius: 8px;
         border: 1px solid #C7D2FE;
-    }
-
-    /* Soft Glass File Dropzone */
-    div[data-testid="stFileUploader"] {
-        background: #FFFFFF !important;
-        border: 1.5px dashed #CBD5E1 !important;
-        border-radius: 16px !important;
-        padding: 16px !important;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03) !important;
-        transition: all 0.2s ease !important;
-    }
-    div[data-testid="stFileUploader"]:hover {
-        border-color: #4338CA !important;
-        background: #F8FAFC !important;
-        box-shadow: 0 6px 16px rgba(67, 56, 202, 0.08) !important;
-    }
-    div[data-testid="stFileUploader"] section {
-        background-color: transparent !important;
-    }
-    
-    /* Metrics Visual Cards */
-    div[data-testid="stMetric"] {
-        background-color: #FFFFFF !important;
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 16px !important;
-        padding: 18px 20px !important;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03) !important;
-    }
-    div[data-testid="stMetricLabel"] p {
-        font-size: 11px !important;
-        font-weight: 700 !important;
-        color: #64748B !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.6px !important;
-    }
-    div[data-testid="stMetricValue"] div {
-        font-size: 22px !important;
-        font-weight: 700 !important;
-        color: #0284C7 !important;
-    }
-
-    /* Executive Tabs Override */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: transparent;
-        border-bottom: 1px solid #E2E8F0;
-        padding-bottom: 8px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 42px;
-        border-radius: 12px;
-        padding: 0 20px;
-        background-color: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        color: #64748B;
-        font-weight: 600;
-        font-size: 13px;
-        transition: all 0.2s ease;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #4338CA !important;
-        color: #FFFFFF !important;
-        border: 1px solid #4338CA !important;
-        box-shadow: 0 4px 12px rgba(67, 56, 202, 0.25) !important;
-    }
-
-    /* High-Contrast Glass Data Editor Grid */
-    div[data-testid="stDataEditor"] {
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 16px !important;
-        overflow: hidden !important;
-        background-color: #FFFFFF !important;
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04) !important;
-    }
-
-    /* Clean Touch-Friendly Buttons */
-    .stButton>button, .stDownloadButton>button {
-        border-radius: 10px !important;
-        font-weight: 600 !important;
-        font-size: 13px !important;
-        padding: 10px 20px !important;
-        border: 1px solid #CBD5E1 !important;
-        background-color: #FFFFFF !important;
-        color: #0F172A !important;
-        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04) !important;
-        transition: all 0.2s ease-in-out !important;
-    }
-    .stButton>button:hover, .stDownloadButton>button:hover {
-        border-color: #4338CA !important;
-        color: #4338CA !important;
-        background-color: #F8FAFC !important;
-    }
-    button[kind="primary"] {
-        background: linear-gradient(135deg, #4338CA 0%, #3730A3 100%) !important;
-        border: none !important;
-        color: #FFFFFF !important;
-        box-shadow: 0 4px 14px rgba(67, 56, 202, 0.3) !important;
-    }
-    button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #3730A3 0%, #312E81 100%) !important;
-        box-shadow: 0 6px 18px rgba(67, 56, 202, 0.4) !important;
-    }
-
-    /* Sidebar Styling */
-    section[data-testid="stSidebar"] {
-        background-color: #FFFFFF !important;
-        border-right: 1px solid #E2E8F0 !important;
+        margin-left: 8px;
     }
 
     /* Card Panels */
     .info-card {
         background: #FFFFFF;
         border: 1px solid #E2E8F0;
-        border-radius: 16px;
-        padding: 20px;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
-        margin-bottom: 16px;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -263,7 +131,7 @@ if st.session_state["last_store_slug"] != selected_store_slug:
     st.rerun()
 
 # Register New Store
-with st.sidebar.expander("➕ Register New Store", expanded=False):
+with st.sidebar.expander("➕ Register New Store", expanded=True):
     new_store_name = st.text_input("New Store Name:")
     if st.button("Create Store Environment", use_container_width=True):
         if new_store_name.strip():
@@ -301,16 +169,16 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# Render Modernized SaaS Header
+# Render Header
 st.markdown(f"""
 <div class="saas-header">
-    <div class="saas-title-box">
+    <div>
         <p class="saas-title">⚡ Universal OS — AI Intake SaaS</p>
         <p class="saas-subtitle">Multi-Store Purchase Ingestion & Bulk Inventory Synchronizer</p>
     </div>
-    <div class="badge-container">
+    <div>
         <span class="status-badge">🟢 Commercial SaaS Active</span>
-        <span class="store-badge">📍 Active Store: <b>{ACTIVE_STORE_DISPLAY}</b></span>
+        <span class="store-badge">📍 Store: <b>{ACTIVE_STORE_DISPLAY}</b></span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -637,7 +505,6 @@ with tab_master:
     col_add, col_list = st.columns([1, 2])
     
     with col_add:
-        st.markdown('<div class="info-card">', unsafe_allow_html=True)
         st.markdown("#### ➕ Add New SKU")
         add_sku = st.text_input("SKU Name")
         add_cat = st.text_input("Category", value="General")
@@ -662,21 +529,19 @@ with tab_master:
                     st.rerun()
                 else:
                     st.warning("SKU already exists.")
-        st.markdown('</div>', unsafe_allow_html=True)
                     
     with col_list:
         st.markdown("#### 📋 Store SKUs")
         if not master_df.empty:
             st.dataframe(master_df, use_container_width=True)
             st.write(" ")
-            with st.expander("🗑️ Delete Existing SKU"):
-                sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
-                if st.button("Delete Selected SKU", use_container_width=True):
-                    if sku_to_delete != "-- None --":
-                        updated = master_df[master_df["Official_SKU_Name"] != sku_to_delete]
-                        save_master(updated, selected_store_slug)
-                        st.success(f"Removed '{sku_to_delete}'!")
-                        st.rerun()
+            sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
+            if st.button("🗑️ Delete Selected SKU", use_container_width=True):
+                if sku_to_delete != "-- None --":
+                    updated = master_df[master_df["Official_SKU_Name"] != sku_to_delete]
+                    save_master(updated, selected_store_slug)
+                    st.success(f"Removed '{sku_to_delete}'!")
+                    st.rerun()
         else:
             st.info("Master catalog for this store is empty.")
 
@@ -708,13 +573,9 @@ with tab_memory:
 with tab_guide:
     st.markdown("### 📖 Import Guide")
     st.markdown("""
-    <div class="info-card">
-        <ol style="line-height: 1.8; margin-bottom: 0;">
-            <li><b>Select Store:</b> Choose your active store in the sidebar or register a new one.</li>
-            <li><b>Upload Bills:</b> Upload purchase invoice photos in <b>Tab 1</b> and click <b>Process Invoices</b>.</li>
-            <li><b>Review & Audit:</b> Confirm quantities, HSN codes, and mapped SKUs.</li>
-            <li><b>Download Excel:</b> Click <b>Download File</b> to generate your spreadsheet.</li>
-            <li><b>Upload to ERP/Accounting:</b> Open your software → <b>Items / Inventory</b> → <b>Bulk Import</b>, select the generated <code>.xlsx</code> file, and upload.</li>
-        </ol>
-    </div>
-    """, unsafe_allow_html=True)
+    1. **Select Store:** Choose your active store in the sidebar or register a new one.
+    2. **Upload Bills:** Upload purchase invoice photos in **Tab 1** and click **Process Invoices**.
+    3. **Review & Audit:** Confirm quantities, HSN codes, and mapped SKUs.
+    4. **Download Excel:** Click **Download File** to generate your spreadsheet.
+    5. **Upload to ERP/Accounting:** Open your software → **Items / Inventory** → **Bulk Import**, select the generated `.xlsx` file, and upload.
+    """)
