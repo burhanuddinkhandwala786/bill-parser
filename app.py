@@ -20,110 +20,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- TARGETED MODERN SAAS OVERRIDES ---
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-
-    html, body, [data-testid="stAppViewContainer"] {
-        font-family: 'Plus Jakarta Sans', -apple-system, sans-serif !important;
-    }
-
-    /* Main Container Spacing */
-    .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 3rem !important;
-        max-width: 100% !important;
-    }
-
-    /* Hero Banner Card */
-    .hero-card {
-        background: linear-gradient(135deg, #111827 0%, #1F2937 100%);
-        border: 1px solid #374151;
-        border-radius: 14px;
-        padding: 20px 28px;
-        margin-bottom: 24px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .hero-title {
-        font-size: 24px;
-        font-weight: 700;
-        color: #FFFFFF !important;
-        margin: 0;
-    }
-
-    .hero-subtitle {
-        font-size: 13px;
-        color: #9CA3AF !important;
-        margin-top: 4px;
-        margin-bottom: 0;
-    }
-
-    .badge-group {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-    }
-
-    .status-chip {
-        background: rgba(16, 185, 129, 0.15);
-        color: #34D399 !important;
-        border: 1px solid rgba(16, 185, 129, 0.3);
-        padding: 5px 12px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-    }
-
-    .store-chip {
-        background: rgba(99, 102, 241, 0.15);
-        color: #A5B4FC !important;
-        border: 1px solid rgba(99, 102, 241, 0.3);
-        padding: 5px 12px;
-        border-radius: 8px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-
-    /* Tab Header Cleanups */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        border-bottom: 1px solid #374151;
-        padding-bottom: 4px;
-    }
-
-    .stTabs [data-baseweb="tab"] {
-        height: 40px;
-        border-radius: 8px;
-        padding: 0 16px;
-        color: #9CA3AF !important;
-        font-weight: 600;
-        font-size: 13px;
-    }
-
-    .stTabs [aria-selected="true"] {
-        background-color: #6366F1 !important;
-        color: #FFFFFF !important;
-    }
-
-    /* Uploader Box Fixes */
-    div[data-testid="stFileUploader"] {
-        border: 1px dashed #4B5563 !important;
-        border-radius: 12px !important;
-        background-color: #111827 !important;
-    }
-
-    /* Custom Labels */
-    label p, .stMarkdown p {
-        color: #F3F4F6 !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 # --- MULTI-STORE DIRECTORY & DATA ISOLATION ---
 DATA_DIR = "stores_data"
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -140,7 +36,7 @@ def sanitize_store_name(name):
     return "".join([c if c.isalnum() else "_" for c in name.strip()])
 
 # --- SIDEBAR: MULTI-TENANT SWITCHER ---
-st.sidebar.markdown("### 🏬 Store Management")
+st.sidebar.title("🏬 Store Directory")
 existing_stores = get_store_list()
 
 selected_store_slug = st.sidebar.selectbox(
@@ -170,8 +66,8 @@ with st.sidebar.expander("➕ Register New Store", expanded=True):
             st.sidebar.success(f"Store '{new_store_name}' initialized!")
             st.rerun()
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔑 API Configuration")
+st.sidebar.divider()
+st.sidebar.subheader("🔑 API Configuration")
 
 api_key = None
 try:
@@ -198,19 +94,16 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# --- HERO BANNER ---
-st.markdown(f"""
-<div class="hero-card">
-    <div>
-        <p class="hero-title">⚡ Universal OS — AI Intake</p>
-        <p class="hero-subtitle">Multi-Store Purchase Ingestion & Bulk Inventory Synchronizer</p>
-    </div>
-    <div class="badge-group">
-        <span class="status-chip">🟢 SAAS ACTIVE</span>
-        <span class="store-chip">📍 Store: <b>{ACTIVE_STORE_DISPLAY}</b></span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+# --- HEADER SECTION (NATIVE STREAMLIT) ---
+h_col1, h_col2 = st.columns([3, 1])
+with h_col1:
+    st.title("⚡ Universal OS — AI Intake SaaS")
+    st.caption("Multi-Store Purchase Ingestion & Bulk Inventory Synchronizer")
+
+with h_col2:
+    st.info(f"🟢 **SAAS ACTIVE**\n\n📍 Store: **{ACTIVE_STORE_DISPLAY}**")
+
+st.divider()
 
 # --- STORE DATA LOADERS & PERSISTENCE ---
 def load_json_memory():
@@ -340,7 +233,7 @@ with tab_parser:
     
     with col_upload:
         with st.container(border=True):
-            st.markdown("### 1. Multi-Bill Image Intake")
+            st.subheader("1. Multi-Bill Image Intake")
             uploaded_files = st.file_uploader(
                 f"Upload Purchase Bills for {ACTIVE_STORE_DISPLAY} (PNG, JPG, JPEG)",
                 type=["jpg", "jpeg", "png"],
@@ -349,7 +242,7 @@ with tab_parser:
 
     with col_info:
         with st.container(border=True):
-            st.markdown("### ⚡ Batch Status")
+            st.subheader("⚡ Batch Status")
             if uploaded_files:
                 st.success(f"📁 {len(uploaded_files)} File(s) Ready for Ingestion")
             else:
@@ -421,7 +314,7 @@ with tab_parser:
     # --- REVIEW & EDIT WORKSPACE ---
     if "parsed_df" in st.session_state:
         st.divider()
-        st.markdown("### 2. Live Audit Workspace")
+        st.subheader("2. Live Audit Workspace")
         st.caption("💡 Map raw vendor items to official SKUs. Selling Price defaults to 0.0 unless manually specified.")
         
         df = st.session_state["parsed_df"]
@@ -531,14 +424,14 @@ with tab_parser:
 # TAB 2: STORE MASTER CATALOG MANAGER
 # ==========================================
 with tab_master:
-    st.markdown(f"### ⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
+    st.subheader(f"⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
     st.caption("Manage official SKUs for this store catalog.")
     
     col_add, col_list = st.columns([1, 2])
     
     with col_add:
         with st.container(border=True):
-            st.markdown("#### ➕ Add New SKU")
+            st.markdown("### ➕ Add New SKU")
             add_sku = st.text_input("SKU Name")
             add_cat = st.text_input("Category", value="General")
             add_unit = st.selectbox("Default Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET"])
@@ -565,7 +458,7 @@ with tab_master:
                     
     with col_list:
         with st.container(border=True):
-            st.markdown("#### 📋 Store SKUs")
+            st.markdown("### 📋 Store SKUs")
             if not master_df.empty:
                 st.dataframe(master_df, use_container_width=True)
                 st.write(" ")
@@ -583,7 +476,7 @@ with tab_master:
 # TAB 3: VENDOR SKU MEMORY WORKSPACE
 # ==========================================
 with tab_memory:
-    st.markdown(f"### 🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
+    st.subheader(f"🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
     st.caption("Maps vendor bill descriptions to your store SKUs.")
     
     if mapping_memory:
@@ -605,7 +498,7 @@ with tab_memory:
 # TAB 4: IMPORT GUIDE
 # ==========================================
 with tab_guide:
-    st.markdown("### 📖 Import Guide")
+    st.subheader("📖 Import Guide")
     with st.container(border=True):
         st.markdown("""
         1. **Select Store:** Choose your active store in the sidebar or register a new one.
