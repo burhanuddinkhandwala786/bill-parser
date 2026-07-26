@@ -14,243 +14,92 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 # --- ENTERPRISE SAAS PAGE CONFIGURATION & STYLING ---
 st.set_page_config(
-    page_title="Universal OS",
+    page_title="Universal OS | Multi-Store AI Ingestion SaaS",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
 
 # Custom Enterprise SaaS CSS System
 st.markdown("""
 <style>
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
-html, body, [class*="css"]{
-    font-family:'Inter',sans-serif;
-}
-
-.stApp{
-    background:#F6F8FC;
-}
-
-/* Sidebar */
-
-[data-testid="stSidebar"]{
-    background:white;
-    border-right:1px solid #E5E7EB;
-}
-
-/* Header */
-
-.saas-header{
-    background:linear-gradient(135deg,#2563EB,#4F46E5);
-    color:white;
-    border-radius:18px;
-    padding:28px;
-    margin-bottom:25px;
-    box-shadow:0 18px 40px rgba(37,99,235,.18);
-}
-
-.saas-title{
-    font-size:30px;
-    font-weight:800;
-    margin:0;
-}
-
-.saas-subtitle{
-    margin-top:6px;
-    opacity:.9;
-    font-size:15px;
-}
-
-.status-badge{
-    float:right;
-    background:#22C55E;
-    color:white;
-    padding:6px 14px;
-    border-radius:25px;
-    font-size:12px;
-    font-weight:700;
-}
-
-.store-badge{
-    display:inline-block;
-    margin-top:15px;
-    padding:7px 16px;
-    background:rgba(255,255,255,.18);
-    border-radius:12px;
-    backdrop-filter:blur(8px);
-}
-
-/* Metric Cards */
-
-div[data-testid="stMetric"]{
-
-    background:white;
-
-    border:none;
-
-    border-radius:18px;
-
-    padding:22px;
-
-    box-shadow:0 6px 18px rgba(0,0,0,.06);
-
-    transition:.25s;
-
-}
-
-div[data-testid="stMetric"]:hover{
-
-    transform:translateY(-4px);
-
-}
-
-div[data-testid="stMetricLabel"]{
-
-    font-size:14px;
-
-    color:#6B7280;
-
-}
-
-div[data-testid="stMetricValue"]{
-
-    color:#111827;
-
-    font-size:30px;
-
-    font-weight:700;
-
-}
-
-/* Buttons */
-
-.stButton>button{
-
-    width:100%;
-
-    border:none;
-
-    border-radius:12px;
-
-    background:#2563EB;
-
-    color:white;
-
-    height:48px;
-
-    font-weight:600;
-
-    transition:.25s;
-
-}
-
-.stButton>button:hover{
-
-    background:#1D4ED8;
-
-    transform:translateY(-2px);
-
-}
-
-/* Upload */
-
-[data-testid="stFileUploader"]{
-
-    border:2px dashed #CBD5E1;
-
-    border-radius:16px;
-
-    background:white;
-
-    padding:20px;
-
-}
-
-/* Dataframe */
-
-[data-testid="stDataFrame"]{
-
-    border-radius:18px;
-
-    overflow:hidden;
-
-    box-shadow:0 6px 18px rgba(0,0,0,.05);
-
-}
-
-/* Tabs */
-
-.stTabs [role="tab"]{
-
-    border-radius:12px;
-
-    padding:12px 22px;
-
-    margin-right:6px;
-
-}
-
-.stTabs [aria-selected="true"]{
-
-    background:#2563EB;
-
-    color:white;
-
-}
-
-/* Progress */
-
-.stProgress > div > div{
-
-    background:#2563EB;
-
-}
-
-/* Success */
-
-.stSuccess{
-
-    border-radius:12px;
-
-}
-
-/* Warning */
-
-.stWarning{
-
-    border-radius:12px;
-
-}
-
-/* Error */
-
-.stError{
-
-    border-radius:12px;
-
-}
-
-/* Info */
-
-.stInfo{
-
-    border-radius:12px;
-
-}
-
-hr{
-
-    margin-top:28px;
-
-    margin-bottom:28px;
-
-}
-
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    .stApp {
+        background-color: #0B0F19;
+        color: #F3F4F6;
+    }
+    
+    /* Hero Banner Styling */
+    .saas-header {
+        background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #1E293B 100%);
+        padding: 28px 36px;
+        border-radius: 16px;
+        color: #FFFFFF;
+        margin-bottom: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    .saas-title {
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+        margin: 0;
+        color: #FFFFFF;
+    }
+    .saas-subtitle {
+        font-size: 14px;
+        color: #C7D2FE;
+        margin-top: 6px;
+        margin-bottom: 0;
+    }
+    .status-badge {
+        display: inline-block;
+        background-color: #10B981;
+        color: #FFFFFF;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 12px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        float: right;
+    }
+    .store-badge {
+        display: inline-block;
+        background-color: #6366F1;
+        color: #FFFFFF;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 12px;
+        border-radius: 6px;
+        margin-top: 10px;
+    }
+    
+    /* Metrics Visual Cards */
+    div[data-testid="stMetric"] {
+        background-color: #1E293B;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+    div[data-testid="stMetricValue"] {
+        font-size: 22px !important;
+        font-weight: 700 !important;
+        color: #38BDF8 !important;
+    }
+    
+    .stButton>button {
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.2s ease-in-out;
+    }
 </style>
-""", unsafe_allow_html=True,)
+""", unsafe_allow_html=True)
 
 # --- MULTI-STORE DIRECTORY & DATA ISOLATION ---
 DATA_DIR = "stores_data"
@@ -268,13 +117,7 @@ def sanitize_store_name(name):
     return "".join([c if c.isalnum() else "_" for c in name.strip()])
 
 # --- SIDEBAR: MULTI-TENANT SWITCHER ---
-st.sidebar.markdown("# ⚡ Universal OS")
-
-st.sidebar.caption("AI Inventory Platform")
-
-st.sidebar.divider()
-
-st.sidebar.markdown("### 🏬 Store Management")
+st.sidebar.markdown("## 🏬 Store Management")
 existing_stores = get_store_list()
 
 selected_store_slug = st.sidebar.selectbox(
@@ -304,7 +147,7 @@ with st.sidebar.expander("➕ Register New Store"):
             st.success(f"Store '{new_store_name}' initialized!")
             st.rerun()
 
-st.sidebar.divider()
+st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔑 API Configuration")
 
 api_key = None
@@ -332,51 +175,15 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# ======= TOP BAR =======
-
-left, right = st.columns([8, 2])
-
-with left:
-    st.markdown(f"""
-    <div style="
-        background:white;
-        border-radius:18px;
-        padding:22px;
-        box-shadow:0 2px 10px rgba(0,0,0,.06);
-        margin-bottom:20px;
-    ">
-        <div style="
-            font-size:28px;
-            font-weight:700;
-            color:#111827;
-        ">
-            ⚡ Universal OS
-        </div>
-
-        <div style="
-            color:#6B7280;
-            font-size:15px;
-            margin-top:6px;
-        ">
-            AI Purchase Invoice → Inventory Import
-        </div>
-
-        <div style="
-            margin-top:16px;
-            display:inline-block;
-            padding:8px 16px;
-            background:#EEF2FF;
-            color:#2563EB;
-            border-radius:999px;
-            font-weight:600;
-        ">
-            🏬 {ACTIVE_STORE_DISPLAY}
-        </div>
-    </div>
-    """, unsafe_allow_html=True,)
-
-with right:
-    st.success("🟢 System Ready")
+# Render Banner
+st.markdown(f"""
+<div class="saas-header">
+    <span class="status-badge">🟢 Commercial SaaS Active</span>
+    <p class="saas-title">⚡ Universal OS — AI Intake SaaS</p>
+    <p class="saas-subtitle">Multi-Store Purchase Ingestion & Bulk Inventory Synchronizer</p>
+    <span class="store-badge">📍 Active Store: <b>{ACTIVE_STORE_DISPLAY}</b></span>
+</div>
+""", unsafe_allow_html=True)
 
 # --- STORE DATA LOADERS & PERSISTENCE ---
 def load_json_memory():
@@ -491,20 +298,17 @@ def extract_invoice_data(image):
     raise Exception(f"AI Service busy across models: {last_error}")
 
 # --- WORKSPACE TABS ---
-page = st.sidebar.radio(
-    "Navigation",
-    [
-        "📥 Import Bills",
-        "📦 Master Catalog",
-        "🧠 Vendor Memory",
-        "📖 Guide"
-    ]
-)
+tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
+    "📥 Batch Invoice Parser", 
+    "⚙️ Store Master Catalog",
+    "📋 Vendor SKU Memory", 
+    "📖 Guide"
+])
 
 # ==========================================
 # TAB 1: BATCH INVOICE PARSER
 # ==========================================
-if page == "📥 Import Bills":
+with tab_parser:
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
@@ -696,7 +500,7 @@ if page == "📥 Import Bills":
 # ==========================================
 # TAB 2: STORE MASTER CATALOG MANAGER
 # ==========================================
-if page == "📦 Master Catalog":
+with tab_master:
     st.markdown(f"### ⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
     st.caption("Manage official SKUs for this store catalog.")
     
@@ -745,7 +549,7 @@ if page == "📦 Master Catalog":
 # ==========================================
 # TAB 3: VENDOR SKU MEMORY WORKSPACE
 # ==========================================
-if page == "🧠 Vendor Memory":
+with tab_memory:
     st.markdown(f"### 🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
     st.caption("Maps vendor bill descriptions to your store SKUs.")
     
@@ -766,7 +570,7 @@ if page == "🧠 Vendor Memory":
 # ==========================================
 # TAB 4: IMPORT GUIDE
 # ==========================================
-if page == "📖 Guide":
+with tab_guide:
     st.markdown("### 📖 Import Guide")
     st.markdown("""
     1. **Select Store:** Choose your active store in the sidebar or register a new one.
