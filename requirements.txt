@@ -2,6 +2,6 @@ streamlit
 google-genai
 pandas
 openpyxl
-rapidfuzz
 pillow
+rapidfuzz
 tenacity
