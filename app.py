@@ -21,14 +21,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- STRICT CSS REFINEMENTS FOR TABS & CARD ALIGNMENT ---
+# --- EXECUTIVE LIGHT THEME OVERRIDES ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
+    /* Global Canvas & Light Theme Base */
     html, body, [data-testid="stAppViewContainer"] {
         font-family: 'Plus Jakarta Sans', -apple-system, sans-serif !important;
-        background-color: #0B0F19 !important;
+        background-color: #F8FAFC !important;
+        color: #0F172A !important;
     }
 
     /* Suppress Streamlit Input Watermarks */
@@ -36,10 +38,16 @@ st.markdown("""
         display: none !important;
     }
 
-    /* FIX 1: ROUNDED SOFT TABS (NO BOXY CORNERS) */
+    /* Sidebar Light Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #FFFFFF !important;
+        border-right: 1px solid #E2E8F0 !important;
+    }
+
+    /* Light Theme Tab Navigation */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px !important;
-        border-bottom: 1px solid #1F2937 !important;
+        border-bottom: 1px solid #E2E8F0 !important;
         padding-bottom: 8px !important;
         margin-bottom: 20px !important;
         background-color: transparent !important;
@@ -49,11 +57,11 @@ st.markdown("""
     button[data-baseweb="tab"], 
     div[data-baseweb="tab"] {
         height: 38px !important;
-        border-radius: 12px !important; /* Soft rounded corners */
+        border-radius: 10px !important;
         padding: 0 16px !important;
-        background-color: #111827 !important;
-        border: 1px solid #1F2937 !important;
-        color: #9CA3AF !important;
+        background-color: #FFFFFF !important;
+        border: 1px solid #CBD5E1 !important;
+        color: #475569 !important;
         font-weight: 600 !important;
         font-size: 13px !important;
         transition: all 0.2s ease-in-out !important;
@@ -61,17 +69,17 @@ st.markdown("""
 
     .stTabs [aria-selected="true"], 
     button[aria-selected="true"] {
-        background: #4F46E5 !important;
+        background-color: #4338CA !important;
         color: #FFFFFF !important;
-        border-color: #6366F1 !important;
-        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3) !important;
+        border-color: #4338CA !important;
+        box-shadow: 0 4px 12px rgba(67, 56, 202, 0.2) !important;
     }
 
-    /* FIX 2: HEADER UNWRAPPED BADGE */
+    /* Header Badge Light Style */
     .header-badge {
-        background: rgba(99, 102, 241, 0.15);
-        border: 1px solid #6366F1;
-        color: #A5B4FC;
+        background: #EEF2FF;
+        border: 1px solid #C7D2FE;
+        color: #4338CA;
         padding: 8px 16px;
         border-radius: 10px;
         font-size: 13px;
@@ -82,22 +90,31 @@ st.markdown("""
         gap: 8px;
     }
 
-    /* FIX 3: METRIC VALUE TYPOGRAPHY */
+    /* Clean Card Container Styling */
+    div[data-testid="stVerticalBlock"] > div[data-testid="stBlock"] {
+        background-color: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05) !important;
+    }
+
+    /* Metric Typography */
     div[data-testid="stMetricValue"] div {
-        color: #38BDF8 !important;
+        color: #0284C7 !important;
         font-weight: 700 !important;
     }
 
-    /* BUTTON STYLING */
+    /* Buttons */
     .stButton > button {
-        border-radius: 10px !important;
+        border-radius: 8px !important;
         font-weight: 600 !important;
     }
 
     button[kind="primary"] {
-        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
+        background: linear-gradient(135deg, #4338CA 0%, #3730A3 100%) !important;
         border: none !important;
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3) !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 4px 12px rgba(67, 56, 202, 0.25) !important;
     }
 </style>
 """, unsafe_allow_html=True)
