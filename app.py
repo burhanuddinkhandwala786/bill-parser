@@ -12,27 +12,73 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-# --- ENTERPRISE PAGE CONFIGURATION & STYLING ---
-st.set_page_config(page_title="Universal OS | Enterprise Intake", page_icon="⚡", layout="wide")
+# --- ENTERPRISE SAAS PAGE CONFIGURATION & STYLING ---
+st.set_page_config(
+    page_title="Universal OS | AI Bulk Intake Engine",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
+# Custom Enterprise SaaS CSS System
 st.markdown("""
 <style>
-    .main-title {
+    /* Main Background & Font Styling */
+    .stApp {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    
+    /* SaaS Header Container */
+    .saas-header {
+        background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+        padding: 24px 32px;
+        border-radius: 12px;
+        color: #FFFFFF;
+        margin-bottom: 24px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    .saas-title {
         font-size: 26px;
         font-weight: 700;
-        color: #1E293B;
-        margin-bottom: 2px;
+        letter-spacing: -0.5px;
+        margin: 0;
+        color: #F8FAFC;
     }
-    .sub-title {
+    .saas-subtitle {
         font-size: 14px;
-        color: #64748B;
-        margin-bottom: 20px;
+        color: #94A3B8;
+        margin-top: 4px;
+        margin-bottom: 0;
+    }
+    .status-badge {
+        display: inline-block;
+        background-color: #10B981;
+        color: #FFFFFF;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        float: right;
+    }
+    
+    /* Metric Cards Styling */
+    div[data-testid="stMetricValue"] {
+        font-size: 22px !important;
+        font-weight: 700 !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">⚡ AI Invoice-to-Excel Bulk Stock Engine</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Upload purchase bills → Audit & Review Rates → Export 100% Compliant Excel sheet for instant bulk import.</div>', unsafe_allow_html=True)
+# Render SaaS Header
+st.markdown("""
+<div class="saas-header">
+    <span class="status-badge">🟢 AI Engine Active</span>
+    <p class="saas-title">⚡ Universal OS — AI Intake SaaS</p>
+    <p class="saas-subtitle">Automated Purchase Bill Parser & Accountune Bulk Inventory Synchronizer</p>
+</div>
+""", unsafe_allow_html=True)
 
 # --- SECURE API KEY INITIALIZATION ---
 api_key = None
@@ -46,10 +92,10 @@ if not api_key:
     api_key = os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
-    api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
+    api_key = st.sidebar.text_input("🔑 Enter Gemini API Key", type="password")
 
 if not api_key:
-    st.warning("⚠️ API Key Missing! Enter your Gemini API Key in the sidebar or Streamlit Secrets.")
+    st.info("👋 Welcome! Please enter your Gemini API Key in the sidebar or configure it in Streamlit Secrets to begin.")
     st.stop()
 
 client = genai.Client(api_key=api_key)
@@ -158,164 +204,232 @@ def extract_invoice_data(image):
             
     raise Exception(f"AI Service busy across models: {last_error}")
 
-# --- WORKSPACE UI: STEP 1 INTAKE ---
-st.subheader("1. Multi-Bill Intake")
-uploaded_files = st.file_uploader(
-    "Upload Supplier Purchase Invoices (Select One or Multiple PNG/JPG Files)",
-    type=["jpg", "jpeg", "png"],
-    accept_multiple_files=True
-)
+# --- WORKSPACE TABS ---
+tab_parser, tab_memory, tab_guide = st.tabs([
+    "📥 Batch Invoice Parser", 
+    "📋 Vendor SKU Memory", 
+    "📖 Accountune Import Guide"
+])
 
-if uploaded_files:
-    if st.button("🚀 Process & Parse Bills", type="primary"):
-        all_parsed_items = []
-        progress_bar = st.progress(0)
-        
-        for idx, file in enumerate(uploaded_files):
-            try:
-                img = Image.open(file)
-                parsed_json = extract_invoice_data(img)
-                supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
-                
-                for row in parsed_json.get("Line Items", []):
-                    qty = float(row.get("Quantity") or 1.0)
-                    gst_rate = float(row.get("GST Rate") or 18.0)
-                    base_rate = float(row.get("Listed Base Rate") or 0.0)
-                    total_inclusive = float(row.get("Listed Total Inclusive Rate") or 0.0)
-                    hsn_sac = str(row.get("HSN Code") or "").strip()
-                    
-                    # Tax computation
-                    if base_rate > 0:
-                        final_base = base_rate
-                        final_inclusive = base_rate * (1 + (gst_rate / 100))
-                    elif total_inclusive > 0:
-                        final_inclusive = total_inclusive
-                        final_base = total_inclusive / (1 + (gst_rate / 100))
-                    else:
-                        final_base = 0.0
-                        final_inclusive = 0.0
-                        
-                    raw_item_name = str(row.get("Item Name", "")).strip()
-                    matched_sku, match_type = match_sku(raw_item_name)
-                    suggested_sale = final_inclusive * 1.25 # Default 25% margin
-                    
-                    all_parsed_items.append({
-                        "Supplier Name": supplier,
-                        "Raw Vendor Item": raw_item_name,
-                        "Official SKU": matched_sku,
-                        "Match Status": match_type,
-                        "Current Quantity": qty,
-                        "Unit": str(row.get("Unit", "PCS")).upper(),
-                        "HSN/SAC": hsn_sac,
-                        "Category": "General",
-                        "GST Rate": gst_rate,
-                        "Purchase Price": round(final_base, 2),
-                        "Selling Price": round(suggested_sale, 2),
-                    })
-            except Exception as e:
-                st.error(f"Error reading {file.name}: {e}")
-                
-            progress_bar.progress((idx + 1) / len(uploaded_files))
-            
-        # Free memory RAM after processing batch
-        gc.collect()
-            
-        if all_parsed_items:
-            st.session_state["parsed_df"] = pd.DataFrame(all_parsed_items)
-            st.success("✅ Extraction complete! Review, edit, or adjust items below.")
-
-# --- WORKSPACE UI: STEP 2 REVIEW & ACCOUNTUNE EXPORT ---
-if "parsed_df" in st.session_state:
-    st.write("---")
-    st.subheader("2. Review & Adjust Before Export")
-    st.info("💡 Double-click any cell below to edit item names, prices, quantities, HSN codes, or GST %. Learned SKU memory updates automatically!")
+# ==========================================
+# TAB 1: BATCH INVOICE PARSER
+# ==========================================
+with tab_parser:
+    col_upload, col_info = st.columns([2, 1])
     
-    df = st.session_state["parsed_df"]
-    
-    # Live Enterprise Summary Metric Cards
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Line Items", len(df))
-    m2.metric("Total Bill Quantity", f"{df['Current Quantity'].sum():,.0f}")
-    m3.metric("Total Taxable Cost", f"₹{df['Purchase Price'].sum():,.2f}")
-    m4.metric("Est. Total Selling Value", f"₹{df['Selling Price'].sum():,.2f}")
-    
-    st.write(" ")
-    
-    edited_df = st.data_editor(
-        df,
-        num_rows="dynamic",
-        use_container_width=True,
-        column_config={
-            "Official SKU": st.column_config.SelectboxColumn("Official SKU Name", options=master_sku_list, required=True) if master_sku_list else "Official SKU",
-            "Purchase Price": st.column_config.NumberColumn("Purchase Price (₹)", format="₹%.2f"),
-            "Selling Price": st.column_config.NumberColumn("Selling Price (₹)", format="₹%.2f"),
-            "Current Quantity": st.column_config.NumberColumn("Current Quantity", min_value=0.1),
-            "GST Rate": st.column_config.NumberColumn("GST Rate (%)", min_value=0, max_value=28),
-            "HSN/SAC": st.column_config.TextColumn("HSN/SAC"),
-        }
-    )
-    
-    st.write("---")
-    st.markdown("### 📥 Generate Accountune Bulk Import File")
-    
-    if st.button("✅ Download Exact App-Compliant Import File", type="primary"):
-        # Update learned memory mappings
-        memory_updated = False
-        for idx, row in edited_df.iterrows():
-            raw = str(row["Raw Vendor Item"]).strip().upper()
-            official = str(row["Official SKU"]).strip()
-            if raw and official and raw != official:
-                mapping_memory[raw] = official
-                memory_updated = True
-                
-        if memory_updated:
-            save_json_memory(mapping_memory)
-            st.toast("🧠 Saved vendor SKU mapping to memory!")
-            
-        # Build openpyxl workbook matching the exact Accountune template layout
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Items"
-        
-        # Header Metadata Rows (Matching Accountune Template Rows 1 to 3)
-        ws.append(["UNIVERSAL HARDWARE AND PLYWOOD STORE"])
-        ws.append(["Items"])
-        ws.append([f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}"])
-        ws.append([]) # Empty Row 4
-        
-        # Row 5: Exact 13 Headers required by Accountune
-        exact_headers = [
-            "S. No.", "Name", "Current Quantity", "Unit", "HSN/SAC",
-            "Category", "GST Rate", "Selling Price", "Selling Price (Secondary)",
-            "Purchase Price", "Purchase Price (Secondary)", "Secondary Unit", "Ratio"
-        ]
-        ws.append(exact_headers)
-        
-        # Row 6+: Data Rows
-        for i, row in edited_df.iterrows():
-            ws.append([
-                i + 1,                              # S. No.
-                str(row["Official SKU"]),           # Name
-                float(row["Current Quantity"]),     # Current Quantity
-                str(row["Unit"]),                   # Unit
-                str(row["HSN/SAC"]),                # HSN/SAC
-                str(row["Category"]),               # Category
-                float(row["GST Rate"]),             # GST Rate
-                float(row["Selling Price"]),        # Selling Price
-                "",                                 # Selling Price (Secondary)
-                float(row["Purchase Price"]),       # Purchase Price
-                "",                                 # Purchase Price (Secondary)
-                "",                                 # Secondary Unit
-                ""                                  # Ratio
-            ])
-            
-        buffer = BytesIO()
-        wb.save(buffer)
-        buffer.seek(0)
-        
-        st.download_button(
-            label="📥 Download Compliant Excel File (Universal_Items_Import.xlsx)",
-            data=buffer.getvalue(),
-            file_name="Universal_Items_Import.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    with col_upload:
+        st.markdown("### 1. Multi-Bill Image Intake")
+        uploaded_files = st.file_uploader(
+            "Upload Supplier Purchase Invoices (PNG, JPG, JPEG)",
+            type=["jpg", "jpeg", "png"],
+            accept_multiple_files=True
         )
+
+    with col_info:
+        st.markdown("### ⚡ Batch Stats")
+        if uploaded_files:
+            st.success(f"📁 {len(uploaded_files)} File(s) Staged for Processing")
+        else:
+            st.info("No files selected. Upload one or multiple bills to begin.")
+
+    if uploaded_files:
+        if st.button("🚀 Process & Parse Invoices with AI", type="primary", use_container_width=True):
+            all_parsed_items = []
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for idx, file in enumerate(uploaded_files):
+                status_text.caption(f"Parsing bill {idx + 1} of {len(uploaded_files)}: **{file.name}**...")
+                try:
+                    img = Image.open(file)
+                    parsed_json = extract_invoice_data(img)
+                    supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
+                    
+                    for row in parsed_json.get("Line Items", []):
+                        qty = float(row.get("Quantity") or 1.0)
+                        gst_rate = float(row.get("GST Rate") or 18.0)
+                        base_rate = float(row.get("Listed Base Rate") or 0.0)
+                        total_inclusive = float(row.get("Listed Total Inclusive Rate") or 0.0)
+                        hsn_sac = str(row.get("HSN Code") or "").strip()
+                        
+                        # Tax computation
+                        if base_rate > 0:
+                            final_base = base_rate
+                            final_inclusive = base_rate * (1 + (gst_rate / 100))
+                        elif total_inclusive > 0:
+                            final_inclusive = total_inclusive
+                            final_base = total_inclusive / (1 + (gst_rate / 100))
+                        else:
+                            final_base = 0.0
+                            final_inclusive = 0.0
+                            
+                        raw_item_name = str(row.get("Item Name", "")).strip()
+                        matched_sku, match_type = match_sku(raw_item_name)
+                        suggested_sale = final_inclusive * 1.25 # Default 25% margin
+                        
+                        all_parsed_items.append({
+                            "Supplier Name": supplier,
+                            "Raw Vendor Item": raw_item_name,
+                            "Official SKU": matched_sku,
+                            "Match Status": match_type,
+                            "Current Quantity": qty,
+                            "Unit": str(row.get("Unit", "PCS")).upper(),
+                            "HSN/SAC": hsn_sac,
+                            "Category": "General",
+                            "GST Rate": gst_rate,
+                            "Purchase Price": round(final_base, 2),
+                            "Selling Price": round(suggested_sale, 2),
+                        })
+                except Exception as e:
+                    st.error(f"Error reading {file.name}: {e}")
+                    
+                progress_bar.progress((idx + 1) / len(uploaded_files))
+                
+            status_text.empty()
+            gc.collect() # Garbage collection for memory optimization
+                
+            if all_parsed_items:
+                st.session_state["parsed_df"] = pd.DataFrame(all_parsed_items)
+                st.toast("✅ Extraction complete! Review data below.", icon="🎉")
+
+    # --- REVIEW & EDIT WORKSPACE ---
+    if "parsed_df" in st.session_state:
+        st.write("---")
+        st.markdown("### 2. Live Audit & Review Workspace")
+        st.caption("💡 Double-click any cell below to edit item names, prices, quantities, HSN codes, or GST %. Learned SKU memory updates automatically upon export!")
+        
+        df = st.session_state["parsed_df"]
+        
+        # Live Financial Summary KPIs
+        total_items = len(df)
+        total_qty = df['Current Quantity'].sum()
+        total_taxable = (df['Purchase Price'] * df['Current Quantity']).sum()
+        total_selling = (df['Selling Price'] * df['Current Quantity']).sum()
+        est_margin = ((total_selling - total_taxable) / total_selling * 100) if total_selling > 0 else 0.0
+        
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Total Line Items", total_items)
+        m2.metric("Total Units", f"{total_qty:,.0f}")
+        m3.metric("Taxable Purchase Cost", f"₹{total_taxable:,.2f}")
+        m4.metric("Est. Selling Value", f"₹{total_selling:,.2f}")
+        m5.metric("Est. Margin %", f"{est_margin:.1f}%")
+        
+        st.write(" ")
+        
+        edited_df = st.data_editor(
+            df,
+            num_rows="dynamic",
+            use_container_width=True,
+            column_config={
+                "Official SKU": st.column_config.SelectboxColumn("Official SKU Name", options=master_sku_list, required=True) if master_sku_list else "Official SKU",
+                "Purchase Price": st.column_config.NumberColumn("Purchase Price (Excl. GST) ₹", format="₹%.2f"),
+                "Selling Price": st.column_config.NumberColumn("Selling Price (Incl. GST) ₹", format="₹%.2f"),
+                "Current Quantity": st.column_config.NumberColumn("Current Quantity", min_value=0.1),
+                "GST Rate": st.column_config.NumberColumn("GST Rate (%)", min_value=0, max_value=28),
+                "HSN/SAC": st.column_config.TextColumn("HSN/SAC"),
+            }
+        )
+        
+        st.write("---")
+        col_gen1, col_gen2 = st.columns([2, 1])
+        
+        with col_gen1:
+            st.markdown("### 3. Generate Accountune Template")
+            if st.button("✅ Generate & Download Accountune Excel File", type="primary", use_container_width=True):
+                # Save learned memory mappings
+                memory_updated = False
+                for idx, row in edited_df.iterrows():
+                    raw = str(row["Raw Vendor Item"]).strip().upper()
+                    official = str(row["Official SKU"]).strip()
+                    if raw and official and raw != official:
+                        mapping_memory[raw] = official
+                        memory_updated = True
+                        
+                if memory_updated:
+                    save_json_memory(mapping_memory)
+                    st.toast("🧠 Vendor SKU mappings updated in persistent memory!")
+                    
+                # Build openpyxl workbook matching Accountune template
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "Items"
+                
+                # Header Metadata Rows (Rows 1 to 3)
+                ws.append(["UNIVERSAL HARDWARE AND PLYWOOD STORE"])
+                ws.append(["Items"])
+                ws.append([f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}"])
+                ws.append([]) # Empty Row 4
+                
+                # Row 5: Exact 13 Headers required by Accountune
+                exact_headers = [
+                    "S. No.", "Name", "Current Quantity", "Unit", "HSN/SAC",
+                    "Category", "GST Rate", "Selling Price", "Selling Price (Secondary)",
+                    "Purchase Price", "Purchase Price (Secondary)", "Secondary Unit", "Ratio"
+                ]
+                ws.append(exact_headers)
+                
+                # Row 6+: Data Rows
+                for i, row in edited_df.iterrows():
+                    ws.append([
+                        i + 1,                              # S. No.
+                        str(row["Official SKU"]),           # Name
+                        float(row["Current Quantity"]),     # Current Quantity
+                        str(row["Unit"]),                   # Unit
+                        str(row["HSN/SAC"]),                # HSN/SAC
+                        str(row["Category"]),               # Category
+                        float(row["GST Rate"]),             # GST Rate
+                        float(row["Selling Price"]),        # Selling Price
+                        "",                                 # Selling Price (Secondary)
+                        float(row["Purchase Price"]),       # Purchase Price
+                        "",                                 # Purchase Price (Secondary)
+                        "",                                 # Secondary Unit
+                        ""                                  # Ratio
+                    ])
+                    
+                buffer = BytesIO()
+                wb.save(buffer)
+                buffer.seek(0)
+                
+                st.download_button(
+                    label="📥 Click Here to Download Universal_Items_Import.xlsx",
+                    data=buffer.getvalue(),
+                    file_name="Universal_Items_Import.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+
+# ==========================================
+# TAB 2: VENDOR SKU MEMORY WORKSPACE
+# ==========================================
+with tab_memory:
+    st.markdown("### 🧠 Learned Vendor SKU Memory")
+    st.caption("This system automatically remembers how supplier raw item names map to your official store SKU names.")
+    
+    if mapping_memory:
+        mem_df = pd.DataFrame([
+            {"Raw Vendor Item Name": k, "Mapped Official Store SKU": v}
+            for k, v in mapping_memory.items()
+        ])
+        st.dataframe(mem_df, use_container_width=True)
+        
+        if st.button("🗑️ Clear Learned Memory Cache"):
+            save_json_memory({})
+            st.success("Memory cache cleared successfully!")
+            st.rerun()
+    else:
+        st.info("No vendor mappings learned yet. Corrections made during review will automatically store here.")
+
+# ==========================================
+# TAB 3: ACCOUNTUNE IMPORT GUIDE
+# ==========================================
+with tab_guide:
+    st.markdown("### 📖 Accountune Bulk Import Instructions")
+    st.markdown("""
+    1. **Upload Purchase Bills:** Select supplier invoice images in **Tab 1** and click **Process & Parse Invoices**.
+    2. **Review Data:** Verify HSN/SAC codes, Quantities, and Prices in the interactive editor grid.
+    3. **Download Excel:** Click **Generate & Download Accountune Excel File**.
+    4. **Upload to Accountune:**
+       * Open **Accountune Desktop / Web App**.
+       * Navigate to **Items / Inventory** $\rightarrow$ **Bulk Import / Export**.
+       * Select the downloaded `Universal_Items_Import.xlsx` file and confirm the import.
+    """)
