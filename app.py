@@ -12,6 +12,7 @@ from google import genai
 from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
+from concurrent.futures import ThreadPoolExecutor
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -275,6 +276,48 @@ def extract_invoice_data(image):
             
     raise Exception(f"AI Service busy across models: {last_error}")
 
+def process_single_file(file):
+    file.seek(0)
+    img = Image.open(file)
+    parsed_json = extract_invoice_data(img)
+    supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
+    
+    items = []
+    for row in parsed_json.get("Line Items", []):
+        qty = float(row.get("Quantity") or 1.0)
+        gst_rate = float(row.get("GST Rate") or 18.0)
+        base_rate = float(row.get("Listed Base Rate") or 0.0)
+        total_inclusive = float(row.get("Listed Total Inclusive Rate") or 0.0)
+        hsn_sac = str(row.get("HSN Code") or "").strip()
+        
+        # Tax Reverse Math Handling
+        if base_rate > 0:
+            final_base = base_rate
+        elif total_inclusive > 0:
+            final_base = total_inclusive / (1 + (gst_rate / 100))
+        else:
+            final_base = 0.0
+            
+        raw_item_name = str(row.get("Item Name", "")).strip()
+        matched_sku, match_type = match_sku(raw_item_name)
+        
+        known_selling = get_known_selling_price(matched_sku)
+        
+        items.append({
+            "Supplier Name": supplier,
+            "Raw Vendor Item": raw_item_name,
+            "Official SKU": matched_sku,
+            "Match Status": match_type,
+            "Current Quantity": qty,
+            "Unit": str(row.get("Unit", "PCS")).upper(),
+            "HSN/SAC": hsn_sac,
+            "Category": "General",
+            "GST Rate": gst_rate,
+            "Purchase Price": round(final_base, 2),
+            "Selling Price": round(known_selling, 2)
+        })
+    return items
+
 # --- WORKSPACE TABS ---
 tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
     "📥 Batch Invoice Parser", 
@@ -313,70 +356,29 @@ with tab_parser:
             st.subheader("⚡ Ingestion Queue")
             if uploaded_files:
                 st.success(f"📁 **{len(uploaded_files)} File(s)** Staged")
-                st.caption("AI engine optimized for high-accuracy extraction.")
+                st.caption("Parallel AI engine ready to parse files concurrently.")
             else:
                 st.info("No files queued.")
                 st.caption("Drop purchase invoices to begin structured extraction.")
 
     if uploaded_files:
         st.write("")
-        if st.button("🚀 Process Invoices with AI Engine", type="primary", use_container_width=True):
+        if st.button("🚀 Process Invoices with Fast AI Engine", type="primary", use_container_width=True):
             if "parsed_df" in st.session_state:
                 del st.session_state["parsed_df"]
                 
             all_parsed_items = []
             
-            with st.status("Analyzing purchase bills with Multimodal AI...", expanded=True) as status_container:
-                progress_bar = st.progress(0)
-                
-                for idx, file in enumerate(uploaded_files):
-                    st.write(f"⚡ Processing **{file.name}** ({idx + 1}/{len(uploaded_files)})...")
-                    try:
-                        file.seek(0)
-                        img = Image.open(file)
-                        parsed_json = extract_invoice_data(img)
-                        supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
-                        
-                        for row in parsed_json.get("Line Items", []):
-                            qty = float(row.get("Quantity") or 1.0)
-                            gst_rate = float(row.get("GST Rate") or 18.0)
-                            base_rate = float(row.get("Listed Base Rate") or 0.0)
-                            total_inclusive = float(row.get("Listed Total Inclusive Rate") or 0.0)
-                            hsn_sac = str(row.get("HSN Code") or "").strip()
-                            
-                            # Tax Reverse Math Handling
-                            if base_rate > 0:
-                                final_base = base_rate
-                            elif total_inclusive > 0:
-                                final_base = total_inclusive / (1 + (gst_rate / 100))
-                            else:
-                                final_base = 0.0
-                                
-                            raw_item_name = str(row.get("Item Name", "")).strip()
-                            matched_sku, match_type = match_sku(raw_item_name)
-                            
-                            known_selling = get_known_selling_price(matched_sku)
-                            
-                            all_parsed_items.append({
-                                "Supplier Name": supplier,
-                                "Raw Vendor Item": raw_item_name,
-                                "Official SKU": matched_sku,
-                                "Match Status": match_type,
-                                "Current Quantity": qty,
-                                "Unit": str(row.get("Unit", "PCS")).upper(),
-                                "HSN/SAC": hsn_sac,
-                                "Category": "General",
-                                "GST Rate": gst_rate,
-                                "Purchase Price": round(final_base, 2),
-                                "Selling Price": round(known_selling, 2)
-                            })
-                    except Exception as e:
-                        st.error(f"Error reading {file.name}: {e}")
-                        
-                    progress_bar.progress((idx + 1) / len(uploaded_files))
+            with st.status("Parsing purchase bills concurrently with Multimodal AI...", expanded=True) as status_container:
+                # Parallel Execution across uploaded files
+                with ThreadPoolExecutor(max_workers=min(len(uploaded_files), 5)) as executor:
+                    results = list(executor.map(process_single_file, uploaded_files))
+                    
+                for res in results:
+                    all_parsed_items.extend(res)
                     
                 gc.collect()
-                status_container.update(label="✅ Ingestion & Extraction Complete!", state="complete", expanded=False)
+                status_container.update(label="✅ Ingestion & Batch Extraction Complete!", state="complete", expanded=False)
                 
             if all_parsed_items:
                 st.session_state["parsed_df"] = pd.DataFrame(all_parsed_items)
