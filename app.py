@@ -21,21 +21,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- SAFE NON-DESTRUCTIVE STYLING (THEME-AGNOSTIC) ---
+# --- MINIMAL FUNCTIONAL CSS (NO DANGEROUS COLOR OVERRIDES) ---
 st.markdown("""
 <style>
-    /* Suppress Streamlit Input Watermarks */
+    /* Prevent Streamlit 'Press Enter to apply' text from overlapping input fields */
     div[data-testid="InputInstructions"] {
         display: none !important;
     }
-
-    /* Clean Card Padding */
+    
+    /* Clean layout spacing */
     .block-container {
         padding-top: 1.5rem !important;
         padding-bottom: 2.5rem !important;
     }
 
-    /* Metric Highlights */
+    /* High contrast metric values */
     div[data-testid="stMetricValue"] div {
         color: #2563EB !important;
         font-weight: 700 !important;
@@ -227,14 +227,17 @@ def _call_gemini_with_retry(client, model_name, contents, config):
     )
 
 def extract_invoice_data(image):
-    # SPEED OPTIMIZATION: Resize & Compress image to JPEG in-memory before payload transmission
+    # ACCURACY-FIRST PREPROCESSING:
+    # 1. Resize to 1800px max dimension (preserves small text, decimals, and dense rows)
     img_copy = image.copy()
-    img_copy.thumbnail((1024, 1024))
+    img_copy.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
     
+    # 2. Convert & compress to high-quality JPEG (90% quality avoids OCR compression artifacts)
     buffer = BytesIO()
     if img_copy.mode in ("RGBA", "P"):
         img_copy = img_copy.convert("RGB")
-    img_copy.save(buffer, format="JPEG", quality=82, optimize=True)
+    
+    img_copy.save(buffer, format="JPEG", quality=90, optimize=True)
     buffer.seek(0)
     optimized_img = Image.open(buffer)
 
@@ -315,20 +318,20 @@ with tab_parser:
             st.subheader("⚡ Ingestion Queue")
             if uploaded_files:
                 st.success(f"📁 **{len(uploaded_files)} File(s)** Staged")
-                st.caption("AI engine will compress and parse lines in seconds.")
+                st.caption("AI engine optimized for high-accuracy extraction.")
             else:
                 st.info("No files queued.")
                 st.caption("Drop purchase invoices to begin structured extraction.")
 
     if uploaded_files:
         st.write("")
-        if st.button("🚀 Process Invoices with Fast AI Engine", type="primary", use_container_width=True):
+        if st.button("🚀 Process Invoices with AI Engine", type="primary", use_container_width=True):
             if "parsed_df" in st.session_state:
                 del st.session_state["parsed_df"]
                 
             all_parsed_items = []
             
-            with st.status("Compressing & Parsing Invoices with Multimodal AI...", expanded=True) as status_container:
+            with st.status("Analyzing purchase bills with Multimodal AI...", expanded=True) as status_container:
                 progress_bar = st.progress(0)
                 
                 for idx, file in enumerate(uploaded_files):
@@ -510,7 +513,7 @@ with tab_master:
     
     with col_add:
         with st.container(border=True):
-            st.markdown("### ➕ Add New Master SKU")
+            st.markdown("#### ➕ Add New Master SKU")
             add_sku = st.text_input("SKU Name (e.g. Copper Wire 1.5mm)")
             add_cat = st.text_input("Category", value="General")
             add_unit = st.selectbox("Default Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET"])
@@ -537,7 +540,7 @@ with tab_master:
                     
     with col_list:
         with st.container(border=True):
-            st.markdown("### 📋 Catalog Register")
+            st.markdown("#### 📋 Catalog Register")
             if not master_df.empty:
                 st.dataframe(master_df, use_container_width=True)
                 st.write("")
