@@ -12,7 +12,7 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-# --- ENTERPRISE SAAS PAGE CONFIGURATION & LUXURY LIGHT STYLING ---
+# --- ENTERPRISE SAAS PAGE CONFIGURATION & STYLING ---
 st.set_page_config(
     page_title="Universal OS | Multi-Store AI Ingestion SaaS",
     page_icon="⚡",
@@ -20,61 +20,45 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Executive Light Theme CSS System (Apple / macOS Studio Aesthetic)
+# Custom Enterprise SaaS CSS System
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
-    /* Reset & Clean Light Canvas */
     html, body, [class*="css"] {
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        color: #0F172A !important;
-        -webkit-font-smoothing: antialiased;
+        font-family: 'Inter', sans-serif;
     }
-    
     .stApp {
-        background-color: #F8FAFC !important;
-    }
-
-    /* Suppress Native Streamlit Header Overlaps */
-    header[data-testid="stHeader"] {
-        display: none !important;
+        background-color: #0B0F19;
+        color: #F3F4F6;
     }
     
-    .block-container {
-        padding-top: 1.2rem !important;
-        padding-bottom: 2.5rem !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
-        max-width: 100% !important;
-    }
-    
-    /* Hero Banner Styling - Sleek Metallic Glass */
+    /* Hero Banner Styling */
     .saas-header {
-        background: linear-gradient(135deg, #FFFFFF 0%, #F1F5F9 100%);
-        padding: 24px 32px;
-        border-radius: 20px;
-        color: #0F172A;
-        margin-bottom: 24px;
-        border: 1px solid #E2E8F0;
-        box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05);
+        background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #1E293B 100%);
+        padding: 28px 36px;
+        border-radius: 16px;
+        color: #FFFFFF;
+        margin-bottom: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
     }
     .saas-title {
-        font-size: 26px;
+        font-size: 28px;
         font-weight: 700;
         letter-spacing: -0.5px;
         margin: 0;
-        color: #0F172A;
+        color: #FFFFFF;
     }
     .saas-subtitle {
         font-size: 14px;
-        color: #64748B;
-        margin-top: 4px;
+        color: #C7D2FE;
+        margin-top: 6px;
         margin-bottom: 0;
     }
     .status-badge {
         display: inline-block;
-        background-color: #059669;
+        background-color: #10B981;
         color: #FFFFFF;
         font-size: 11px;
         font-weight: 700;
@@ -86,114 +70,33 @@ st.markdown("""
     }
     .store-badge {
         display: inline-block;
-        background-color: #4338CA;
+        background-color: #6366F1;
         color: #FFFFFF;
         font-size: 12px;
         font-weight: 600;
-        padding: 5px 14px;
-        border-radius: 8px;
+        padding: 4px 12px;
+        border-radius: 6px;
         margin-top: 10px;
-        box-shadow: 0 2px 8px rgba(67, 56, 202, 0.2);
-    }
-
-    /* Soft Glass File Dropzone */
-    div[data-testid="stFileUploader"] {
-        background: #FFFFFF !important;
-        border: 1.5px dashed #CBD5E1 !important;
-        border-radius: 16px !important;
-        padding: 16px !important;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03) !important;
-        transition: all 0.2s ease !important;
-    }
-    div[data-testid="stFileUploader"]:hover {
-        border-color: #4338CA !important;
-        background: #F8FAFC !important;
-        box-shadow: 0 6px 16px rgba(67, 56, 202, 0.08) !important;
-    }
-    div[data-testid="stFileUploader"] section {
-        background-color: transparent !important;
     }
     
     /* Metrics Visual Cards */
     div[data-testid="stMetric"] {
-        background-color: #FFFFFF !important;
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 16px !important;
-        padding: 18px 20px !important;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03) !important;
+        background-color: #1E293B;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
     }
-    div[data-testid="stMetricLabel"] p {
-        font-size: 11px !important;
-        font-weight: 700 !important;
-        color: #64748B !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.6px !important;
-    }
-    div[data-testid="stMetricValue"] div {
+    div[data-testid="stMetricValue"] {
         font-size: 22px !important;
         font-weight: 700 !important;
-        color: #0284C7 !important;
+        color: #38BDF8 !important;
     }
-
-    /* Executive Tabs Override */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: transparent;
-        border-bottom: 1px solid #E2E8F0;
-        padding-bottom: 6px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 40px;
-        border-radius: 12px;
-        padding: 0 18px;
-        background-color: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        color: #64748B;
+    
+    .stButton>button {
+        border-radius: 8px;
         font-weight: 600;
-        font-size: 13px;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #4338CA !important;
-        color: #FFFFFF !important;
-        border: none !important;
-        box-shadow: 0 4px 12px rgba(67, 56, 202, 0.25) !important;
-    }
-
-    /* High-Contrast Glass Data Editor Grid */
-    div[data-testid="stDataEditor"] {
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 16px !important;
-        overflow: hidden !important;
-        background-color: #FFFFFF !important;
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04) !important;
-    }
-
-    /* Clean Touch-Friendly Buttons */
-    .stButton>button, .stDownloadButton>button {
-        border-radius: 10px !important;
-        font-weight: 600 !important;
-        font-size: 13px !important;
-        padding: 10px 20px !important;
-        border: 1px solid #CBD5E1 !important;
-        background-color: #FFFFFF !important;
-        color: #0F172A !important;
-        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04) !important;
-        transition: all 0.2s ease-in-out !important;
-    }
-    .stButton>button:hover, .stDownloadButton>button:hover {
-        border-color: #4338CA !important;
-        color: #4338CA !important;
-        background-color: #F8FAFC !important;
-    }
-    button[kind="primary"] {
-        background: linear-gradient(135deg, #4338CA 0%, #3730A3 100%) !important;
-        border: none !important;
-        color: #FFFFFF !important;
-        box-shadow: 0 4px 14px rgba(67, 56, 202, 0.3) !important;
-    }
-    button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #3730A3 0%, #312E81 100%) !important;
-        box-shadow: 0 6px 18px rgba(67, 56, 202, 0.4) !important;
+        transition: all 0.2s ease-in-out;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -234,9 +137,9 @@ if st.session_state["last_store_slug"] != selected_store_slug:
     st.rerun()
 
 # Register New Store
-with st.sidebar.expander("➕ Register New Store", expanded=True):
+with st.sidebar.expander("➕ Register New Store"):
     new_store_name = st.text_input("New Store Name:")
-    if st.button("Create Store Environment", use_container_width=True):
+    if st.button("Create Store Environment"):
         if new_store_name.strip():
             slug = sanitize_store_name(new_store_name)
             new_path = os.path.join(DATA_DIR, slug)
@@ -611,7 +514,7 @@ with tab_master:
         add_gst = st.selectbox("GST Rate (%)", options=[0, 5, 12, 18, 28], index=3)
         add_price = st.number_input("Selling Price ₹ (Optional)", min_value=0.0, step=10.0)
         
-        if st.button("Save SKU to Master List", use_container_width=True):
+        if st.button("Save SKU to Master List"):
             if add_sku.strip():
                 clean_sku = add_sku.strip()
                 if clean_sku not in master_sku_list:
@@ -634,7 +537,7 @@ with tab_master:
         if not master_df.empty:
             st.dataframe(master_df, use_container_width=True)
             sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
-            if st.button("🗑️ Delete Selected SKU", use_container_width=True):
+            if st.button("🗑️ Delete Selected SKU"):
                 if sku_to_delete != "-- None --":
                     updated = master_df[master_df["Official_SKU_Name"] != sku_to_delete]
                     save_master(updated, selected_store_slug)
