@@ -180,7 +180,7 @@ st.markdown(f"""
 <div class="saas-header">
     <span class="status-badge">🟢 Commercial SaaS Active</span>
     <p class="saas-title">⚡ Universal OS — AI Intake SaaS</p>
-    <p class="saas-subtitle">Multi-Store Purchase Ingestion & Accountune Bulk Inventory Synchronizer</p>
+    <p class="saas-subtitle">Multi-Store Purchase Ingestion & Bulk Inventory Synchronizer</p>
     <span class="store-badge">📍 Active Store: <b>{ACTIVE_STORE_DISPLAY}</b></span>
 </div>
 """, unsafe_allow_html=True)
@@ -302,7 +302,7 @@ tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
     "📥 Batch Invoice Parser", 
     "⚙️ Store Master Catalog",
     "📋 Vendor SKU Memory", 
-    "📖 Accountune Guide"
+    "📖 Guide"
 ])
 
 # ==========================================
@@ -418,7 +418,7 @@ with tab_parser:
         )
         
         st.write("---")
-        if st.button("✅ Generate & Download Accountune Excel File", type="primary", use_container_width=True):
+        if st.button("✅ Generate & Download Excel File", type="primary", use_container_width=True):
             memory_updated = False
             master_updated = False
             current_master_skus = set(master_sku_list)
@@ -490,7 +490,7 @@ with tab_parser:
             buffer.seek(0)
             
             st.download_button(
-                label=f"📥 Download Accountune File for {ACTIVE_STORE_DISPLAY}",
+                label=f"📥 Download File for {ACTIVE_STORE_DISPLAY}",
                 data=buffer.getvalue(),
                 file_name=f"{selected_store_slug}_Items_Import.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
