@@ -332,15 +332,51 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# Render Banner
-st.markdown(f"""
-<div class="saas-header">
-    <span class="status-badge">🟢 Commercial SaaS Active</span>
-    <p class="saas-title">⚡ Universal OS — AI Intake SaaS</p>
-    <p class="saas-subtitle">Multi-Store Purchase Ingestion & Bulk Inventory Synchronizer</p>
-    <span class="store-badge">📍 Active Store: <b>{ACTIVE_STORE_DISPLAY}</b></span>
-</div>
-""", unsafe_allow_html=True)
+# ======= TOP BAR =======
+
+left, right = st.columns([8, 2])
+
+with left:
+    st.markdown(f"""
+    <div style="
+        background:white;
+        border-radius:18px;
+        padding:22px;
+        box-shadow:0 2px 10px rgba(0,0,0,.06);
+        margin-bottom:20px;
+    ">
+        <div style="
+            font-size:28px;
+            font-weight:700;
+            color:#111827;
+        ">
+            ⚡ Universal OS
+        </div>
+
+        <div style="
+            color:#6B7280;
+            font-size:15px;
+            margin-top:6px;
+        ">
+            AI Purchase Invoice → Inventory Import
+        </div>
+
+        <div style="
+            margin-top:16px;
+            display:inline-block;
+            padding:8px 16px;
+            background:#EEF2FF;
+            color:#2563EB;
+            border-radius:999px;
+            font-weight:600;
+        ">
+            🏬 {ACTIVE_STORE_DISPLAY}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with right:
+    st.success("🟢 System Ready")
 
 # --- STORE DATA LOADERS & PERSISTENCE ---
 def load_json_memory():
@@ -458,11 +494,10 @@ def extract_invoice_data(image):
 page = st.sidebar.radio(
     "Navigation",
     [
-        "🏠 Dashboard",
         "📥 Import Bills",
         "📦 Master Catalog",
-        "🧠 SKU Memory",
-        "⚙ Settings"
+        "🧠 Vendor Memory",
+        "📖 Guide"
     ]
 )
 
@@ -710,7 +745,7 @@ if page == "📦 Master Catalog":
 # ==========================================
 # TAB 3: VENDOR SKU MEMORY WORKSPACE
 # ==========================================
-if page == "🧠 SKU Memory":
+if page == "🧠 Vendor Memory":
     st.markdown(f"### 🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
     st.caption("Maps vendor bill descriptions to your store SKUs.")
     
@@ -731,7 +766,7 @@ if page == "🧠 SKU Memory":
 # ==========================================
 # TAB 4: IMPORT GUIDE
 # ==========================================
-if page == "⚙ Settings":
+if page == "📖 Guide":
     st.markdown("### 📖 Import Guide")
     st.markdown("""
     1. **Select Store:** Choose your active store in the sidebar or register a new one.
