@@ -226,11 +226,21 @@ with tab_parser:
         )
 
     with col_info:
-        st.markdown("### ⚡ Batch Stats")
-        if uploaded_files:
-            st.success(f"📁 {len(uploaded_files)} File(s) Staged for Processing")
-        else:
-            st.info("No files selected. Upload one or multiple bills to begin.")
+        st.markdown("### ⚡ Quick Add New SKU")
+        new_sku_input = st.text_input("Add new Official SKU on the go:")
+        if st.button("➕ Add SKU to Master List"):
+            if new_sku_input.strip():
+                clean_new_sku = new_sku_input.strip()
+                if clean_new_sku not in master_sku_list:
+                    # Append new SKU to CSV
+                    new_row = pd.DataFrame([{"Official_SKU_Name": clean_new_sku, "Category": "General", "Default_Unit": "PCS", "GST_Rate": 18}])
+                    updated_master = pd.concat([master_df, new_row], ignore_index=True)
+                    updated_master.to_csv(MASTER_FILE, index=False)
+                    st.cache_data.clear() # Clear Streamlit cache to refresh master list
+                    st.success(f"Added '{clean_new_sku}' to Official SKU List!")
+                    st.rerun()
+                else:
+                    st.warning("SKU already exists in master list!")
 
     if uploaded_files:
         if st.button("🚀 Process & Parse Invoices with AI", type="primary", use_container_width=True):
