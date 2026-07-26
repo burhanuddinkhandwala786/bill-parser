@@ -21,100 +21,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- EXECUTIVE LIGHT THEME OVERRIDES ---
+# --- MINIMAL FUNCTIONAL CSS (NO DANGEROUS COLOR OVERRIDES) ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-
-    /* Global Canvas & Light Theme Base */
-    html, body, [data-testid="stAppViewContainer"] {
-        font-family: 'Plus Jakarta Sans', -apple-system, sans-serif !important;
-        background-color: #F8FAFC !important;
-        color: #0F172A !important;
-    }
-
-    /* Suppress Streamlit Input Watermarks */
+    /* Prevent Streamlit 'Press Enter to apply' text from overlapping input fields */
     div[data-testid="InputInstructions"] {
         display: none !important;
-    }
-
-    /* Sidebar Light Styling */
-    section[data-testid="stSidebar"] {
-        background-color: #FFFFFF !important;
-        border-right: 1px solid #E2E8F0 !important;
-    }
-
-    /* Light Theme Tab Navigation */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px !important;
-        border-bottom: 1px solid #E2E8F0 !important;
-        padding-bottom: 8px !important;
-        margin-bottom: 20px !important;
-        background-color: transparent !important;
-    }
-
-    .stTabs [data-baseweb="tab"], 
-    button[data-baseweb="tab"], 
-    div[data-baseweb="tab"] {
-        height: 38px !important;
-        border-radius: 10px !important;
-        padding: 0 16px !important;
-        background-color: #FFFFFF !important;
-        border: 1px solid #CBD5E1 !important;
-        color: #475569 !important;
-        font-weight: 600 !important;
-        font-size: 13px !important;
-        transition: all 0.2s ease-in-out !important;
-    }
-
-    .stTabs [aria-selected="true"], 
-    button[aria-selected="true"] {
-        background-color: #4338CA !important;
-        color: #FFFFFF !important;
-        border-color: #4338CA !important;
-        box-shadow: 0 4px 12px rgba(67, 56, 202, 0.2) !important;
-    }
-
-    /* Header Badge Light Style */
-    .header-badge {
-        background: #EEF2FF;
-        border: 1px solid #C7D2FE;
-        color: #4338CA;
-        padding: 8px 16px;
-        border-radius: 10px;
-        font-size: 13px;
-        font-weight: 600;
-        white-space: nowrap;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    /* Clean Card Container Styling */
-    div[data-testid="stVerticalBlock"] > div[data-testid="stBlock"] {
-        background-color: #FFFFFF !important;
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 12px !important;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05) !important;
-    }
-
-    /* Metric Typography */
-    div[data-testid="stMetricValue"] div {
-        color: #0284C7 !important;
-        font-weight: 700 !important;
-    }
-
-    /* Buttons */
-    .stButton > button {
-        border-radius: 8px !important;
-        font-weight: 600 !important;
-    }
-
-    button[kind="primary"] {
-        background: linear-gradient(135deg, #4338CA 0%, #3730A3 100%) !important;
-        border: none !important;
-        color: #FFFFFF !important;
-        box-shadow: 0 4px 12px rgba(67, 56, 202, 0.25) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -211,7 +123,7 @@ MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
 # --- HEADER SECTION ---
-header_left, header_right = st.columns([3, 1.2])
+header_left, header_right = st.columns([3, 1])
 
 with header_left:
     st.title("⚡ Universal OS")
@@ -219,7 +131,7 @@ with header_left:
 
 with header_right:
     st.write("")
-    st.markdown(f'<div class="header-badge">📍 Active: <b>{ACTIVE_STORE_DISPLAY}</b></div>', unsafe_allow_html=True)
+    st.info(f"📍 Active: **{ACTIVE_STORE_DISPLAY}**")
 
 st.divider()
 
@@ -348,9 +260,15 @@ tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
 # ==========================================
 with tab_parser:
     sm1, sm2, sm3 = st.columns(3)
-    sm1.metric("Master SKUs Registered", len(master_sku_list))
-    sm2.metric("Learned Vendor Rules", len(mapping_memory))
-    sm3.metric("Engine Status", "🟢 Active")
+    with sm1:
+        with st.container(border=True):
+            st.metric("Master SKUs Registered", len(master_sku_list))
+    with sm2:
+        with st.container(border=True):
+            st.metric("Learned Vendor Rules", len(mapping_memory))
+    with sm3:
+        with st.container(border=True):
+            st.metric("Engine Status", "🟢 Ready")
 
     st.write("")
 
@@ -358,7 +276,7 @@ with tab_parser:
     
     with col_upload:
         with st.container(border=True):
-            st.markdown("### 1. Ingestion Dropzone")
+            st.subheader("1. Ingestion Dropzone")
             st.caption("Upload purchase bills (PNG, JPG, JPEG) to extract line items.")
             uploaded_files = st.file_uploader(
                 "Upload Bills",
@@ -369,10 +287,10 @@ with tab_parser:
 
     with col_info:
         with st.container(border=True):
-            st.markdown("### ⚡ Ingestion Queue")
+            st.subheader("⚡ Ingestion Queue")
             if uploaded_files:
                 st.success(f"📁 **{len(uploaded_files)} File(s)** Ready")
-                st.caption("AI Ready to analyze invoice lines, HSN codes, and tax rates.")
+                st.caption("Multimodal AI ready to parse line items, HSN codes, and tax rates.")
             else:
                 st.info("No files in queue.")
                 st.caption("Drop purchase invoices to begin structured extraction.")
@@ -444,15 +362,21 @@ with tab_parser:
     # --- REVIEW & EDIT WORKSPACE ---
     if "parsed_df" in st.session_state:
         st.divider()
-        st.markdown("### 2. Live Inventory Audit Workspace")
+        st.subheader("2. Live Inventory Audit Workspace")
         st.caption("Verify AI extraction, mapped SKUs, and rate details before exporting to accounting software.")
         
         df = st.session_state["parsed_df"]
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("Total Line Items", f"{len(df)} Items")
-        m2.metric("Total Stock Quantity", f"{df['Current Quantity'].sum():,.0f} Units")
-        m3.metric("Taxable Purchase Value", f"₹{(df['Purchase Price'] * df['Current Quantity']).sum():,.2f}")
+        with m1:
+            with st.container(border=True):
+                st.metric("Total Line Items", f"{len(df)} Items")
+        with m2:
+            with st.container(border=True):
+                st.metric("Total Stock Quantity", f"{df['Current Quantity'].sum():,.0f} Units")
+        with m3:
+            with st.container(border=True):
+                st.metric("Taxable Purchase Value", f"₹{(df['Purchase Price'] * df['Current Quantity']).sum():,.2f}")
         
         st.write("")
         
@@ -554,7 +478,7 @@ with tab_parser:
 # TAB 2: STORE MASTER CATALOG MANAGER
 # ==========================================
 with tab_master:
-    st.markdown(f"### ⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
+    st.subheader(f"⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
     st.caption("Define official product SKUs, tax rates, and default units for this store.")
     
     col_add, col_list = st.columns([1, 2])
@@ -607,7 +531,7 @@ with tab_master:
 # TAB 3: VENDOR SKU MEMORY WORKSPACE
 # ==========================================
 with tab_memory:
-    st.markdown(f"### 🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
+    st.subheader(f"🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
     st.caption("AI remembers how vendor-specific invoice descriptions map to your store SKUs.")
     
     if mapping_memory:
@@ -629,7 +553,7 @@ with tab_memory:
 # TAB 4: IMPORT GUIDE
 # ==========================================
 with tab_guide:
-    st.markdown("### 📖 Standard Operating Procedure")
+    st.subheader("📖 Standard Operating Procedure")
     with st.container(border=True):
         st.markdown("""
         ### How to Process & Sync Invoices:
