@@ -41,6 +41,18 @@ st.markdown("""
         color: #2563EB !important;
         font-weight: 700 !important;
     }
+
+    /* Equalize container heights across adjacent columns */
+    div[data-testid="stColumn"] {
+        display: flex;
+        flex-direction: column;
+    }
+    div[data-testid="stColumn"] > div {
+        flex: 1;
+    }
+    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] {
+        height: 100% !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
