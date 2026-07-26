@@ -23,81 +23,232 @@ st.set_page_config(
 # Custom Enterprise SaaS CSS System
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-    .stApp {
-        background-color: #0B0F19;
-        color: #F3F4F6;
-    }
-    
-    /* Hero Banner Styling */
-    .saas-header {
-        background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #1E293B 100%);
-        padding: 28px 36px;
-        border-radius: 16px;
-        color: #FFFFFF;
-        margin-bottom: 28px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-    }
-    .saas-title {
-        font-size: 28px;
-        font-weight: 700;
-        letter-spacing: -0.5px;
-        margin: 0;
-        color: #FFFFFF;
-    }
-    .saas-subtitle {
-        font-size: 14px;
-        color: #C7D2FE;
-        margin-top: 6px;
-        margin-bottom: 0;
-    }
-    .status-badge {
-        display: inline-block;
-        background-color: #10B981;
-        color: #FFFFFF;
-        font-size: 11px;
-        font-weight: 700;
-        padding: 4px 12px;
-        border-radius: 20px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        float: right;
-    }
-    .store-badge {
-        display: inline-block;
-        background-color: #6366F1;
-        color: #FFFFFF;
-        font-size: 12px;
-        font-weight: 600;
-        padding: 4px 12px;
-        border-radius: 6px;
-        margin-top: 10px;
-    }
-    
-    /* Metrics Visual Cards */
-    div[data-testid="stMetric"] {
-        background-color: #1E293B;
-        border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 16px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-    }
-    div[data-testid="stMetricValue"] {
-        font-size: 22px !important;
-        font-weight: 700 !important;
-        color: #38BDF8 !important;
-    }
-    
-    .stButton>button {
-        border-radius: 8px;
-        font-weight: 600;
-        transition: all 0.2s ease-in-out;
-    }
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+html, body, [class*="css"]{
+    font-family:'Inter',sans-serif;
+}
+
+.stApp{
+    background:#F6F8FC;
+}
+
+/* Sidebar */
+
+[data-testid="stSidebar"]{
+    background:white;
+    border-right:1px solid #E5E7EB;
+}
+
+/* Header */
+
+.saas-header{
+    background:linear-gradient(135deg,#2563EB,#4F46E5);
+    color:white;
+    border-radius:18px;
+    padding:28px;
+    margin-bottom:25px;
+    box-shadow:0 18px 40px rgba(37,99,235,.18);
+}
+
+.saas-title{
+    font-size:30px;
+    font-weight:800;
+    margin:0;
+}
+
+.saas-subtitle{
+    margin-top:6px;
+    opacity:.9;
+    font-size:15px;
+}
+
+.status-badge{
+    float:right;
+    background:#22C55E;
+    color:white;
+    padding:6px 14px;
+    border-radius:25px;
+    font-size:12px;
+    font-weight:700;
+}
+
+.store-badge{
+    display:inline-block;
+    margin-top:15px;
+    padding:7px 16px;
+    background:rgba(255,255,255,.18);
+    border-radius:12px;
+    backdrop-filter:blur(8px);
+}
+
+/* Metric Cards */
+
+div[data-testid="stMetric"]{
+
+    background:white;
+
+    border:none;
+
+    border-radius:18px;
+
+    padding:22px;
+
+    box-shadow:0 6px 18px rgba(0,0,0,.06);
+
+    transition:.25s;
+
+}
+
+div[data-testid="stMetric"]:hover{
+
+    transform:translateY(-4px);
+
+}
+
+div[data-testid="stMetricLabel"]{
+
+    font-size:14px;
+
+    color:#6B7280;
+
+}
+
+div[data-testid="stMetricValue"]{
+
+    color:#111827;
+
+    font-size:30px;
+
+    font-weight:700;
+
+}
+
+/* Buttons */
+
+.stButton>button{
+
+    width:100%;
+
+    border:none;
+
+    border-radius:12px;
+
+    background:#2563EB;
+
+    color:white;
+
+    height:48px;
+
+    font-weight:600;
+
+    transition:.25s;
+
+}
+
+.stButton>button:hover{
+
+    background:#1D4ED8;
+
+    transform:translateY(-2px);
+
+}
+
+/* Upload */
+
+[data-testid="stFileUploader"]{
+
+    border:2px dashed #CBD5E1;
+
+    border-radius:16px;
+
+    background:white;
+
+    padding:20px;
+
+}
+
+/* Dataframe */
+
+[data-testid="stDataFrame"]{
+
+    border-radius:18px;
+
+    overflow:hidden;
+
+    box-shadow:0 6px 18px rgba(0,0,0,.05);
+
+}
+
+/* Tabs */
+
+.stTabs [role="tab"]{
+
+    border-radius:12px;
+
+    padding:12px 22px;
+
+    margin-right:6px;
+
+}
+
+.stTabs [aria-selected="true"]{
+
+    background:#2563EB;
+
+    color:white;
+
+}
+
+/* Progress */
+
+.stProgress > div > div{
+
+    background:#2563EB;
+
+}
+
+/* Success */
+
+.stSuccess{
+
+    border-radius:12px;
+
+}
+
+/* Warning */
+
+.stWarning{
+
+    border-radius:12px;
+
+}
+
+/* Error */
+
+.stError{
+
+    border-radius:12px;
+
+}
+
+/* Info */
+
+.stInfo{
+
+    border-radius:12px;
+
+}
+
+hr{
+
+    margin-top:28px;
+
+    margin-bottom:28px;
+
+}
+
 </style>
 """, unsafe_allow_html=True)
 
