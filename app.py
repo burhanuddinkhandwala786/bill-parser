@@ -12,202 +12,179 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-# --- LUXURY EXECUTIVE DESIGN SYSTEM CONFIGURATION ---
+# --- EXECUTIVE DESIGN SYSTEM ---
 st.set_page_config(
-    page_title="Universal OS | Executive Workspace",
+    page_title="Universal OS | Enterprise Workspace",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded" # Keep sidebar visible by default
 )
 
-# Apple / Mercedes-Benz MBUX Glassmorphism Design Injection
+# Complete Streamlit Style Override (Linear/Vercel Theme)
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
-    /* Global Reset & Pure Dark Obsidian Canvas */
     html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif !important;
-        color: #F1F5F9 !important;
-        -webkit-font-smoothing: antialiased;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        color: #E2E8F0 !important;
     }
     
     .stApp {
-        background-color: #030508 !important;
+        background-color: #090A0F !important;
     }
 
-    /* 1. HIDE ALL STREAMLIT NATIVE CHROME & OVERLAPPING HEADERS */
+    /* HIDE NATIVE OVERLAPPING STREAMLIT HEADER */
     header[data-testid="stHeader"] {
         display: none !important;
     }
     
     .block-container {
-        padding-top: 1.2rem !important;
-        padding-bottom: 2.5rem !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
+        padding-top: 1.5rem !important;
+        padding-bottom: 3rem !important;
+        padding-left: 1.5rem !important;
+        padding-right: 1.5rem !important;
         max-width: 100% !important;
     }
 
-    /* 2. APPLE-INSPIRED TOP NAVIGATION / BAR */
+    /* MODERN TOP COMMAND BAR */
     .command-bar {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
-        gap: 16px;
-        background: rgba(255, 255, 255, 0.025);
-        backdrop-filter: blur(24px);
-        -webkit-backdrop-filter: blur(24px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        padding: 14px 28px;
-        border-radius: 20px;
+        gap: 12px;
+        background: #12151E;
+        border: 1px solid #1F2430;
+        padding: 12px 20px;
+        border-radius: 12px;
         margin-bottom: 24px;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     }
     .brand-logo {
-        font-size: 15px;
-        font-weight: 600;
-        letter-spacing: -0.3px;
-        color: #FFFFFF;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: -0.2px;
+        color: #F8FAFC;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
     }
     .brand-badge {
-        background: rgba(255, 255, 255, 0.08);
-        color: #CBD5E1;
-        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: rgba(99, 102, 241, 0.15);
+        color: #818CF8;
+        border: 1px solid rgba(99, 102, 241, 0.3);
         font-size: 10px;
-        font-weight: 600;
-        padding: 3px 10px;
-        border-radius: 20px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 4px;
         text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    .store-pill {
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        color: #38BDF8;
-        font-size: 12px;
-        font-weight: 500;
-        padding: 5px 16px;
-        border-radius: 20px;
         letter-spacing: 0.5px;
     }
 
     .section-label {
-        font-size: 10px;
+        font-size: 11px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 1.5px;
+        letter-spacing: 1px;
         color: #64748B;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
     }
 
-    /* 3. MERCEDES LUXURY GLASS FILE DROPZONE */
+    /* SLEEK FILE DROPZONE */
     div[data-testid="stFileUploader"] {
-        background: rgba(255, 255, 255, 0.02) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 20px !important;
-        padding: 20px !important;
-        backdrop-filter: blur(12px) !important;
-        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        background: #12151E !important;
+        border: 1px dashed #283245 !important;
+        border-radius: 12px !important;
+        padding: 16px !important;
+        transition: all 0.2s ease !important;
     }
     div[data-testid="stFileUploader"]:hover {
-        border-color: rgba(255, 255, 255, 0.3) !important;
-        background: rgba(255, 255, 255, 0.04) !important;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+        border-color: #6366F1 !important;
+        background: #151A26 !important;
     }
     div[data-testid="stFileUploader"] section {
         background-color: transparent !important;
     }
 
-    /* 4. EXECUTIVE METRIC TILES */
+    /* EXECUTIVE METRIC TILES */
     div[data-testid="stMetric"] {
-        background: rgba(255, 255, 255, 0.02) !important;
-        backdrop-filter: blur(16px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        border-radius: 20px !important;
-        padding: 20px 24px !important;
-        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4) !important;
+        background: #12151E !important;
+        border: 1px solid #1F2430 !important;
+        border-radius: 12px !important;
+        padding: 16px !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
     }
     div[data-testid="stMetricLabel"] p {
         font-size: 10px !important;
         font-weight: 700 !important;
         color: #64748B !important;
         text-transform: uppercase !important;
-        letter-spacing: 1.2px !important;
+        letter-spacing: 0.8px !important;
     }
     div[data-testid="stMetricValue"] div {
-        font-size: 24px !important;
-        font-weight: 600 !important;
+        font-size: 20px !important;
+        font-weight: 700 !important;
         color: #F8FAFC !important;
-        letter-spacing: -0.5px !important;
     }
 
-    /* 5. LUXURY MINIMALIST TABS */
+    /* VERCEL-STYLE SLEEK TABS */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
+        gap: 4px;
         background-color: transparent;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        padding-bottom: 8px;
+        border-bottom: 1px solid #1F2430;
+        padding-bottom: 6px;
     }
     .stTabs [data-baseweb="tab"] {
-        height: 42px;
-        border-radius: 20px;
-        padding: 0 20px;
-        background-color: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.06);
+        height: 36px;
+        border-radius: 6px;
+        padding: 0 16px;
+        background-color: transparent;
+        border: none;
         color: #64748B;
         font-weight: 500;
-        font-size: 12px;
-        letter-spacing: 0.3px;
-        transition: all 0.2s ease;
+        font-size: 13px;
     }
     .stTabs [aria-selected="true"] {
-        background-color: rgba(255, 255, 255, 0.1) !important;
-        color: #FFFFFF !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
-    }
-
-    /* 6. GLASS DATA EDITOR GRID */
-    div[data-testid="stDataEditor"] {
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        border-radius: 20px !important;
-        overflow: hidden !important;
-        background-color: rgba(255, 255, 255, 0.015) !important;
-        backdrop-filter: blur(20px) !important;
-    }
-
-    /* 7. OVERRIDE STREAMLIT RED/PRIMARY BUTTONS WITH CHROME / INDIGO LUXURY GRADIENT */
-    .stButton>button, .stDownloadButton>button {
-        border-radius: 20px !important;
-        font-weight: 500 !important;
-        font-size: 13px !important;
-        padding: 12px 24px !important;
-        border: 1px solid rgba(255, 255, 255, 0.12) !important;
-        background: rgba(255, 255, 255, 0.04) !important;
+        background-color: #12151E !important;
         color: #F8FAFC !important;
-        backdrop-filter: blur(12px) !important;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        border: 1px solid #1F2430 !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    /* DATA EDITOR GRID */
+    div[data-testid="stDataEditor"] {
+        border: 1px solid #1F2430 !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        background-color: #12151E !important;
+    }
+
+    /* OVERRIDE STREAMLIT RED PRIMARY BUTTON */
+    .stButton>button, .stDownloadButton>button {
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        font-size: 13px !important;
+        padding: 10px 20px !important;
+        border: 1px solid #283245 !important;
+        background: #12151E !important;
+        color: #F8FAFC !important;
+        transition: all 0.2s ease !important;
     }
     .stButton>button:hover, .stDownloadButton>button:hover {
-        background: rgba(255, 255, 255, 0.1) !important;
-        border-color: rgba(255, 255, 255, 0.3) !important;
+        background: #1A2234 !important;
+        border-color: #6366F1 !important;
         color: #FFFFFF !important;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
     }
     button[kind="primary"] {
-        background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%) !important;
+        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
         border: none !important;
         color: #FFFFFF !important;
-        box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3) !important;
+        box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35) !important;
     }
     button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #2563EB 0%, #1E40AF 100%) !important;
-        box-shadow: 0 12px 32px rgba(59, 130, 246, 0.45) !important;
+        background: linear-gradient(135deg, #4F46E5 0%, #4338CA 100%) !important;
+        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -232,7 +209,7 @@ st.sidebar.markdown("## 🏬 Store Operations")
 existing_stores = get_store_list()
 
 selected_store_slug = st.sidebar.selectbox(
-    "Active Catalog Context",
+    "Active Store Catalog",
     options=existing_stores,
     format_func=lambda x: x.replace("_", " ")
 )
@@ -246,8 +223,8 @@ if st.session_state["last_store_slug"] != selected_store_slug:
     st.session_state["last_store_slug"] = selected_store_slug
     st.rerun()
 
-with st.sidebar.expander("➕ Register Store Environment"):
-    new_store_name = st.text_input("Store Name:")
+with st.sidebar.expander("➕ Register Store Environment", expanded=True):
+    new_store_name = st.text_input("New Store Name:")
     if st.button("Initialize Environment"):
         if new_store_name.strip():
             slug = sanitize_store_name(new_store_name)
@@ -282,14 +259,17 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# --- TOP MINIMAL COMMAND BAR ---
+# --- TOP COMMAND BAR ---
 st.markdown(f"""
 <div class="command-bar">
     <div class="brand-logo">
-        ⚡ Universal OS <span class="brand-badge">EXECUTIVE EDITION</span>
+        ⚡ Universal OS <span class="brand-badge">PRO INTAKE</span>
     </div>
-    <div class="store-pill">
-        📍 CATALOG: <b>{ACTIVE_STORE_DISPLAY}</b>
+    <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:12px; color:#64748B;">Active Catalog:</span>
+        <span style="background:#181E2A; border:1px solid #283245; color:#38BDF8; font-size:11px; font-weight:600; padding:4px 12px; border-radius:20px;">
+            📍 {ACTIVE_STORE_DISPLAY}
+        </span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -408,7 +388,7 @@ def extract_invoice_data(image):
 
 # --- WORKSPACE TABS ---
 tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
-    "⚡ Batch Processing", 
+    "⚡ Batch Intake", 
     "⚙️ Master Catalog", 
     "🧠 AI Memory", 
     "📖 Integration Guide"
