@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- MODERN MODERNIZED CSS SYSTEM (FIXES BOXY TABS & WRAPPED BADGES) ---
+# --- STRICT CSS REFINEMENTS FOR TABS & CARD ALIGNMENT ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
@@ -31,24 +31,26 @@ st.markdown("""
         background-color: #0B0F19 !important;
     }
 
-    /* Remove Streamlit Input Instructions Overlap */
+    /* Suppress Streamlit Input Watermarks */
     div[data-testid="InputInstructions"] {
         display: none !important;
     }
 
-    /* FIX 1: ROUNDED MODERN PILL TABS (NO BOXY SHARP HIGHLIGHTS) */
+    /* FIX 1: ROUNDED SOFT TABS (NO BOXY CORNERS) */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 12px;
+        gap: 8px !important;
         border-bottom: 1px solid #1F2937 !important;
         padding-bottom: 8px !important;
         margin-bottom: 20px !important;
-        background: transparent !important;
+        background-color: transparent !important;
     }
 
-    .stTabs [data-baseweb="tab"], button[data-baseweb="tab"] {
+    .stTabs [data-baseweb="tab"], 
+    button[data-baseweb="tab"], 
+    div[data-baseweb="tab"] {
         height: 38px !important;
-        border-radius: 20px !important; /* Soft pill shape */
-        padding: 0 18px !important;
+        border-radius: 12px !important; /* Soft rounded corners */
+        padding: 0 16px !important;
         background-color: #111827 !important;
         border: 1px solid #1F2937 !important;
         color: #9CA3AF !important;
@@ -57,26 +59,15 @@ st.markdown("""
         transition: all 0.2s ease-in-out !important;
     }
 
-    .stTabs [aria-selected="true"], button[aria-selected="true"] {
-        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
+    .stTabs [aria-selected="true"], 
+    button[aria-selected="true"] {
+        background: #4F46E5 !important;
         color: #FFFFFF !important;
-        border: 1px solid #6366F1 !important;
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35) !important;
+        border-color: #6366F1 !important;
+        box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3) !important;
     }
 
-    /* FIX 2: SIDEBAR ACTION STYLING */
-    section[data-testid="stSidebar"] {
-        background-color: #0F172A !important;
-        border-right: 1px solid #1E293B !important;
-    }
-
-    section[data-testid="stSidebar"] .stTabs [data-baseweb="tab"] {
-        border-radius: 10px !important;
-        height: 34px !important;
-        font-size: 12px !important;
-    }
-
-    /* FIX 3: DYNAMIC UNWRAPPED HEADER BADGE */
+    /* FIX 2: HEADER UNWRAPPED BADGE */
     .header-badge {
         background: rgba(99, 102, 241, 0.15);
         border: 1px solid #6366F1;
@@ -91,13 +82,13 @@ st.markdown("""
         gap: 8px;
     }
 
-    /* Metric Visual Upgrades */
+    /* FIX 3: METRIC VALUE TYPOGRAPHY */
     div[data-testid="stMetricValue"] div {
         color: #38BDF8 !important;
         font-weight: 700 !important;
     }
 
-    /* Smooth Button Rounding */
+    /* BUTTON STYLING */
     .stButton > button {
         border-radius: 10px !important;
         font-weight: 600 !important;
@@ -148,7 +139,7 @@ if st.session_state["last_store_slug"] != selected_store_slug:
 
 st.sidebar.divider()
 
-# --- SIDEBAR STORE MANAGEMENT EXPANDERS ---
+# --- SIDEBAR STORE ACTIONS ---
 with st.sidebar.expander("✏️ Rename Active Store", expanded=False):
     current_display = selected_store_slug.replace("_", " ")
     renamed_input = st.text_input("New Name:", value=current_display, key="rename_input_field")
@@ -202,7 +193,7 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# --- HEADER SECTION (UNWRAPPED DYNAMIC BADGE) ---
+# --- HEADER SECTION ---
 header_left, header_right = st.columns([3, 1.2])
 
 with header_left:
@@ -340,15 +331,9 @@ tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
 # ==========================================
 with tab_parser:
     sm1, sm2, sm3 = st.columns(3)
-    with sm1:
-        with st.container(border=True):
-            st.metric("Master SKUs Registered", len(master_sku_list))
-    with sm2:
-        with st.container(border=True):
-            st.metric("Learned Vendor Rules", len(mapping_memory))
-    with sm3:
-        with st.container(border=True):
-            st.metric("Engine Status", "🟢 Active")
+    sm1.metric("Master SKUs Registered", len(master_sku_list))
+    sm2.metric("Learned Vendor Rules", len(mapping_memory))
+    sm3.metric("Engine Status", "🟢 Active")
 
     st.write("")
 
@@ -448,15 +433,9 @@ with tab_parser:
         df = st.session_state["parsed_df"]
         
         m1, m2, m3 = st.columns(3)
-        with m1:
-            with st.container(border=True):
-                st.metric("Total Line Items", f"{len(df)} Items")
-        with m2:
-            with st.container(border=True):
-                st.metric("Total Stock Quantity", f"{df['Current Quantity'].sum():,.0f} Units")
-        with m3:
-            with st.container(border=True):
-                st.metric("Taxable Purchase Value", f"₹{(df['Purchase Price'] * df['Current Quantity']).sum():,.2f}")
+        m1.metric("Total Line Items", f"{len(df)} Items")
+        m2.metric("Total Stock Quantity", f"{df['Current Quantity'].sum():,.0f} Units")
+        m3.metric("Taxable Purchase Value", f"₹{(df['Purchase Price'] * df['Current Quantity']).sum():,.2f}")
         
         st.write("")
         
