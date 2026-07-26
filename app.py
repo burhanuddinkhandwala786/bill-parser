@@ -1,4 +1,5 @@
 import os
+import gc
 import json
 import time
 import openpyxl
@@ -11,10 +12,27 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-# --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="AI Bulk Stock Intake Engine", page_icon="⚡", layout="wide")
-st.title("⚡ AI Invoice-to-Excel Bulk Stock Engine")
-st.caption("Upload purchase bills -> Audit & Review Rates -> Export 100% compliant Excel template for direct bulk import.")
+# --- ENTERPRISE PAGE CONFIGURATION & STYLING ---
+st.set_page_config(page_title="Universal OS | Enterprise Intake", page_icon="⚡", layout="wide")
+
+st.markdown("""
+<style>
+    .main-title {
+        font-size: 26px;
+        font-weight: 700;
+        color: #1E293B;
+        margin-bottom: 2px;
+    }
+    .sub-title {
+        font-size: 14px;
+        color: #64748B;
+        margin-bottom: 20px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="main-title">⚡ AI Invoice-to-Excel Bulk Stock Engine</div>', unsafe_unsafe_html=True)
+st.markdown('<div class="sub-title">Upload purchase bills → Audit & Review Rates → Export 100% Accountune-compliant Excel sheet for instant bulk import.</div>', unsafe_allow_html=True)
 
 # --- SECURE API KEY INITIALIZATION ---
 api_key = None
@@ -50,8 +68,11 @@ def load_json_memory():
     return {}
 
 def save_json_memory(memory_dict):
-    with open(MEMORY_FILE, "w") as f:
-        json.dump(memory_dict, f, indent=4)
+    try:
+        with open(MEMORY_FILE, "w") as f:
+            json.dump(memory_dict, f, indent=4)
+    except Exception as e:
+        st.sidebar.error(f"Memory save alert: {e}")
 
 @st.cache_data
 def load_master():
@@ -80,10 +101,10 @@ def match_sku(raw_name):
             
     return raw_name, "⚠️ New SKU"
 
-# --- FAIL-SAFE HIGH-SPEED AI ENGINE ---
+# --- FAIL-SAFE HIGH-SPEED AI ENGINE WITH RETRIES & MODEL CASCADE ---
 def is_server_error(exception):
     err_str = str(exception).lower()
-    return "503" in err_str or "unavailable" in err_str or "overloaded" in err_str or "429" in err_str
+    return "503" in err_str or "unavailable" in err_str or "overloaded" in err_str or "429" in err_str or "resourceexhausted" in err_str
 
 @retry(
     stop=stop_after_attempt(3),
@@ -99,7 +120,7 @@ def _call_gemini_with_retry(client, model_name, contents, config):
     )
 
 def extract_invoice_data(image):
-    # Downscale image in-memory for 5x faster network transmission
+    # Downscale image in-memory for 5x faster network transmission and lower RAM usage
     img_copy = image.copy()
     img_copy.thumbnail((1024, 1024))
 
@@ -124,7 +145,7 @@ def extract_invoice_data(image):
     
     config = types.GenerateContentConfig(response_mime_type="application/json")
     contents = [img_copy, prompt]
-    candidate_models = ['gemini-3.5-flash-lite', 'gemini-3.5-flash']
+    candidate_models = ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
     
     last_error = None
     for model_name in candidate_models:
@@ -135,9 +156,9 @@ def extract_invoice_data(image):
             last_error = e
             continue
             
-    raise Exception(f"AI Service error: {last_error}")
+    raise Exception(f"AI Service busy across models: {last_error}")
 
-# --- WORKSPACE UI ---
+# --- WORKSPACE UI: STEP 1 INTAKE ---
 st.subheader("1. Multi-Bill Intake")
 uploaded_files = st.file_uploader(
     "Upload Supplier Purchase Invoices (Select One or Multiple PNG/JPG Files)",
@@ -196,17 +217,29 @@ if uploaded_files:
                 
             progress_bar.progress((idx + 1) / len(uploaded_files))
             
+        # Free memory RAM after processing batch
+        gc.collect()
+            
         if all_parsed_items:
             st.session_state["parsed_df"] = pd.DataFrame(all_parsed_items)
             st.success("✅ Extraction complete! Review, edit, or adjust items below.")
 
-# --- INTERACTIVE REVIEW & EXPORT GRID ---
+# --- WORKSPACE UI: STEP 2 REVIEW & ACCOUNTUNE EXPORT ---
 if "parsed_df" in st.session_state:
     st.write("---")
     st.subheader("2. Review & Adjust Before Export")
     st.info("💡 Double-click any cell below to edit item names, prices, quantities, HSN codes, or GST %. Learned SKU memory updates automatically!")
     
     df = st.session_state["parsed_df"]
+    
+    # Live Enterprise Summary Metric Cards
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Line Items", len(df))
+    m2.metric("Total Bill Quantity", f"{df['Current Quantity'].sum():,.0f}")
+    m3.metric("Total Taxable Cost", f"₹{df['Purchase Price'].sum():,.2f}")
+    m4.metric("Est. Total Selling Value", f"₹{df['Selling Price'].sum():,.2f}")
+    
+    st.write(" ")
     
     edited_df = st.data_editor(
         df,
@@ -223,7 +256,7 @@ if "parsed_df" in st.session_state:
     )
     
     st.write("---")
-    st.markdown("### 📥 Generate Bulk Import File")
+    st.markdown("### 📥 Generate Accountune Bulk Import File")
     
     if st.button("✅ Download Exact App-Compliant Import File", type="primary"):
         # Update learned memory mappings
@@ -239,18 +272,18 @@ if "parsed_df" in st.session_state:
             save_json_memory(mapping_memory)
             st.toast("🧠 Saved vendor SKU mapping to memory!")
             
-        # Build openpyxl workbook matching the exact template layout
+        # Build openpyxl workbook matching the exact Accountune template layout
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Items"
         
-        # Header Metadata Rows (Matching Template Rows 1 to 3)
+        # Header Metadata Rows (Matching Accountune Template Rows 1 to 3)
         ws.append(["UNIVERSAL HARDWARE AND PLYWOOD STORE"])
         ws.append(["Items"])
         ws.append([f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}"])
         ws.append([]) # Empty Row 4
         
-        # Row 5: Exact Headers required by App
+        # Row 5: Exact 13 Headers required by Accountune
         exact_headers = [
             "S. No.", "Name", "Current Quantity", "Unit", "HSN/SAC",
             "Category", "GST Rate", "Selling Price", "Selling Price (Secondary)",
@@ -281,7 +314,7 @@ if "parsed_df" in st.session_state:
         buffer.seek(0)
         
         st.download_button(
-            label="📥 Download Compliant Excel File (Items_Import.xlsx)",
+            label="📥 Download Compliant Excel File (Universal_Items_Import.xlsx)",
             data=buffer.getvalue(),
             file_name="Universal_Items_Import.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
