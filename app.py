@@ -21,54 +21,92 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CLEAN MODERN SAAS STYLING ---
+# --- MODERN MODERNIZED CSS SYSTEM (FIXES BOXY TABS & WRAPPED BADGES) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
     html, body, [data-testid="stAppViewContainer"] {
         font-family: 'Plus Jakarta Sans', -apple-system, sans-serif !important;
+        background-color: #0B0F19 !important;
     }
 
-    /* Suppress Input Instructions Overlap */
+    /* Remove Streamlit Input Instructions Overlap */
     div[data-testid="InputInstructions"] {
         display: none !important;
     }
 
-    /* Container Spacing & Borders */
-    .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 3rem !important;
+    /* FIX 1: ROUNDED MODERN PILL TABS (NO BOXY SHARP HIGHLIGHTS) */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 12px;
+        border-bottom: 1px solid #1F2937 !important;
+        padding-bottom: 8px !important;
+        margin-bottom: 20px !important;
+        background: transparent !important;
+    }
+
+    .stTabs [data-baseweb="tab"], button[data-baseweb="tab"] {
+        height: 38px !important;
+        border-radius: 20px !important; /* Soft pill shape */
+        padding: 0 18px !important;
+        background-color: #111827 !important;
+        border: 1px solid #1F2937 !important;
+        color: #9CA3AF !important;
+        font-weight: 600 !important;
+        font-size: 13px !important;
+        transition: all 0.2s ease-in-out !important;
+    }
+
+    .stTabs [aria-selected="true"], button[aria-selected="true"] {
+        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
+        color: #FFFFFF !important;
+        border: 1px solid #6366F1 !important;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35) !important;
+    }
+
+    /* FIX 2: SIDEBAR ACTION STYLING */
+    section[data-testid="stSidebar"] {
+        background-color: #0F172A !important;
+        border-right: 1px solid #1E293B !important;
+    }
+
+    section[data-testid="stSidebar"] .stTabs [data-baseweb="tab"] {
+        border-radius: 10px !important;
+        height: 34px !important;
+        font-size: 12px !important;
+    }
+
+    /* FIX 3: DYNAMIC UNWRAPPED HEADER BADGE */
+    .header-badge {
+        background: rgba(99, 102, 241, 0.15);
+        border: 1px solid #6366F1;
+        color: #A5B4FC;
+        padding: 8px 16px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
     }
 
     /* Metric Visual Upgrades */
-    div[data-testid="stMetric"] {
-        background-color: transparent !important;
-    }
     div[data-testid="stMetricValue"] div {
         color: #38BDF8 !important;
         font-weight: 700 !important;
     }
 
-    /* Clean Native Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        border-bottom: 1px solid #1F2937;
-        padding-bottom: 4px;
-        margin-bottom: 16px;
+    /* Smooth Button Rounding */
+    .stButton > button {
+        border-radius: 10px !important;
+        font-weight: 600 !important;
     }
 
-    .stTabs [data-baseweb="tab"] {
-        height: 40px;
-        border-radius: 8px;
-        padding: 0 16px;
-        font-weight: 600;
-        font-size: 13px;
-    }
-
-    .stTabs [aria-selected="true"] {
-        background-color: #4F46E5 !important;
-        color: #FFFFFF !important;
+    button[kind="primary"] {
+        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
+        border: none !important;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -110,13 +148,11 @@ if st.session_state["last_store_slug"] != selected_store_slug:
 
 st.sidebar.divider()
 
-# --- SIDEBAR STORE ACTIONS ---
-side_tab1, side_tab2 = st.sidebar.tabs(["✏️ Rename Store", "➕ Add Store"])
-
-with side_tab1:
+# --- SIDEBAR STORE MANAGEMENT EXPANDERS ---
+with st.sidebar.expander("✏️ Rename Active Store", expanded=False):
     current_display = selected_store_slug.replace("_", " ")
-    renamed_input = st.text_input("Current Store Name", value=current_display, key="rename_input_field")
-    if st.button("Save New Name", use_container_width=True, type="secondary"):
+    renamed_input = st.text_input("New Name:", value=current_display, key="rename_input_field")
+    if st.button("Save Store Name", use_container_width=True, type="secondary"):
         if renamed_input.strip() and renamed_input.strip() != current_display:
             new_slug = sanitize_store_name(renamed_input)
             old_path = os.path.join(DATA_DIR, selected_store_slug)
@@ -130,9 +166,9 @@ with side_tab1:
             else:
                 st.sidebar.error("A store with that name already exists.")
 
-with side_tab2:
-    new_store_name = st.text_input("New Store Title", placeholder="e.g. Metro Hardware", key="add_input_field")
-    if st.button("Create Store", use_container_width=True, type="primary"):
+with st.sidebar.expander("➕ Register New Store", expanded=False):
+    new_store_name = st.text_input("Store Title:", placeholder="e.g. Metro Hardware", key="add_input_field")
+    if st.button("Create Environment", use_container_width=True, type="primary"):
         if new_store_name.strip():
             slug = sanitize_store_name(new_store_name)
             new_path = os.path.join(DATA_DIR, slug)
@@ -166,8 +202,8 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# --- HEADER SECTION (CLEAN & COHESIVE) ---
-header_left, header_right = st.columns([3, 1])
+# --- HEADER SECTION (UNWRAPPED DYNAMIC BADGE) ---
+header_left, header_right = st.columns([3, 1.2])
 
 with header_left:
     st.title("⚡ Universal OS")
@@ -175,7 +211,7 @@ with header_left:
 
 with header_right:
     st.write("")
-    st.info(f"📍 Active: **{ACTIVE_STORE_DISPLAY}**")
+    st.markdown(f'<div class="header-badge">📍 Active: <b>{ACTIVE_STORE_DISPLAY}</b></div>', unsafe_allow_html=True)
 
 st.divider()
 
