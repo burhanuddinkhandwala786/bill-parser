@@ -12,184 +12,96 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-# --- EXECUTIVE DESIGN SYSTEM ---
+# --- ENTERPRISE SAAS PAGE CONFIGURATION & STYLING ---
 st.set_page_config(
-    page_title="Universal OS | Enterprise Workspace",
+    page_title="Universal OS | Multi-Store AI Ingestion SaaS",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded" # Keep sidebar visible by default
+    initial_sidebar_state="expanded"
 )
 
-# Complete Streamlit Style Override (Linear/Vercel Theme)
+# Custom Enterprise SaaS CSS System
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
     html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        color: #E2E8F0 !important;
+        font-family: 'Inter', sans-serif;
     }
-    
     .stApp {
-        background-color: #090A0F !important;
-    }
-
-    /* HIDE NATIVE OVERLAPPING STREAMLIT HEADER */
-    header[data-testid="stHeader"] {
-        display: none !important;
+        background-color: #0B0F19;
+        color: #F3F4F6;
     }
     
-    .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 3rem !important;
-        padding-left: 1.5rem !important;
-        padding-right: 1.5rem !important;
-        max-width: 100% !important;
+    /* Hero Banner Styling */
+    .saas-header {
+        background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #1E293B 100%);
+        padding: 28px 36px;
+        border-radius: 16px;
+        color: #FFFFFF;
+        margin-bottom: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
     }
-
-    /* MODERN TOP COMMAND BAR */
-    .command-bar {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        background: #12151E;
-        border: 1px solid #1F2430;
-        padding: 12px 20px;
-        border-radius: 12px;
-        margin-bottom: 24px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    .saas-title {
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+        margin: 0;
+        color: #FFFFFF;
     }
-    .brand-logo {
+    .saas-subtitle {
         font-size: 14px;
-        font-weight: 700;
-        letter-spacing: -0.2px;
-        color: #F8FAFC;
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        color: #C7D2FE;
+        margin-top: 6px;
+        margin-bottom: 0;
     }
-    .brand-badge {
-        background: rgba(99, 102, 241, 0.15);
-        color: #818CF8;
-        border: 1px solid rgba(99, 102, 241, 0.3);
-        font-size: 10px;
-        font-weight: 700;
-        padding: 2px 8px;
-        border-radius: 4px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    .section-label {
+    .status-badge {
+        display: inline-block;
+        background-color: #10B981;
+        color: #FFFFFF;
         font-size: 11px;
         font-weight: 700;
+        padding: 4px 12px;
+        border-radius: 20px;
         text-transform: uppercase;
-        letter-spacing: 1px;
-        color: #64748B;
-        margin-bottom: 10px;
+        letter-spacing: 0.5px;
+        float: right;
     }
-
-    /* SLEEK FILE DROPZONE */
-    div[data-testid="stFileUploader"] {
-        background: #12151E !important;
-        border: 1px dashed #283245 !important;
-        border-radius: 12px !important;
-        padding: 16px !important;
-        transition: all 0.2s ease !important;
-    }
-    div[data-testid="stFileUploader"]:hover {
-        border-color: #6366F1 !important;
-        background: #151A26 !important;
-    }
-    div[data-testid="stFileUploader"] section {
-        background-color: transparent !important;
-    }
-
-    /* EXECUTIVE METRIC TILES */
-    div[data-testid="stMetric"] {
-        background: #12151E !important;
-        border: 1px solid #1F2430 !important;
-        border-radius: 12px !important;
-        padding: 16px !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
-    }
-    div[data-testid="stMetricLabel"] p {
-        font-size: 10px !important;
-        font-weight: 700 !important;
-        color: #64748B !important;
-        text-transform: uppercase !important;
-        letter-spacing: 0.8px !important;
-    }
-    div[data-testid="stMetricValue"] div {
-        font-size: 20px !important;
-        font-weight: 700 !important;
-        color: #F8FAFC !important;
-    }
-
-    /* VERCEL-STYLE SLEEK TABS */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 4px;
-        background-color: transparent;
-        border-bottom: 1px solid #1F2430;
-        padding-bottom: 6px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 36px;
+    .store-badge {
+        display: inline-block;
+        background-color: #6366F1;
+        color: #FFFFFF;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 12px;
         border-radius: 6px;
-        padding: 0 16px;
-        background-color: transparent;
-        border: none;
-        color: #64748B;
-        font-weight: 500;
-        font-size: 13px;
+        margin-top: 10px;
     }
-    .stTabs [aria-selected="true"] {
-        background-color: #12151E !important;
-        color: #F8FAFC !important;
-        border: 1px solid #1F2430 !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+    
+    /* Metrics Visual Cards */
+    div[data-testid="stMetric"] {
+        background-color: #1E293B;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
     }
-
-    /* DATA EDITOR GRID */
-    div[data-testid="stDataEditor"] {
-        border: 1px solid #1F2430 !important;
-        border-radius: 12px !important;
-        overflow: hidden !important;
-        background-color: #12151E !important;
+    div[data-testid="stMetricValue"] {
+        font-size: 22px !important;
+        font-weight: 700 !important;
+        color: #38BDF8 !important;
     }
-
-    /* OVERRIDE STREAMLIT RED PRIMARY BUTTON */
-    .stButton>button, .stDownloadButton>button {
-        border-radius: 8px !important;
-        font-weight: 600 !important;
-        font-size: 13px !important;
-        padding: 10px 20px !important;
-        border: 1px solid #283245 !important;
-        background: #12151E !important;
-        color: #F8FAFC !important;
-        transition: all 0.2s ease !important;
-    }
-    .stButton>button:hover, .stDownloadButton>button:hover {
-        background: #1A2234 !important;
-        border-color: #6366F1 !important;
-        color: #FFFFFF !important;
-    }
-    button[kind="primary"] {
-        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
-        border: none !important;
-        color: #FFFFFF !important;
-        box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35) !important;
-    }
-    button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #4F46E5 0%, #4338CA 100%) !important;
-        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5) !important;
+    
+    .stButton>button {
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.2s ease-in-out;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- MULTI-STORE ISOLATION ---
+# --- MULTI-STORE DIRECTORY & DATA ISOLATION ---
 DATA_DIR = "stores_data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -204,8 +116,8 @@ def get_store_list():
 def sanitize_store_name(name):
     return "".join([c if c.isalnum() else "_" for c in name.strip()])
 
-# --- SIDEBAR CONTROL PANEL ---
-st.sidebar.markdown("## 🏬 Store Operations")
+# --- SIDEBAR: MULTI-TENANT SWITCHER ---
+st.sidebar.markdown("## 🏬 Store Management")
 existing_stores = get_store_list()
 
 selected_store_slug = st.sidebar.selectbox(
@@ -214,6 +126,7 @@ selected_store_slug = st.sidebar.selectbox(
     format_func=lambda x: x.replace("_", " ")
 )
 
+# Store Switch State Purge Guard
 if "last_store_slug" not in st.session_state:
     st.session_state["last_store_slug"] = selected_store_slug
 
@@ -223,17 +136,19 @@ if st.session_state["last_store_slug"] != selected_store_slug:
     st.session_state["last_store_slug"] = selected_store_slug
     st.rerun()
 
-with st.sidebar.expander("➕ Register Store Environment", expanded=True):
+# Register New Store
+with st.sidebar.expander("➕ Register New Store"):
     new_store_name = st.text_input("New Store Name:")
-    if st.button("Initialize Environment"):
+    if st.button("Create Store Environment"):
         if new_store_name.strip():
             slug = sanitize_store_name(new_store_name)
-            os.makedirs(os.path.join(DATA_DIR, slug), exist_ok=True)
-            st.success(f"Initialized '{new_store_name}'!")
+            new_path = os.path.join(DATA_DIR, slug)
+            os.makedirs(new_path, exist_ok=True)
+            st.success(f"Store '{new_store_name}' initialized!")
             st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔑 API Authentication")
+st.sidebar.markdown("### 🔑 API Configuration")
 
 api_key = None
 try:
@@ -249,32 +164,28 @@ if not api_key:
     api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
 
 if not api_key:
-    st.info("👋 Enter your Gemini API Key in the sidebar or Streamlit Secrets to activate workspace.")
+    st.info("👋 Welcome! Enter your Gemini API Key in the sidebar or Streamlit Secrets to begin.")
     st.stop()
 
 client = genai.Client(api_key=api_key)
 
+# Active Store File Paths
 CURRENT_STORE_DIR = os.path.join(DATA_DIR, selected_store_slug)
 MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# --- TOP COMMAND BAR ---
+# Render Banner
 st.markdown(f"""
-<div class="command-bar">
-    <div class="brand-logo">
-        ⚡ Universal OS <span class="brand-badge">PRO INTAKE</span>
-    </div>
-    <div style="display:flex; align-items:center; gap:12px;">
-        <span style="font-size:12px; color:#64748B;">Active Catalog:</span>
-        <span style="background:#181E2A; border:1px solid #283245; color:#38BDF8; font-size:11px; font-weight:600; padding:4px 12px; border-radius:20px;">
-            📍 {ACTIVE_STORE_DISPLAY}
-        </span>
-    </div>
+<div class="saas-header">
+    <span class="status-badge">🟢 Commercial SaaS Active</span>
+    <p class="saas-title">⚡ Universal OS — AI Intake SaaS</p>
+    <p class="saas-subtitle">Multi-Store Purchase Ingestion & Accountune Bulk Inventory Synchronizer</p>
+    <span class="store-badge">📍 Active Store: <b>{ACTIVE_STORE_DISPLAY}</b></span>
 </div>
 """, unsafe_allow_html=True)
 
-# --- DATA LOADERS & PERSISTENCE ---
+# --- STORE DATA LOADERS & PERSISTENCE ---
 def load_json_memory():
     if os.path.exists(MEMORY_FILE):
         try:
@@ -388,107 +299,109 @@ def extract_invoice_data(image):
 
 # --- WORKSPACE TABS ---
 tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
-    "⚡ Batch Intake", 
-    "⚙️ Master Catalog", 
-    "🧠 AI Memory", 
-    "📖 Integration Guide"
+    "📥 Batch Invoice Parser", 
+    "⚙️ Store Master Catalog",
+    "📋 Vendor SKU Memory", 
+    "📖 Accountune Guide"
 ])
 
 # ==========================================
-# TAB 1: BATCH INGESTION WORKSPACE
+# TAB 1: BATCH INVOICE PARSER
 # ==========================================
 with tab_parser:
-    col_intake, col_stats = st.columns([1.5, 1.5])
+    col_upload, col_info = st.columns([2, 1])
     
-    with col_intake:
-        st.markdown('<div class="section-label">1. INGESTION CONTROL</div>', unsafe_allow_html=True)
+    with col_upload:
+        st.markdown("### 1. Multi-Bill Image Intake")
         uploaded_files = st.file_uploader(
-            "Drop purchase invoice photos (PNG, JPG, JPEG)",
+            f"Upload Purchase Bills for {ACTIVE_STORE_DISPLAY} (PNG, JPG, JPEG)",
             type=["jpg", "jpeg", "png"],
-            accept_multiple_files=True,
-            label_visibility="collapsed"
+            accept_multiple_files=True
         )
-        
+
+    with col_info:
+        st.markdown("### ⚡ Batch Status")
         if uploaded_files:
-            if st.button("🚀 Process & Extract Batch Data", type="primary", use_container_width=True):
-                if "parsed_df" in st.session_state:
-                    del st.session_state["parsed_df"]
-                    
-                all_parsed_items = []
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                for idx, file in enumerate(uploaded_files):
-                    status_text.caption(f"Parsing {idx + 1}/{len(uploaded_files)}: **{file.name}**...")
-                    try:
-                        file.seek(0)
-                        img = Image.open(file)
-                        parsed_json = extract_invoice_data(img)
-                        supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
-                        
-                        for row in parsed_json.get("Line Items", []):
-                            qty = float(row.get("Quantity") or 1.0)
-                            gst_rate = float(row.get("GST Rate") or 18.0)
-                            base_rate = float(row.get("Listed Base Rate") or 0.0)
-                            total_inclusive = float(row.get("Listed Total Inclusive Rate") or 0.0)
-                            hsn_sac = str(row.get("HSN Code") or "").strip()
-                            
-                            if base_rate > 0:
-                                final_base = base_rate
-                            elif total_inclusive > 0:
-                                final_base = total_inclusive / (1 + (gst_rate / 100))
-                            else:
-                                final_base = 0.0
-                                
-                            raw_item_name = str(row.get("Item Name", "")).strip()
-                            matched_sku, match_type = match_sku(raw_item_name)
-                            known_selling = get_known_selling_price(matched_sku)
-                            
-                            all_parsed_items.append({
-                                "Supplier Name": supplier,
-                                "Raw Vendor Item": raw_item_name,
-                                "Official SKU": matched_sku,
-                                "Match Status": match_type,
-                                "Current Quantity": qty,
-                                "Unit": str(row.get("Unit", "PCS")).upper(),
-                                "HSN/SAC": hsn_sac,
-                                "Category": "General",
-                                "GST Rate": gst_rate,
-                                "Purchase Price": round(final_base, 2),
-                                "Selling Price": round(known_selling, 2)
-                            })
-                    except Exception as e:
-                        st.error(f"Error reading {file.name}: {e}")
-                        
-                    progress_bar.progress((idx + 1) / len(uploaded_files))
-                    
-                status_text.empty()
-                gc.collect()
-                    
-                if all_parsed_items:
-                    st.session_state["parsed_df"] = pd.DataFrame(all_parsed_items)
-                    st.rerun()
-
-    with col_stats:
-        st.markdown('<div class="section-label">2. BATCH HEALTH OVERVIEW</div>', unsafe_allow_html=True)
-        if "parsed_df" in st.session_state:
-            df_temp = st.session_state["parsed_df"]
-            m1, m2 = st.columns(2)
-            m1.metric("Total Line Items", len(df_temp))
-            m2.metric("Total Units", f"{df_temp['Current Quantity'].sum():,.0f}")
-            st.metric("Taxable Purchase Cost", f"₹{(df_temp['Purchase Price'] * df_temp['Current Quantity']).sum():,.2f}")
-        elif uploaded_files:
-            st.info(f"📁 {len(uploaded_files)} File(s) staged. Click 'Process & Extract' to begin.")
+            st.success(f"📁 {len(uploaded_files)} File(s) Ready for Ingestion")
         else:
-            st.caption("Upload purchase bills on the left to activate processing.")
+            st.info("No files uploaded.")
 
-    # --- AUDIT WORKSPACE GRID ---
+    if uploaded_files:
+        if st.button("🚀 Process & Parse Invoices with AI", type="primary", use_container_width=True):
+            if "parsed_df" in st.session_state:
+                del st.session_state["parsed_df"]
+                
+            all_parsed_items = []
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            for idx, file in enumerate(uploaded_files):
+                status_text.caption(f"Parsing bill {idx + 1} of {len(uploaded_files)}: **{file.name}**...")
+                try:
+                    file.seek(0)
+                    img = Image.open(file)
+                    parsed_json = extract_invoice_data(img)
+                    supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
+                    
+                    for row in parsed_json.get("Line Items", []):
+                        qty = float(row.get("Quantity") or 1.0)
+                        gst_rate = float(row.get("GST Rate") or 18.0)
+                        base_rate = float(row.get("Listed Base Rate") or 0.0)
+                        total_inclusive = float(row.get("Listed Total Inclusive Rate") or 0.0)
+                        hsn_sac = str(row.get("HSN Code") or "").strip()
+                        
+                        # Tax Reverse Math Handling
+                        if base_rate > 0:
+                            final_base = base_rate
+                        elif total_inclusive > 0:
+                            final_base = total_inclusive / (1 + (gst_rate / 100))
+                        else:
+                            final_base = 0.0
+                            
+                        raw_item_name = str(row.get("Item Name", "")).strip()
+                        matched_sku, match_type = match_sku(raw_item_name)
+                        
+                        known_selling = get_known_selling_price(matched_sku)
+                        
+                        all_parsed_items.append({
+                            "Supplier Name": supplier,
+                            "Raw Vendor Item": raw_item_name,
+                            "Official SKU": matched_sku,
+                            "Match Status": match_type,
+                            "Current Quantity": qty,
+                            "Unit": str(row.get("Unit", "PCS")).upper(),
+                            "HSN/SAC": hsn_sac,
+                            "Category": "General",
+                            "GST Rate": gst_rate,
+                            "Purchase Price": round(final_base, 2),
+                            "Selling Price": round(known_selling, 2)
+                        })
+                except Exception as e:
+                    st.error(f"Error reading {file.name}: {e}")
+                    
+                progress_bar.progress((idx + 1) / len(uploaded_files))
+                
+            status_text.empty()
+            gc.collect()
+                
+            if all_parsed_items:
+                st.session_state["parsed_df"] = pd.DataFrame(all_parsed_items)
+                st.rerun()
+
+    # --- REVIEW & EDIT WORKSPACE ---
     if "parsed_df" in st.session_state:
-        st.markdown("---")
-        st.markdown('<div class="section-label">3. DATA REVIEW & AUDIT WORKSPACE</div>', unsafe_allow_html=True)
-        st.caption("Double-click cells to modify values. Manually entered SKUs automatically save to catalog upon export.")
+        st.write("---")
+        st.markdown("### 2. Live Audit Workspace")
+        st.caption("💡 Map raw vendor items to official SKUs. Selling Price defaults to 0.0 unless manually specified.")
         
         df = st.session_state["parsed_df"]
+        
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Line Items", len(df))
+        m2.metric("Total Units", f"{df['Current Quantity'].sum():,.0f}")
+        m3.metric("Taxable Purchase Cost", f"₹{(df['Purchase Price'] * df['Current Quantity']).sum():,.2f}")
+        
+        st.write(" ")
         
         edited_df = st.data_editor(
             df,
@@ -504,104 +417,104 @@ with tab_parser:
             }
         )
         
-        st.write(" ")
-        col_space, col_export = st.columns([1.5, 1.5])
-        
-        with col_export:
-            if st.button("✅ Export Accountune Excel Import", type="primary", use_container_width=True):
-                memory_updated = False
-                master_updated = False
-                current_master_skus = set(master_sku_list)
+        st.write("---")
+        if st.button("✅ Generate & Download Accountune Excel File", type="primary", use_container_width=True):
+            memory_updated = False
+            master_updated = False
+            current_master_skus = set(master_sku_list)
+            
+            for idx, row in edited_df.iterrows():
+                raw = str(row["Raw Vendor Item"]).strip().upper()
+                official = str(row["Official SKU"]).strip()
                 
-                for idx, row in edited_df.iterrows():
-                    raw = str(row["Raw Vendor Item"]).strip().upper()
-                    official = str(row["Official SKU"]).strip()
+                # Update vendor memory mapping
+                if raw and official and raw != official:
+                    mapping_memory[raw] = official
+                    memory_updated = True
                     
-                    if raw and official and raw != official:
-                        mapping_memory[raw] = official
-                        memory_updated = True
-                        
-                    if official and official not in current_master_skus:
-                        new_master_row = pd.DataFrame([{
-                            "Official_SKU_Name": official,
-                            "Category": str(row.get("Category", "General")),
-                            "Default_Unit": str(row.get("Unit", "PCS")),
-                            "GST_Rate": float(row.get("GST Rate", 18.0)),
-                            "Selling_Price": float(row.get("Selling Price", 0.0))
-                        }])
-                        master_df = pd.concat([master_df, new_master_row], ignore_index=True)
-                        current_master_skus.add(official)
-                        master_updated = True
+                # Auto-append new SKUs to Master Catalog if manually typed
+                if official and official not in current_master_skus:
+                    new_master_row = pd.DataFrame([{
+                        "Official_SKU_Name": official,
+                        "Category": str(row.get("Category", "General")),
+                        "Default_Unit": str(row.get("Unit", "PCS")),
+                        "GST_Rate": float(row.get("GST Rate", 18.0)),
+                        "Selling_Price": float(row.get("Selling Price", 0.0))
+                    }])
+                    master_df = pd.concat([master_df, new_master_row], ignore_index=True)
+                    current_master_skus.add(official)
+                    master_updated = True
 
-                if memory_updated:
-                    save_json_memory(mapping_memory)
-                    st.toast("🧠 Saved mapping to AI Memory!")
-                    
-                if master_updated:
-                    save_master(master_df, selected_store_slug)
-                    st.toast("⚙️ Updated Master Catalog!")
-                    
-                wb = openpyxl.Workbook()
-                ws = wb.active
-                ws.title = "Items"
+            if memory_updated:
+                save_json_memory(mapping_memory)
+                st.toast("🧠 Saved vendor mapping to learned memory!")
                 
-                ws.append([ACTIVE_STORE_DISPLAY])
-                ws.append(["Items"])
-                ws.append([f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}"])
-                ws.append([]) # Empty Row 4
+            if master_updated:
+                save_master(master_df, selected_store_slug)
+                st.toast("⚙️ New SKUs added to Master Catalog!")
                 
-                exact_headers = [
-                    "S. No.", "Name", "Current Quantity", "Unit", "HSN/SAC",
-                    "Category", "GST Rate", "Selling Price", "Selling Price (Secondary)",
-                    "Purchase Price", "Purchase Price (Secondary)", "Secondary Unit", "Ratio"
-                ]
-                ws.append(exact_headers)
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Items"
+            
+            ws.append([ACTIVE_STORE_DISPLAY])
+            ws.append(["Items"])
+            ws.append([f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}"])
+            ws.append([]) # Row 4
+            
+            exact_headers = [
+                "S. No.", "Name", "Current Quantity", "Unit", "HSN/SAC",
+                "Category", "GST Rate", "Selling Price", "Selling Price (Secondary)",
+                "Purchase Price", "Purchase Price (Secondary)", "Secondary Unit", "Ratio"
+            ]
+            ws.append(exact_headers)
+            
+            for i, row in edited_df.iterrows():
+                selling_val = float(row["Selling Price"]) if row["Selling Price"] > 0 else ""
+                ws.append([
+                    i + 1,
+                    str(row["Official SKU"]),
+                    float(row["Current Quantity"]),
+                    str(row["Unit"]),
+                    str(row["HSN/SAC"]),
+                    str(row["Category"]),
+                    float(row["GST Rate"]),
+                    selling_val,
+                    "",
+                    float(row["Purchase Price"]),
+                    "", "", ""
+                ])
                 
-                for i, row in edited_df.iterrows():
-                    selling_val = float(row["Selling Price"]) if row["Selling Price"] > 0 else ""
-                    ws.append([
-                        i + 1,
-                        str(row["Official SKU"]),
-                        float(row["Current Quantity"]),
-                        str(row["Unit"]),
-                        str(row["HSN/SAC"]),
-                        str(row["Category"]),
-                        float(row["GST Rate"]),
-                        selling_val,
-                        "",
-                        float(row["Purchase Price"]),
-                        "", "", ""
-                    ])
-                    
-                buffer = BytesIO()
-                wb.save(buffer)
-                buffer.seek(0)
-                
-                st.download_button(
-                    label=f"📥 Download Import File ({ACTIVE_STORE_DISPLAY})",
-                    data=buffer.getvalue(),
-                    file_name=f"{selected_store_slug}_Items_Import.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+            buffer = BytesIO()
+            wb.save(buffer)
+            buffer.seek(0)
+            
+            st.download_button(
+                label=f"📥 Download Accountune File for {ACTIVE_STORE_DISPLAY}",
+                data=buffer.getvalue(),
+                file_name=f"{selected_store_slug}_Items_Import.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
 
 # ==========================================
 # TAB 2: STORE MASTER CATALOG MANAGER
 # ==========================================
 with tab_master:
-    st.markdown(f'<div class="section-label">MASTER INVENTORY CATALOG ({ACTIVE_STORE_DISPLAY})</div>', unsafe_allow_html=True)
+    st.markdown(f"### ⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
+    st.caption("Manage official SKUs for this store catalog.")
     
     col_add, col_list = st.columns([1, 2])
     
     with col_add:
-        st.markdown("##### ➕ Register SKU")
+        st.markdown("#### ➕ Add New SKU")
         add_sku = st.text_input("SKU Name")
         add_cat = st.text_input("Category", value="General")
         add_unit = st.selectbox("Default Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET"])
         add_gst = st.selectbox("GST Rate (%)", options=[0, 5, 12, 18, 28], index=3)
         add_price = st.number_input("Selling Price ₹ (Optional)", min_value=0.0, step=10.0)
         
-        if st.button("Save SKU to Master"):
+        if st.button("Save SKU to Master List"):
             if add_sku.strip():
                 clean_sku = add_sku.strip()
                 if clean_sku not in master_sku_list:
@@ -617,10 +530,10 @@ with tab_master:
                     st.success(f"Added '{clean_sku}'!")
                     st.rerun()
                 else:
-                    st.warning("SKU exists in master list.")
+                    st.warning("SKU already exists.")
                     
     with col_list:
-        st.markdown("##### 📋 Catalog Items")
+        st.markdown("#### 📋 Store SKUs")
         if not master_df.empty:
             st.dataframe(master_df, use_container_width=True)
             sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
@@ -631,13 +544,14 @@ with tab_master:
                     st.success(f"Removed '{sku_to_delete}'!")
                     st.rerun()
         else:
-            st.info("Master catalog is empty.")
+            st.info("Master catalog for this store is empty.")
 
 # ==========================================
 # TAB 3: VENDOR SKU MEMORY WORKSPACE
 # ==========================================
 with tab_memory:
-    st.markdown(f'<div class="section-label">LEARNED AI MAPPINGS ({ACTIVE_STORE_DISPLAY})</div>', unsafe_allow_html=True)
+    st.markdown(f"### 🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
+    st.caption("Maps vendor bill descriptions to your store SKUs.")
     
     if mapping_memory:
         mem_df = pd.DataFrame([
@@ -646,22 +560,22 @@ with tab_memory:
         ])
         st.dataframe(mem_df, use_container_width=True)
         
-        if st.button("🗑️ Clear Memory Cache"):
+        if st.button("🗑️ Clear Store Memory Cache"):
             save_json_memory({})
             st.success("Memory cleared!")
             st.rerun()
     else:
-        st.info("No learned vendor mappings yet.")
+        st.info("No learned vendor mappings yet for this store.")
 
 # ==========================================
 # TAB 4: IMPORT GUIDE
 # ==========================================
 with tab_guide:
-    st.markdown('<div class="section-label">INTEGRATION STEPS</div>', unsafe_allow_html=True)
+    st.markdown("### 📖 Accountune Import Guide")
     st.markdown("""
-    1. **Select Catalog:** Choose active store in sidebar.
-    2. **Drop Bills:** Upload purchase photos in **Tab 1** and click **Process & Extract Batch Data**.
-    3. **Review & Audit:** Confirm quantities, HSN codes, and mapped SKUs in the grid.
-    4. **Download:** Click **Export Accountune Excel Import**.
-    5. **Upload:** Open Accountune $\rightarrow$ **Items / Inventory** $\rightarrow$ **Bulk Import**, select the generated `.xlsx` file, and upload!
+    1. **Select Store:** Choose your active store in the sidebar or register a new one.
+    2. **Upload Bills:** Upload purchase invoice photos in **Tab 1** and click **Process Invoices**.
+    3. **Review & Audit:** Confirm quantities, HSN codes, and mapped SKUs.
+    4. **Download Excel:** Click **Download Accountune File**.
+    5. **Upload to Accountune:** Open Accountune $\rightarrow$ **Items / Inventory** $\rightarrow$ **Bulk Import**, select the generated `.xlsx` file, and upload.
     """)
