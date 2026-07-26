@@ -234,6 +234,10 @@ with tab_parser:
 
     if uploaded_files:
         if st.button("🚀 Process & Parse Invoices with AI", type="primary", use_container_width=True):
+            # CLEAR OLD PARSED DATA FIRST
+            if "parsed_df" in st.session_state:
+                del st.session_state["parsed_df"]
+                
             all_parsed_items = []
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -241,6 +245,8 @@ with tab_parser:
             for idx, file in enumerate(uploaded_files):
                 status_text.caption(f"Parsing bill {idx + 1} of {len(uploaded_files)}: **{file.name}**...")
                 try:
+                    # Seek to start of file stream
+                    file.seek(0)
                     img = Image.open(file)
                     parsed_json = extract_invoice_data(img)
                     supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
@@ -290,7 +296,7 @@ with tab_parser:
                 
             if all_parsed_items:
                 st.session_state["parsed_df"] = pd.DataFrame(all_parsed_items)
-                st.toast("✅ Extraction complete! Review data below.", icon="🎉")
+                st.rerun() # Rerun to force clean table refresh across all parsed files
 
     # --- REVIEW & EDIT WORKSPACE ---
     if "parsed_df" in st.session_state:
