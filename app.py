@@ -21,7 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CLEAN MODERN CSS OVERRIDES ---
+# --- MODERN EXECUTIVE COLOR PALETTE & UI OVERRIDES ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
@@ -29,22 +29,97 @@ st.markdown("""
     /* Global Typography */
     html, body, [data-testid="stAppViewContainer"] {
         font-family: 'Plus Jakarta Sans', -apple-system, sans-serif !important;
+        background-color: #0B0F19 !important;
     }
 
-    /* Input Instructions Fix */
+    /* Suppress Input Instructions Overlap */
     div[data-testid="InputInstructions"] {
         display: none !important;
     }
 
-    /* Metric Card Enhancements */
+    /* Hero Header Styling */
+    .hero-container {
+        background: linear-gradient(135deg, #1E1B4B 0%, #0F172A 100%);
+        border: 1px solid #312E81;
+        border-radius: 16px;
+        padding: 20px 28px;
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+    
+    .hero-title {
+        font-size: 26px;
+        font-weight: 700;
+        color: #FFFFFF !important;
+        margin: 0;
+        letter-spacing: -0.5px;
+    }
+    
+    .hero-sub {
+        font-size: 13px;
+        color: #A5B4FC !important;
+        margin-top: 4px;
+        margin-bottom: 0;
+    }
+
+    .store-badge {
+        background: rgba(99, 102, 241, 0.2);
+        border: 1px solid #6366F1;
+        color: #C7D2FE !important;
+        padding: 6px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    /* Custom Container Elevation */
+    div[data-testid="stVerticalBlock"] > div[data-testid="stBlock"] {
+        background-color: #111827 !important;
+        border: 1px solid #1F2937 !important;
+        border-radius: 14px !important;
+    }
+
+    /* Metric Visual Upgrades */
     div[data-testid="stMetricValue"] div {
+        color: #38BDF8 !important;
         font-weight: 700 !important;
     }
 
-    /* Clean Container Spacing */
-    .block-container {
-        padding-top: 1.2rem !important;
-        padding-bottom: 2.5rem !important;
+    /* Tab Customization */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+        border-bottom: 1px solid #1F2937;
+        padding-bottom: 6px;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        height: 42px;
+        border-radius: 8px;
+        padding: 0 18px;
+        background-color: #111827;
+        border: 1px solid #1F2937;
+        color: #9CA3AF !important;
+        font-weight: 600;
+        font-size: 13px;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
+        color: #FFFFFF !important;
+        border: 1px solid #6366F1 !important;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3) !important;
+    }
+
+    /* Primary Buttons */
+    button[kind="primary"] {
+        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
+        border: none !important;
+        box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35) !important;
+        font-weight: 600 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -142,26 +217,18 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# --- TOP COMMAND BAR ---
-title_col, action_col = st.columns([3.5, 1])
-
-with title_col:
-    st.title("⚡ Universal OS")
-    st.caption(f"Multi-Store Purchase Intake Engine • **Active Catalog:** `{ACTIVE_STORE_DISPLAY}`")
-
-with action_col:
-    st.write("")
-    with st.popover("⚙️ Quick Actions", use_container_width=True):
-        st.markdown("**Workspace Shortcuts**")
-        if st.button("🔄 Refresh Data Cache", use_container_width=True):
-            st.cache_data.clear()
-            st.toast("Cache cleared successfully!")
-        if st.button("🧹 Clear Parsed Batch", use_container_width=True):
-            if "parsed_df" in st.session_state:
-                del st.session_state["parsed_df"]
-                st.rerun()
-
-st.divider()
+# --- HERO BANNER (PREVENTS TEXT CLIPPING) ---
+st.markdown(f"""
+<div class="hero-container">
+    <div>
+        <p class="hero-title">⚡ Universal OS — AI Intake SaaS</p>
+        <p class="hero-sub">Multi-Store Purchase Ingestion & Inventory Synchronizer</p>
+    </div>
+    <div>
+        <span class="store-badge">📍 Active: <b>{ACTIVE_STORE_DISPLAY}</b></span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # --- STORE DATA LOADERS & PERSISTENCE ---
 def load_json_memory():
