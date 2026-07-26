@@ -135,21 +135,16 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# --- HEADER SECTION ---
-header_left, header_right = st.columns([3, 1.2])
+# --- HEADER SECTION (NATIVE CLEAN ALIGNMENT) ---
+header_left, header_right = st.columns([3, 1.5])
 
 with header_left:
     st.title("⚡ Universal OS")
     st.caption("Commercial Multi-Store AI Purchase Intake & Inventory Synchronizer")
 
 with header_right:
-    st.write("")
-    st.markdown(
-        f'''<div style="background-color: #EEF2FF; border: 1px solid #C7D2FE; color: #3730A3; 
-        padding: 8px 14px; border-radius: 8px; font-weight: 600; font-size: 13px; text-align: center;">
-        📍 Store: {ACTIVE_STORE_DISPLAY}</div>''', 
-        unsafe_allow_html=True
-    )
+    st.caption("ACTIVE STORE CATALOG")
+    st.markdown(f"📍 **{ACTIVE_STORE_DISPLAY}**")
 
 st.divider()
 
@@ -330,7 +325,6 @@ tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
 # TAB 1: BATCH INVOICE PARSER
 # ==========================================
 with tab_parser:
-    # CLEAN METRIC GRID (PERFECT ALIGNMENT)
     sm1, sm2, sm3 = st.columns(3)
     sm1.metric("Master SKUs Registered", len(master_sku_list))
     sm2.metric("Learned Vendor Rules", len(mapping_memory))
@@ -370,7 +364,6 @@ with tab_parser:
             all_parsed_items = []
             
             with st.status("Parsing purchase bills concurrently with Multimodal AI...", expanded=True) as status_container:
-                # Parallel Execution across uploaded files
                 with ThreadPoolExecutor(max_workers=min(len(uploaded_files), 5)) as executor:
                     results = list(executor.map(process_single_file, uploaded_files))
                     
