@@ -21,6 +21,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# --- TARGETED UI FIXES ---
+st.markdown("""
+<style>
+    /* Prevent Streamlit 'Press Enter to apply' text from overlapping long inputs */
+    div[data-testid="InputInstructions"] {
+        display: none !important;
+    }
+    
+    /* Ensure text inputs have proper internal padding */
+    div[data-baseweb="input"] input {
+        padding-right: 12px !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- MULTI-STORE DIRECTORY & DATA ISOLATION ---
 DATA_DIR = "stores_data"
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -36,8 +51,8 @@ def get_store_list():
 def sanitize_store_name(name):
     return "".join([c if c.isalnum() else "_" for c in name.strip()])
 
-# --- SIDEBAR: MULTI-TENANT SWITCHER & RENAME ---
-st.sidebar.title("🏬 Store Workspace")
+# --- SIDEBAR: MULTI-TENANT WORKSPACE ---
+st.sidebar.title("🏬 Store Management")
 existing_stores = get_store_list()
 
 selected_store_slug = st.sidebar.selectbox(
@@ -56,11 +71,15 @@ if st.session_state["last_store_slug"] != selected_store_slug:
     st.session_state["last_store_slug"] = selected_store_slug
     st.rerun()
 
-# ✏️ Edit Current Store Name
-with st.sidebar.expander("✏️ Rename Current Store", expanded=False):
+st.sidebar.divider()
+
+# --- SIDEBAR STORE ACTIONS (CLEAN TABS INSTEAD OF NARROW EXPANDERS) ---
+side_tab1, side_tab2 = st.sidebar.tabs(["✏️ Rename Store", "➕ Add Store"])
+
+with side_tab1:
     current_display = selected_store_slug.replace("_", " ")
-    renamed_input = st.text_input("New Name for Store:", value=current_display)
-    if st.button("Update Store Name", use_container_width=True):
+    renamed_input = st.text_input("Current Store Name", value=current_display, key="rename_input_field")
+    if st.button("Save New Name", use_container_width=True, type="secondary"):
         if renamed_input.strip() and renamed_input.strip() != current_display:
             new_slug = sanitize_store_name(renamed_input)
             old_path = os.path.join(DATA_DIR, selected_store_slug)
@@ -69,23 +88,25 @@ with st.sidebar.expander("✏️ Rename Current Store", expanded=False):
             if not os.path.exists(new_path):
                 shutil.move(old_path, new_path)
                 st.session_state["last_store_slug"] = new_slug
-                st.sidebar.success(f"Renamed to '{renamed_input}'!")
+                st.sidebar.success("Store name updated!")
                 st.rerun()
             else:
                 st.sidebar.error("A store with that name already exists.")
 
-# ➕ Register New Store
-with st.sidebar.expander("➕ Register New Store", expanded=False):
-    new_store_name = st.text_input("New Store Name:")
-    if st.button("Initialize Store", use_container_width=True, type="primary"):
+with side_tab2:
+    new_store_name = st.text_input("New Store Title", placeholder="e.g. Metro Supplies", key="add_input_field")
+    if st.button("Create Store", use_container_width=True, type="primary"):
         if new_store_name.strip():
             slug = sanitize_store_name(new_store_name)
             new_path = os.path.join(DATA_DIR, slug)
             os.makedirs(new_path, exist_ok=True)
-            st.sidebar.success(f"Store '{new_store_name}' initialized!")
+            st.session_state["last_store_slug"] = slug
+            st.sidebar.success(f"Store '{new_store_name}' created!")
             st.rerun()
 
-# --- API KEY AUTHENTICATION (QUIET BACKGROUND CHECK) ---
+st.sidebar.divider()
+
+# --- API KEY AUTHENTICATION ---
 api_key = None
 try:
     if "GEMINI_API_KEY" in st.secrets:
