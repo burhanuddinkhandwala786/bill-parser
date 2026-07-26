@@ -373,7 +373,7 @@ with left:
             🏬 {ACTIVE_STORE_DISPLAY}
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """, unsafe_allow_html=True,)
 
 with right:
     st.success("🟢 System Ready")
