@@ -12,107 +12,112 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-# --- EXECUTIVE DESIGN SYSTEM ---
+# --- LUXURY EXECUTIVE DESIGN SYSTEM CONFIGURATION ---
 st.set_page_config(
-    page_title="Universal OS | Enterprise Workspace",
+    page_title="Universal OS | Executive Workspace",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Complete Streamlit Style Override (Linear/Vercel Theme)
+# Apple / Mercedes-Benz MBUX Glassmorphism Design Injection
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     
-    /* Reset & Typography */
+    /* Global Reset & Pure Dark Obsidian Canvas */
     html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        color: #E2E8F0 !important;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif !important;
+        color: #F1F5F9 !important;
+        -webkit-font-smoothing: antialiased;
     }
     
     .stApp {
-        background-color: #090A0F !important;
+        background-color: #030508 !important;
     }
 
-    /* 1. HIDE NATIVE OVERLAPPING STREAMLIT HEADER */
+    /* 1. HIDE ALL STREAMLIT NATIVE CHROME & OVERLAPPING HEADERS */
     header[data-testid="stHeader"] {
         display: none !important;
     }
     
     .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 3rem !important;
-        padding-left: 1.5rem !important;
-        padding-right: 1.5rem !important;
+        padding-top: 1.2rem !important;
+        padding-bottom: 2.5rem !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
         max-width: 100% !important;
     }
 
-    /* 2. MODERN TOP COMMAND BAR */
+    /* 2. APPLE-INSPIRED TOP NAVIGATION / BAR */
     .command-bar {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        background: #12151E;
-        border: 1px solid #1F2430;
-        padding: 12px 20px;
-        border-radius: 12px;
+        gap: 16px;
+        background: rgba(255, 255, 255, 0.025);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 14px 28px;
+        border-radius: 20px;
         margin-bottom: 24px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
     }
     .brand-logo {
-        font-size: 14px;
-        font-weight: 700;
-        letter-spacing: -0.2px;
-        color: #F8FAFC;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.3px;
+        color: #FFFFFF;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
     }
     .brand-badge {
-        background: rgba(99, 102, 241, 0.15);
-        color: #818CF8;
-        border: 1px solid rgba(99, 102, 241, 0.3);
+        background: rgba(255, 255, 255, 0.08);
+        color: #CBD5E1;
+        border: 1px solid rgba(255, 255, 255, 0.15);
         font-size: 10px;
-        font-weight: 700;
-        padding: 2px 8px;
-        border-radius: 4px;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 20px;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 1px;
     }
     .store-pill {
-        background: #181E2A;
-        border: 1px solid #283245;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.12);
         color: #38BDF8;
-        font-size: 11px;
-        font-weight: 600;
-        padding: 4px 12px;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 5px 16px;
         border-radius: 20px;
-        letter-spacing: 0.3px;
+        letter-spacing: 0.5px;
     }
 
     .section-label {
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 1.5px;
         color: #64748B;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
     }
 
-    /* 3. SLEEK FILE DROPZONE */
+    /* 3. MERCEDES LUXURY GLASS FILE DROPZONE */
     div[data-testid="stFileUploader"] {
-        background: #12151E !important;
-        border: 1px dashed #283245 !important;
-        border-radius: 12px !important;
-        padding: 16px !important;
-        transition: all 0.2s ease !important;
+        background: rgba(255, 255, 255, 0.02) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 20px !important;
+        padding: 20px !important;
+        backdrop-filter: blur(12px) !important;
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
     }
     div[data-testid="stFileUploader"]:hover {
-        border-color: #6366F1 !important;
-        background: #151A26 !important;
+        border-color: rgba(255, 255, 255, 0.3) !important;
+        background: rgba(255, 255, 255, 0.04) !important;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
     }
     div[data-testid="stFileUploader"] section {
         background-color: transparent !important;
@@ -120,82 +125,89 @@ st.markdown("""
 
     /* 4. EXECUTIVE METRIC TILES */
     div[data-testid="stMetric"] {
-        background: #12151E !important;
-        border: 1px solid #1F2430 !important;
-        border-radius: 12px !important;
-        padding: 16px !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+        background: rgba(255, 255, 255, 0.02) !important;
+        backdrop-filter: blur(16px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 20px !important;
+        padding: 20px 24px !important;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4) !important;
     }
     div[data-testid="stMetricLabel"] p {
         font-size: 10px !important;
         font-weight: 700 !important;
         color: #64748B !important;
         text-transform: uppercase !important;
-        letter-spacing: 0.8px !important;
+        letter-spacing: 1.2px !important;
     }
     div[data-testid="stMetricValue"] div {
-        font-size: 20px !important;
-        font-weight: 700 !important;
+        font-size: 24px !important;
+        font-weight: 600 !important;
         color: #F8FAFC !important;
+        letter-spacing: -0.5px !important;
     }
 
-    /* 5. VERCEL-STYLE SLEEK TABS */
+    /* 5. LUXURY MINIMALIST TABS */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 4px;
+        gap: 8px;
         background-color: transparent;
-        border-bottom: 1px solid #1F2430;
-        padding-bottom: 6px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding-bottom: 8px;
     }
     .stTabs [data-baseweb="tab"] {
-        height: 36px;
-        border-radius: 6px;
-        padding: 0 16px;
-        background-color: transparent;
-        border: none;
+        height: 42px;
+        border-radius: 20px;
+        padding: 0 20px;
+        background-color: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.06);
         color: #64748B;
         font-weight: 500;
-        font-size: 13px;
+        font-size: 12px;
+        letter-spacing: 0.3px;
+        transition: all 0.2s ease;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #12151E !important;
-        color: #F8FAFC !important;
-        border: 1px solid #1F2430 !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+        background-color: rgba(255, 255, 255, 0.1) !important;
+        color: #FFFFFF !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
     }
 
-    /* 6. DATA EDITOR GRID */
+    /* 6. GLASS DATA EDITOR GRID */
     div[data-testid="stDataEditor"] {
-        border: 1px solid #1F2430 !important;
-        border-radius: 12px !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 20px !important;
         overflow: hidden !important;
-        background-color: #12151E !important;
+        background-color: rgba(255, 255, 255, 0.015) !important;
+        backdrop-filter: blur(20px) !important;
     }
 
-    /* 7. OVERRIDE STREAMLIT RED PRIMARY BUTTON */
+    /* 7. OVERRIDE STREAMLIT RED/PRIMARY BUTTONS WITH CHROME / INDIGO LUXURY GRADIENT */
     .stButton>button, .stDownloadButton>button {
-        border-radius: 8px !important;
-        font-weight: 600 !important;
+        border-radius: 20px !important;
+        font-weight: 500 !important;
         font-size: 13px !important;
-        padding: 10px 20px !important;
-        border: 1px solid #283245 !important;
-        background: #12151E !important;
+        padding: 12px 24px !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        background: rgba(255, 255, 255, 0.04) !important;
         color: #F8FAFC !important;
-        transition: all 0.2s ease !important;
+        backdrop-filter: blur(12px) !important;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
     }
     .stButton>button:hover, .stDownloadButton>button:hover {
-        background: #1A2234 !important;
-        border-color: #6366F1 !important;
+        background: rgba(255, 255, 255, 0.1) !important;
+        border-color: rgba(255, 255, 255, 0.3) !important;
         color: #FFFFFF !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
     }
     button[kind="primary"] {
-        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
+        background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%) !important;
         border: none !important;
         color: #FFFFFF !important;
-        box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35) !important;
+        box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3) !important;
     }
     button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #4F46E5 0%, #4338CA 100%) !important;
-        box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5) !important;
+        background: linear-gradient(135deg, #2563EB 0%, #1E40AF 100%) !important;
+        box-shadow: 0 12px 32px rgba(59, 130, 246, 0.45) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -270,11 +282,11 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# --- TOP COMMAND BAR ---
+# --- TOP MINIMAL COMMAND BAR ---
 st.markdown(f"""
 <div class="command-bar">
     <div class="brand-logo">
-        ⚡ Universal OS <span class="brand-badge">PRO INTAKE</span>
+        ⚡ Universal OS <span class="brand-badge">EXECUTIVE EDITION</span>
     </div>
     <div class="store-pill">
         📍 CATALOG: <b>{ACTIVE_STORE_DISPLAY}</b>
@@ -396,7 +408,7 @@ def extract_invoice_data(image):
 
 # --- WORKSPACE TABS ---
 tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
-    "⚡ Batch Intake", 
+    "⚡ Batch Processing", 
     "⚙️ Master Catalog", 
     "🧠 AI Memory", 
     "📖 Integration Guide"
