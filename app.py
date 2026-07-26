@@ -12,88 +12,13 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-# --- ENTERPRISE SAAS PAGE CONFIGURATION & STYLING ---
+# --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="Universal OS | Multi-Store AI Ingestion SaaS",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# Custom Clean Executive Light Theme (No intrusive CSS overrides)
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-    
-    html, body, [data-testid="stAppViewContainer"] {
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-        background-color: #F8FAFC;
-    }
-    
-    .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 2.5rem !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
-        max-width: 100% !important;
-    }
-    
-    /* Hero Banner Styling */
-    .saas-header {
-        background: #FFFFFF;
-        padding: 20px 28px;
-        border-radius: 16px;
-        color: #0F172A;
-        margin-bottom: 24px;
-        border: 1px solid #E2E8F0;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .saas-title {
-        font-size: 24px;
-        font-weight: 700;
-        margin: 0;
-        color: #0F172A;
-    }
-    .saas-subtitle {
-        font-size: 13px;
-        color: #64748B;
-        margin-top: 4px;
-        margin-bottom: 0;
-    }
-    .status-badge {
-        background-color: #DCFCE7;
-        color: #15803D;
-        font-size: 11px;
-        font-weight: 700;
-        padding: 4px 12px;
-        border-radius: 20px;
-        border: 1px solid #BBF7D0;
-        text-transform: uppercase;
-    }
-    .store-badge {
-        background-color: #EEF2FF;
-        color: #4338CA;
-        font-size: 12px;
-        font-weight: 600;
-        padding: 4px 12px;
-        border-radius: 8px;
-        border: 1px solid #C7D2FE;
-        margin-left: 8px;
-    }
-
-    /* Card Panels */
-    .info-card {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        padding: 16px;
-        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # --- MULTI-STORE DIRECTORY & DATA ISOLATION ---
 DATA_DIR = "stores_data"
@@ -111,7 +36,7 @@ def sanitize_store_name(name):
     return "".join([c if c.isalnum() else "_" for c in name.strip()])
 
 # --- SIDEBAR: MULTI-TENANT SWITCHER ---
-st.sidebar.markdown("## 🏬 Store Management")
+st.sidebar.title("🏬 Store Management")
 existing_stores = get_store_list()
 
 selected_store_slug = st.sidebar.selectbox(
@@ -138,11 +63,11 @@ with st.sidebar.expander("➕ Register New Store", expanded=True):
             slug = sanitize_store_name(new_store_name)
             new_path = os.path.join(DATA_DIR, slug)
             os.makedirs(new_path, exist_ok=True)
-            st.success(f"Store '{new_store_name}' initialized!")
+            st.sidebar.success(f"Store '{new_store_name}' initialized!")
             st.rerun()
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔑 API Configuration")
+st.sidebar.divider()
+st.sidebar.subheader("🔑 API Configuration")
 
 api_key = None
 try:
@@ -169,19 +94,17 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# Render Header
-st.markdown(f"""
-<div class="saas-header">
-    <div>
-        <p class="saas-title">⚡ Universal OS — AI Intake SaaS</p>
-        <p class="saas-subtitle">Multi-Store Purchase Ingestion & Bulk Inventory Synchronizer</p>
-    </div>
-    <div>
-        <span class="status-badge">🟢 Commercial SaaS Active</span>
-        <span class="store-badge">📍 Store: <b>{ACTIVE_STORE_DISPLAY}</b></span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+# --- HEADER BANNER ---
+header_col1, header_col2 = st.columns([3, 1])
+with header_col1:
+    st.title("⚡ Universal OS")
+    st.caption("Multi-Store Purchase Ingestion & Bulk Inventory Synchronizer")
+
+with header_col2:
+    st.markdown(f"**Status:** `🟢 COMMERCIAL SAAS ACTIVE`")
+    st.markdown(f"**Store:** `{ACTIVE_STORE_DISPLAY}`")
+
+st.divider()
 
 # --- STORE DATA LOADERS & PERSISTENCE ---
 def load_json_memory():
@@ -310,21 +233,24 @@ with tab_parser:
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
-        st.markdown("### 1. Multi-Bill Image Intake")
-        uploaded_files = st.file_uploader(
-            f"Upload Purchase Bills for {ACTIVE_STORE_DISPLAY} (PNG, JPG, JPEG)",
-            type=["jpg", "jpeg", "png"],
-            accept_multiple_files=True
-        )
+        with st.container(border=True):
+            st.subheader("1. Multi-Bill Image Intake")
+            uploaded_files = st.file_uploader(
+                f"Upload Purchase Bills for {ACTIVE_STORE_DISPLAY} (PNG, JPG, JPEG)",
+                type=["jpg", "jpeg", "png"],
+                accept_multiple_files=True
+            )
 
     with col_info:
-        st.markdown("### ⚡ Batch Status")
-        if uploaded_files:
-            st.success(f"📁 {len(uploaded_files)} File(s) Ready for Ingestion")
-        else:
-            st.info("No files uploaded.")
+        with st.container(border=True):
+            st.subheader("⚡ Batch Status")
+            if uploaded_files:
+                st.success(f"📁 {len(uploaded_files)} File(s) Ready for Ingestion")
+            else:
+                st.info("No files uploaded yet.")
 
     if uploaded_files:
+        st.write("")
         if st.button("🚀 Process & Parse Invoices with AI", type="primary", use_container_width=True):
             if "parsed_df" in st.session_state:
                 del st.session_state["parsed_df"]
@@ -388,8 +314,8 @@ with tab_parser:
 
     # --- REVIEW & EDIT WORKSPACE ---
     if "parsed_df" in st.session_state:
-        st.write("---")
-        st.markdown("### 2. Live Audit Workspace")
+        st.divider()
+        st.subheader("2. Live Audit Workspace")
         st.caption("💡 Map raw vendor items to official SKUs. Selling Price defaults to 0.0 unless manually specified.")
         
         df = st.session_state["parsed_df"]
@@ -415,7 +341,7 @@ with tab_parser:
             }
         )
         
-        st.write("---")
+        st.divider()
         if st.button("✅ Generate & Download Excel File", type="primary", use_container_width=True):
             memory_updated = False
             master_updated = False
@@ -499,57 +425,59 @@ with tab_parser:
 # TAB 2: STORE MASTER CATALOG MANAGER
 # ==========================================
 with tab_master:
-    st.markdown(f"### ⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
+    st.subheader(f"⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
     st.caption("Manage official SKUs for this store catalog.")
     
     col_add, col_list = st.columns([1, 2])
     
     with col_add:
-        st.markdown("#### ➕ Add New SKU")
-        add_sku = st.text_input("SKU Name")
-        add_cat = st.text_input("Category", value="General")
-        add_unit = st.selectbox("Default Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET"])
-        add_gst = st.selectbox("GST Rate (%)", options=[0, 5, 12, 18, 28], index=3)
-        add_price = st.number_input("Selling Price ₹ (Optional)", min_value=0.0, step=10.0)
-        
-        if st.button("Save SKU to Master List", use_container_width=True, type="primary"):
-            if add_sku.strip():
-                clean_sku = add_sku.strip()
-                if clean_sku not in master_sku_list:
-                    new_row = pd.DataFrame([{
-                        "Official_SKU_Name": clean_sku,
-                        "Category": add_cat,
-                        "Default_Unit": add_unit,
-                        "GST_Rate": add_gst,
-                        "Selling_Price": add_price
-                    }])
-                    updated = pd.concat([master_df, new_row], ignore_index=True)
-                    save_master(updated, selected_store_slug)
-                    st.success(f"Added '{clean_sku}'!")
-                    st.rerun()
-                else:
-                    st.warning("SKU already exists.")
+        with st.container(border=True):
+            st.markdown("### ➕ Add New SKU")
+            add_sku = st.text_input("SKU Name")
+            add_cat = st.text_input("Category", value="General")
+            add_unit = st.selectbox("Default Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET"])
+            add_gst = st.selectbox("GST Rate (%)", options=[0, 5, 12, 18, 28], index=3)
+            add_price = st.number_input("Selling Price ₹ (Optional)", min_value=0.0, step=10.0)
+            
+            if st.button("Save SKU to Master List", use_container_width=True, type="primary"):
+                if add_sku.strip():
+                    clean_sku = add_sku.strip()
+                    if clean_sku not in master_sku_list:
+                        new_row = pd.DataFrame([{
+                            "Official_SKU_Name": clean_sku,
+                            "Category": add_cat,
+                            "Default_Unit": add_unit,
+                            "GST_Rate": add_gst,
+                            "Selling_Price": add_price
+                        }])
+                        updated = pd.concat([master_df, new_row], ignore_index=True)
+                        save_master(updated, selected_store_slug)
+                        st.success(f"Added '{clean_sku}'!")
+                        st.rerun()
+                    else:
+                        st.warning("SKU already exists.")
                     
     with col_list:
-        st.markdown("#### 📋 Store SKUs")
-        if not master_df.empty:
-            st.dataframe(master_df, use_container_width=True)
-            st.write(" ")
-            sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
-            if st.button("🗑️ Delete Selected SKU", use_container_width=True):
-                if sku_to_delete != "-- None --":
-                    updated = master_df[master_df["Official_SKU_Name"] != sku_to_delete]
-                    save_master(updated, selected_store_slug)
-                    st.success(f"Removed '{sku_to_delete}'!")
-                    st.rerun()
-        else:
-            st.info("Master catalog for this store is empty.")
+        with st.container(border=True):
+            st.markdown("### 📋 Store SKUs")
+            if not master_df.empty:
+                st.dataframe(master_df, use_container_width=True)
+                st.write(" ")
+                sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
+                if st.button("🗑️ Delete Selected SKU", use_container_width=True):
+                    if sku_to_delete != "-- None --":
+                        updated = master_df[master_df["Official_SKU_Name"] != sku_to_delete]
+                        save_master(updated, selected_store_slug)
+                        st.success(f"Removed '{sku_to_delete}'!")
+                        st.rerun()
+            else:
+                st.info("Master catalog for this store is empty.")
 
 # ==========================================
 # TAB 3: VENDOR SKU MEMORY WORKSPACE
 # ==========================================
 with tab_memory:
-    st.markdown(f"### 🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
+    st.subheader(f"🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
     st.caption("Maps vendor bill descriptions to your store SKUs.")
     
     if mapping_memory:
@@ -571,11 +499,12 @@ with tab_memory:
 # TAB 4: IMPORT GUIDE
 # ==========================================
 with tab_guide:
-    st.markdown("### 📖 Import Guide")
-    st.markdown("""
-    1. **Select Store:** Choose your active store in the sidebar or register a new one.
-    2. **Upload Bills:** Upload purchase invoice photos in **Tab 1** and click **Process Invoices**.
-    3. **Review & Audit:** Confirm quantities, HSN codes, and mapped SKUs.
-    4. **Download Excel:** Click **Download File** to generate your spreadsheet.
-    5. **Upload to ERP/Accounting:** Open your software → **Items / Inventory** → **Bulk Import**, select the generated `.xlsx` file, and upload.
-    """)
+    st.subheader("📖 Import Guide")
+    with st.container(border=True):
+        st.markdown("""
+        1. **Select Store:** Choose your active store in the sidebar or register a new one.
+        2. **Upload Bills:** Upload purchase invoice photos in **Tab 1** and click **Process Invoices**.
+        3. **Review & Audit:** Confirm quantities, HSN codes, and mapped SKUs.
+        4. **Download Excel:** Click **Download File** to generate your spreadsheet.
+        5. **Upload to ERP/Accounting:** Open your software → **Items / Inventory** → **Bulk Import**, select the generated `.xlsx` file, and upload.
+        """)
