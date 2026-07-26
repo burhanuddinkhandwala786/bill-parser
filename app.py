@@ -14,7 +14,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Universal OS | Multi-Store AI Ingestion SaaS",
+    page_title="Universal OS | Multi-Store AI SaaS",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -36,7 +36,7 @@ def sanitize_store_name(name):
     return "".join([c if c.isalnum() else "_" for c in name.strip()])
 
 # --- SIDEBAR: MULTI-TENANT SWITCHER ---
-st.sidebar.title("🏬 Store Directory")
+st.sidebar.title("🏬 Store Workspace")
 existing_stores = get_store_list()
 
 selected_store_slug = st.sidebar.selectbox(
@@ -55,10 +55,10 @@ if st.session_state["last_store_slug"] != selected_store_slug:
     st.session_state["last_store_slug"] = selected_store_slug
     st.rerun()
 
-# Register New Store
-with st.sidebar.expander("➕ Register New Store", expanded=True):
-    new_store_name = st.text_input("New Store Name:")
-    if st.button("Create Store Environment", use_container_width=True):
+# Register New Store Section
+with st.sidebar.expander("➕ Register New Store", expanded=False):
+    new_store_name = st.text_input("Store Name:")
+    if st.button("Initialize Store", use_container_width=True, type="primary"):
         if new_store_name.strip():
             slug = sanitize_store_name(new_store_name)
             new_path = os.path.join(DATA_DIR, slug)
@@ -67,7 +67,7 @@ with st.sidebar.expander("➕ Register New Store", expanded=True):
             st.rerun()
 
 st.sidebar.divider()
-st.sidebar.subheader("🔑 API Configuration")
+st.sidebar.subheader("🔑 Engine Settings")
 
 api_key = None
 try:
@@ -94,14 +94,29 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# --- HEADER SECTION (NATIVE STREAMLIT) ---
-h_col1, h_col2 = st.columns([3, 1])
-with h_col1:
-    st.title("⚡ Universal OS — AI Intake SaaS")
-    st.caption("Multi-Store Purchase Ingestion & Bulk Inventory Synchronizer")
+# --- TOP COMMAND BAR ---
+nav_col1, nav_col2, nav_col3 = st.columns([3, 1.5, 1])
 
-with h_col2:
-    st.info(f"🟢 **SAAS ACTIVE**\n\n📍 Store: **{ACTIVE_STORE_DISPLAY}**")
+with nav_col1:
+    st.title("⚡ Universal OS")
+    st.caption("Commercial Multi-Store AI Purchase Intake & Inventory Synchronizer")
+
+with nav_col2:
+    st.write("")
+    st.caption(f"STATUS: **🟢 ONLINE** | ACTIVE CATALOG")
+    st.subheader(f"📍 {ACTIVE_STORE_DISPLAY}")
+
+with nav_col3:
+    st.write("")
+    with st.popover("⚙️ Quick Actions", use_container_width=True):
+        st.markdown("**Workspace Shortcuts**")
+        if st.button("🔄 Refresh Data Cache", use_container_width=True):
+            st.cache_data.clear()
+            st.toast("Cache cleared successfully!")
+        if st.button("🧹 Clear Parsed Batch", use_container_width=True):
+            if "parsed_df" in st.session_state:
+                del st.session_state["parsed_df"]
+                st.rerun()
 
 st.divider()
 
@@ -220,92 +235,97 @@ def extract_invoice_data(image):
 # --- WORKSPACE TABS ---
 tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
     "📥 Batch Invoice Parser", 
-    "⚙️ Store Master Catalog",
-    "📋 Vendor SKU Memory", 
-    "📖 Guide"
+    "⚙️ Master Catalog",
+    "📋 Vendor Memory", 
+    "📖 Operating Guide"
 ])
 
 # ==========================================
 # TAB 1: BATCH INVOICE PARSER
 # ==========================================
 with tab_parser:
-    col_upload, col_info = st.columns([2, 1])
+    col_upload, col_info = st.columns([2.2, 1])
     
     with col_upload:
         with st.container(border=True):
-            st.subheader("1. Multi-Bill Image Intake")
+            st.markdown("### 1. Invoice Image Dropzone")
+            st.caption(f"Target Catalog Environment: **{ACTIVE_STORE_DISPLAY}**")
             uploaded_files = st.file_uploader(
-                f"Upload Purchase Bills for {ACTIVE_STORE_DISPLAY} (PNG, JPG, JPEG)",
+                "Upload Bills (PNG, JPG, JPEG)",
                 type=["jpg", "jpeg", "png"],
-                accept_multiple_files=True
+                accept_multiple_files=True,
+                label_visibility="collapsed"
             )
 
     with col_info:
         with st.container(border=True):
-            st.subheader("⚡ Batch Status")
+            st.markdown("### ⚡ Batch Ingestion Status")
             if uploaded_files:
-                st.success(f"📁 {len(uploaded_files)} File(s) Ready for Ingestion")
+                st.success(f"📁 **{len(uploaded_files)} File(s)** Ready for Parsing")
+                st.caption("AI Ready to analyze invoice lines, HSN, taxes, and price rates.")
             else:
-                st.info("No files uploaded yet.")
+                st.info("No invoice files staged.")
+                st.caption("Upload one or multiple purchase bills to start ingestion.")
 
     if uploaded_files:
         st.write("")
-        if st.button("🚀 Process & Parse Invoices with AI", type="primary", use_container_width=True):
+        if st.button("🚀 Run AI Invoice Parsing Engine", type="primary", use_container_width=True):
             if "parsed_df" in st.session_state:
                 del st.session_state["parsed_df"]
                 
             all_parsed_items = []
-            progress_bar = st.progress(0)
-            status_text = st.empty()
             
-            for idx, file in enumerate(uploaded_files):
-                status_text.caption(f"Parsing bill {idx + 1} of {len(uploaded_files)}: **{file.name}**...")
-                try:
-                    file.seek(0)
-                    img = Image.open(file)
-                    parsed_json = extract_invoice_data(img)
-                    supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
-                    
-                    for row in parsed_json.get("Line Items", []):
-                        qty = float(row.get("Quantity") or 1.0)
-                        gst_rate = float(row.get("GST Rate") or 18.0)
-                        base_rate = float(row.get("Listed Base Rate") or 0.0)
-                        total_inclusive = float(row.get("Listed Total Inclusive Rate") or 0.0)
-                        hsn_sac = str(row.get("HSN Code") or "").strip()
-                        
-                        # Tax Reverse Math Handling
-                        if base_rate > 0:
-                            final_base = base_rate
-                        elif total_inclusive > 0:
-                            final_base = total_inclusive / (1 + (gst_rate / 100))
-                        else:
-                            final_base = 0.0
-                            
-                        raw_item_name = str(row.get("Item Name", "")).strip()
-                        matched_sku, match_type = match_sku(raw_item_name)
-                        
-                        known_selling = get_known_selling_price(matched_sku)
-                        
-                        all_parsed_items.append({
-                            "Supplier Name": supplier,
-                            "Raw Vendor Item": raw_item_name,
-                            "Official SKU": matched_sku,
-                            "Match Status": match_type,
-                            "Current Quantity": qty,
-                            "Unit": str(row.get("Unit", "PCS")).upper(),
-                            "HSN/SAC": hsn_sac,
-                            "Category": "General",
-                            "GST Rate": gst_rate,
-                            "Purchase Price": round(final_base, 2),
-                            "Selling Price": round(known_selling, 2)
-                        })
-                except Exception as e:
-                    st.error(f"Error reading {file.name}: {e}")
-                    
-                progress_bar.progress((idx + 1) / len(uploaded_files))
+            with st.status("Analyzing purchase bills with Multimodal AI...", expanded=True) as status_container:
+                progress_bar = st.progress(0)
                 
-            status_text.empty()
-            gc.collect()
+                for idx, file in enumerate(uploaded_files):
+                    st.write(f"🔍 Processing **{file.name}** ({idx + 1}/{len(uploaded_files)})...")
+                    try:
+                        file.seek(0)
+                        img = Image.open(file)
+                        parsed_json = extract_invoice_data(img)
+                        supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
+                        
+                        for row in parsed_json.get("Line Items", []):
+                            qty = float(row.get("Quantity") or 1.0)
+                            gst_rate = float(row.get("GST Rate") or 18.0)
+                            base_rate = float(row.get("Listed Base Rate") or 0.0)
+                            total_inclusive = float(row.get("Listed Total Inclusive Rate") or 0.0)
+                            hsn_sac = str(row.get("HSN Code") or "").strip()
+                            
+                            # Tax Reverse Math Handling
+                            if base_rate > 0:
+                                final_base = base_rate
+                            elif total_inclusive > 0:
+                                final_base = total_inclusive / (1 + (gst_rate / 100))
+                            else:
+                                final_base = 0.0
+                                
+                            raw_item_name = str(row.get("Item Name", "")).strip()
+                            matched_sku, match_type = match_sku(raw_item_name)
+                            
+                            known_selling = get_known_selling_price(matched_sku)
+                            
+                            all_parsed_items.append({
+                                "Supplier Name": supplier,
+                                "Raw Vendor Item": raw_item_name,
+                                "Official SKU": matched_sku,
+                                "Match Status": match_type,
+                                "Current Quantity": qty,
+                                "Unit": str(row.get("Unit", "PCS")).upper(),
+                                "HSN/SAC": hsn_sac,
+                                "Category": "General",
+                                "GST Rate": gst_rate,
+                                "Purchase Price": round(final_base, 2),
+                                "Selling Price": round(known_selling, 2)
+                            })
+                    except Exception as e:
+                        st.error(f"Error reading {file.name}: {e}")
+                        
+                    progress_bar.progress((idx + 1) / len(uploaded_files))
+                    
+                gc.collect()
+                status_container.update(label="✅ Batch Processing Complete!", state="complete", expanded=False)
                 
             if all_parsed_items:
                 st.session_state["parsed_df"] = pd.DataFrame(all_parsed_items)
@@ -314,17 +334,23 @@ with tab_parser:
     # --- REVIEW & EDIT WORKSPACE ---
     if "parsed_df" in st.session_state:
         st.divider()
-        st.subheader("2. Live Audit Workspace")
-        st.caption("💡 Map raw vendor items to official SKUs. Selling Price defaults to 0.0 unless manually specified.")
+        st.markdown("### 2. Live Inventory Audit Workspace")
+        st.caption("Verify AI extraction, mapped SKUs, and rate details before exporting to accounting software.")
         
         df = st.session_state["parsed_df"]
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("Total Line Items", len(df))
-        m2.metric("Total Units", f"{df['Current Quantity'].sum():,.0f}")
-        m3.metric("Taxable Purchase Cost", f"₹{(df['Purchase Price'] * df['Current Quantity']).sum():,.2f}")
+        with m1:
+            with st.container(border=True):
+                st.metric("Total Line Items", f"{len(df)} Items")
+        with m2:
+            with st.container(border=True):
+                st.metric("Total Stock Quantity", f"{df['Current Quantity'].sum():,.0f} Units")
+        with m3:
+            with st.container(border=True):
+                st.metric("Taxable Purchase Value", f"₹{(df['Purchase Price'] * df['Current Quantity']).sum():,.2f}")
         
-        st.write(" ")
+        st.write("")
         
         edited_df = st.data_editor(
             df,
@@ -341,7 +367,7 @@ with tab_parser:
         )
         
         st.divider()
-        if st.button("✅ Generate & Download Excel File", type="primary", use_container_width=True):
+        if st.button("✅ Confirm Audit & Generate Excel Import File", type="primary", use_container_width=True):
             memory_updated = False
             master_updated = False
             current_master_skus = set(master_sku_list)
@@ -370,11 +396,11 @@ with tab_parser:
 
             if memory_updated:
                 save_json_memory(mapping_memory)
-                st.toast("🧠 Saved vendor mapping to learned memory!")
+                st.toast("🧠 Learned Vendor Mapping updated!")
                 
             if master_updated:
                 save_master(master_df, selected_store_slug)
-                st.toast("⚙️ New SKUs added to Master Catalog!")
+                st.toast("⚙️ Master SKU catalog expanded!")
                 
             wb = openpyxl.Workbook()
             ws = wb.active
@@ -413,9 +439,9 @@ with tab_parser:
             buffer.seek(0)
             
             st.download_button(
-                label=f"📥 Download File for {ACTIVE_STORE_DISPLAY}",
+                label=f"📥 Download Bulk Import Spreadsheet for {ACTIVE_STORE_DISPLAY}",
                 data=buffer.getvalue(),
-                file_name=f"{selected_store_slug}_Items_Import.xlsx",
+                file_name=f"{selected_store_slug}_Inventory_Import.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
@@ -424,21 +450,21 @@ with tab_parser:
 # TAB 2: STORE MASTER CATALOG MANAGER
 # ==========================================
 with tab_master:
-    st.subheader(f"⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
-    st.caption("Manage official SKUs for this store catalog.")
+    st.markdown(f"### ⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
+    st.caption("Define official product SKUs, tax rates, and default units for this store.")
     
     col_add, col_list = st.columns([1, 2])
     
     with col_add:
         with st.container(border=True):
-            st.markdown("### ➕ Add New SKU")
-            add_sku = st.text_input("SKU Name")
+            st.markdown("#### ➕ Add New Master SKU")
+            add_sku = st.text_input("SKU Name (e.g. Copper Wire 1.5mm)")
             add_cat = st.text_input("Category", value="General")
             add_unit = st.selectbox("Default Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET"])
             add_gst = st.selectbox("GST Rate (%)", options=[0, 5, 12, 18, 28], index=3)
             add_price = st.number_input("Selling Price ₹ (Optional)", min_value=0.0, step=10.0)
             
-            if st.button("Save SKU to Master List", use_container_width=True, type="primary"):
+            if st.button("Save SKU to Catalog", use_container_width=True, type="primary"):
                 if add_sku.strip():
                     clean_sku = add_sku.strip()
                     if clean_sku not in master_sku_list:
@@ -458,52 +484,55 @@ with tab_master:
                     
     with col_list:
         with st.container(border=True):
-            st.markdown("### 📋 Store SKUs")
+            st.markdown("#### 📋 Catalog Register")
             if not master_df.empty:
                 st.dataframe(master_df, use_container_width=True)
-                st.write(" ")
-                sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
-                if st.button("🗑️ Delete Selected SKU", use_container_width=True):
-                    if sku_to_delete != "-- None --":
-                        updated = master_df[master_df["Official_SKU_Name"] != sku_to_delete]
-                        save_master(updated, selected_store_slug)
-                        st.success(f"Removed '{sku_to_delete}'!")
-                        st.rerun()
+                st.write("")
+                with st.expander("🗑️ Delete Catalog SKU"):
+                    sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
+                    if st.button("Delete Selected SKU", use_container_width=True):
+                        if sku_to_delete != "-- None --":
+                            updated = master_df[master_df["Official_SKU_Name"] != sku_to_delete]
+                            save_master(updated, selected_store_slug)
+                            st.success(f"Removed '{sku_to_delete}'!")
+                            st.rerun()
             else:
-                st.info("Master catalog for this store is empty.")
+                st.info("Master catalog for this store is currently empty.")
 
 # ==========================================
 # TAB 3: VENDOR SKU MEMORY WORKSPACE
 # ==========================================
 with tab_memory:
-    st.subheader(f"🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
-    st.caption("Maps vendor bill descriptions to your store SKUs.")
+    st.markdown(f"### 🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
+    st.caption("AI remembers how vendor-specific invoice descriptions map to your store SKUs.")
     
     if mapping_memory:
         mem_df = pd.DataFrame([
-            {"Raw Vendor Item Name": k, "Mapped Store SKU": v}
+            {"Raw Vendor Item Description": k, "Mapped Store SKU": v}
             for k, v in mapping_memory.items()
         ])
         st.dataframe(mem_df, use_container_width=True)
         
-        st.write(" ")
-        if st.button("🗑️ Clear Store Memory Cache"):
+        st.write("")
+        if st.button("🗑️ Reset Store Memory Cache"):
             save_json_memory({})
-            st.success("Memory cleared!")
+            st.success("Memory cache reset!")
             st.rerun()
     else:
-        st.info("No learned vendor mappings yet for this store.")
+        st.info("No learned vendor mappings recorded yet for this store location.")
 
 # ==========================================
 # TAB 4: IMPORT GUIDE
 # ==========================================
 with tab_guide:
-    st.subheader("📖 Import Guide")
+    st.markdown("### 📖 Standard Operating Procedure")
     with st.container(border=True):
         st.markdown("""
-        1. **Select Store:** Choose your active store in the sidebar or register a new one.
-        2. **Upload Bills:** Upload purchase invoice photos in **Tab 1** and click **Process Invoices**.
-        3. **Review & Audit:** Confirm quantities, HSN codes, and mapped SKUs.
-        4. **Download Excel:** Click **Download File** to generate your spreadsheet.
-        5. **Upload to ERP/Accounting:** Open your software → **Items / Inventory** → **Bulk Import**, select the generated `.xlsx` file, and upload.
+        ### How to Process & Sync Invoices:
+        1. **Select Store:** Choose your active store location in the left sidebar directory.
+        2. **Upload Bills:** Drop one or multiple purchase invoice photos in **Tab 1**.
+        3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
+        4. **Audit Workspace:** Check quantities, HSN codes, purchase rates, and mapped SKUs.
+        5. **Download Import File:** Generate the `.xlsx` spreadsheet.
+        6. **Import to ERP:** Open your accounting or ERP software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
         """)
