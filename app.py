@@ -455,17 +455,21 @@ def extract_invoice_data(image):
     raise Exception(f"AI Service busy across models: {last_error}")
 
 # --- WORKSPACE TABS ---
-tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
-    "📥 Batch Invoice Parser", 
-    "⚙️ Store Master Catalog",
-    "📋 Vendor SKU Memory", 
-    "📖 Guide"
-])
+page = st.sidebar.radio(
+    "Navigation",
+    [
+        "🏠 Dashboard",
+        "📥 Import Bills",
+        "📦 Master Catalog",
+        "🧠 SKU Memory",
+        "⚙ Settings"
+    ]
+)
 
 # ==========================================
 # TAB 1: BATCH INVOICE PARSER
 # ==========================================
-with tab_parser:
+if page == "📥 Import Bills":
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
@@ -657,7 +661,7 @@ with tab_parser:
 # ==========================================
 # TAB 2: STORE MASTER CATALOG MANAGER
 # ==========================================
-with tab_master:
+if page == "📦 Master Catalog":
     st.markdown(f"### ⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
     st.caption("Manage official SKUs for this store catalog.")
     
@@ -706,7 +710,7 @@ with tab_master:
 # ==========================================
 # TAB 3: VENDOR SKU MEMORY WORKSPACE
 # ==========================================
-with tab_memory:
+if page == "🧠 SKU Memory":
     st.markdown(f"### 🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
     st.caption("Maps vendor bill descriptions to your store SKUs.")
     
@@ -727,7 +731,7 @@ with tab_memory:
 # ==========================================
 # TAB 4: IMPORT GUIDE
 # ==========================================
-with tab_guide:
+if page == "⚙ Settings":
     st.markdown("### 📖 Import Guide")
     st.markdown("""
     1. **Select Store:** Choose your active store in the sidebar or register a new one.
