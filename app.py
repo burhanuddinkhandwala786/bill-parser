@@ -31,7 +31,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">⚡ AI Invoice-to-Excel Bulk Stock Engine</div>', unsafe_unsafe_html=True)
+st.markdown('<div class="main-title">⚡ AI Invoice-to-Excel Bulk Stock Engine</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">Upload purchase bills → Audit & Review Rates → Export 100% Accountune-compliant Excel sheet for instant bulk import.</div>', unsafe_allow_html=True)
 
 # --- SECURE API KEY INITIALIZATION ---
