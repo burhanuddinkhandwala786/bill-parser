@@ -14,10 +14,10 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 # --- ENTERPRISE SAAS PAGE CONFIGURATION & STYLING ---
 st.set_page_config(
-    page_title="Universal OS | Multi-Store AI Ingestion SaaS",
+    page_title="Universal OS",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 # Custom Enterprise SaaS CSS System
@@ -268,7 +268,13 @@ def sanitize_store_name(name):
     return "".join([c if c.isalnum() else "_" for c in name.strip()])
 
 # --- SIDEBAR: MULTI-TENANT SWITCHER ---
-st.sidebar.markdown("## 🏬 Store Management")
+st.sidebar.markdown("# ⚡ Universal OS")
+
+st.sidebar.caption("AI Inventory Platform")
+
+st.sidebar.divider()
+
+st.sidebar.markdown("### 🏬 Store Management")
 existing_stores = get_store_list()
 
 selected_store_slug = st.sidebar.selectbox(
