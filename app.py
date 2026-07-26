@@ -74,7 +74,7 @@ st.markdown("""
 # Render SaaS Header
 st.markdown("""
 <div class="saas-header">
-    <span class="status-badge">🟢 AI Engine Active</span>
+    <span class="status-badge">🟢 Enterprise SaaS Active</span>
     <p class="saas-title">⚡ Universal OS — AI Intake SaaS</p>
     <p class="saas-subtitle">Automated Purchase Bill Parser & Accountune Bulk Inventory Synchronizer</p>
 </div>
@@ -123,9 +123,13 @@ def save_json_memory(memory_dict):
 @st.cache_data
 def load_master():
     try:
-        return pd.read_csv(MASTER_FILE)
+        df = pd.read_csv(MASTER_FILE)
+        # Ensure default selling price column exists
+        if "Selling_Price" not in df.columns:
+            df["Selling_Price"] = 0.0
+        return df
     except Exception:
-        return pd.DataFrame({"Official_SKU_Name": [], "Category": [], "Default_Unit": [], "GST_Rate": []})
+        return pd.DataFrame({"Official_SKU_Name": [], "Category": [], "Default_Unit": [], "GST_Rate": [], "Selling_Price": []})
 
 master_df = load_master()
 master_sku_list = master_df["Official_SKU_Name"].tolist() if not master_df.empty else []
@@ -146,6 +150,16 @@ def match_sku(raw_name):
             return match, f"🔍 Fuzzy ({int(score)}%)"
             
     return raw_name, "⚠️ New SKU"
+
+def get_known_selling_price(sku_name):
+    """Retrieves established catalog selling price if it exists in master inventory."""
+    if not master_df.empty and "Selling_Price" in master_df.columns:
+        matched = master_df[master_df["Official_SKU_Name"] == sku_name]
+        if not matched.empty:
+            price = matched.iloc[0]["Selling_Price"]
+            if pd.notnull(price) and float(price) > 0:
+                return float(price)
+    return 0.0
 
 # --- FAIL-SAFE HIGH-SPEED AI ENGINE WITH RETRIES & MODEL CASCADE ---
 def is_server_error(exception):
@@ -226,6 +240,10 @@ with tab_parser:
         )
 
     with col_info:
+        st.markdown("### ⚙️ Intake Settings")
+        default_markup_pct = st.number_input("Default Markup % for New Items (0 = None)", min_value=0.0, max_value=100.0, value=0.0, step=1.0)
+        
+        st.markdown("---")
         st.markdown("### ⚡ Quick Add New SKU")
         new_sku_input = st.text_input("Add new Official SKU on the go:")
         if st.button("➕ Add SKU to Master List"):
@@ -233,10 +251,10 @@ with tab_parser:
                 clean_new_sku = new_sku_input.strip()
                 if clean_new_sku not in master_sku_list:
                     # Append new SKU to CSV
-                    new_row = pd.DataFrame([{"Official_SKU_Name": clean_new_sku, "Category": "General", "Default_Unit": "PCS", "GST_Rate": 18}])
+                    new_row = pd.DataFrame([{"Official_SKU_Name": clean_new_sku, "Category": "General", "Default_Unit": "PCS", "GST_Rate": 18, "Selling_Price": 0.0}])
                     updated_master = pd.concat([master_df, new_row], ignore_index=True)
                     updated_master.to_csv(MASTER_FILE, index=False)
-                    st.cache_data.clear() # Clear Streamlit cache to refresh master list
+                    st.cache_data.clear() # Clear Streamlit cache
                     st.success(f"Added '{clean_new_sku}' to Official SKU List!")
                     st.rerun()
                 else:
@@ -255,7 +273,6 @@ with tab_parser:
             for idx, file in enumerate(uploaded_files):
                 status_text.caption(f"Parsing bill {idx + 1} of {len(uploaded_files)}: **{file.name}**...")
                 try:
-                    # Seek to start of file stream
                     file.seek(0)
                     img = Image.open(file)
                     parsed_json = extract_invoice_data(img)
@@ -281,7 +298,16 @@ with tab_parser:
                             
                         raw_item_name = str(row.get("Item Name", "")).strip()
                         matched_sku, match_type = match_sku(raw_item_name)
-                        suggested_sale = final_inclusive * 1.25 # Default 25% margin
+                        
+                        # REAL-WORLD SELLING PRICE DETERMINATION:
+                        # 1. Check if SKU has an established price in master catalog
+                        known_price = get_known_selling_price(matched_sku)
+                        
+                        if known_price > 0:
+                            suggested_sale = known_price
+                        else:
+                            # 2. Use cost price plus optional user-defined markup %
+                            suggested_sale = final_inclusive * (1 + (default_markup_pct / 100.0))
                         
                         all_parsed_items.append({
                             "Supplier Name": supplier,
@@ -302,17 +328,17 @@ with tab_parser:
                 progress_bar.progress((idx + 1) / len(uploaded_files))
                 
             status_text.empty()
-            gc.collect() # Garbage collection for memory optimization
+            gc.collect()
                 
             if all_parsed_items:
                 st.session_state["parsed_df"] = pd.DataFrame(all_parsed_items)
-                st.rerun() # Rerun to force clean table refresh across all parsed files
+                st.rerun()
 
     # --- REVIEW & EDIT WORKSPACE ---
     if "parsed_df" in st.session_state:
         st.write("---")
         st.markdown("### 2. Live Audit & Review Workspace")
-        st.caption("💡 Double-click any cell below to edit item names, prices, quantities, HSN codes, or GST %. Learned SKU memory updates automatically upon export!")
+        st.caption("💡 Double-click any cell below to edit item names, prices, quantities, HSN codes, or GST %. Master SKU mappings update automatically upon export!")
         
         df = st.session_state["parsed_df"]
         
