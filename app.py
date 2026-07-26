@@ -21,17 +21,30 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- TARGETED UI FIXES ---
+# --- CLEAN MODERN CSS OVERRIDES ---
 st.markdown("""
 <style>
-    /* Prevent Streamlit 'Press Enter to apply' text from overlapping long inputs */
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+    /* Global Typography */
+    html, body, [data-testid="stAppViewContainer"] {
+        font-family: 'Plus Jakarta Sans', -apple-system, sans-serif !important;
+    }
+
+    /* Input Instructions Fix */
     div[data-testid="InputInstructions"] {
         display: none !important;
     }
-    
-    /* Ensure text inputs have proper internal padding */
-    div[data-baseweb="input"] input {
-        padding-right: 12px !important;
+
+    /* Metric Card Enhancements */
+    div[data-testid="stMetricValue"] div {
+        font-weight: 700 !important;
+    }
+
+    /* Clean Container Spacing */
+    .block-container {
+        padding-top: 1.2rem !important;
+        padding-bottom: 2.5rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -52,7 +65,7 @@ def sanitize_store_name(name):
     return "".join([c if c.isalnum() else "_" for c in name.strip()])
 
 # --- SIDEBAR: MULTI-TENANT WORKSPACE ---
-st.sidebar.title("🏬 Store Management")
+st.sidebar.title("🏬 Store Directory")
 existing_stores = get_store_list()
 
 selected_store_slug = st.sidebar.selectbox(
@@ -73,7 +86,7 @@ if st.session_state["last_store_slug"] != selected_store_slug:
 
 st.sidebar.divider()
 
-# --- SIDEBAR STORE ACTIONS (CLEAN TABS INSTEAD OF NARROW EXPANDERS) ---
+# --- SIDEBAR STORE ACTIONS ---
 side_tab1, side_tab2 = st.sidebar.tabs(["✏️ Rename Store", "➕ Add Store"])
 
 with side_tab1:
@@ -94,7 +107,7 @@ with side_tab1:
                 st.sidebar.error("A store with that name already exists.")
 
 with side_tab2:
-    new_store_name = st.text_input("New Store Title", placeholder="e.g. Metro Supplies", key="add_input_field")
+    new_store_name = st.text_input("New Store Title", placeholder="e.g. Metro Hardware", key="add_input_field")
     if st.button("Create Store", use_container_width=True, type="primary"):
         if new_store_name.strip():
             slug = sanitize_store_name(new_store_name)
@@ -130,18 +143,13 @@ MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
 # --- TOP COMMAND BAR ---
-nav_col1, nav_col2, nav_col3 = st.columns([3, 1.5, 1])
+title_col, action_col = st.columns([3.5, 1])
 
-with nav_col1:
+with title_col:
     st.title("⚡ Universal OS")
-    st.caption("Commercial Multi-Store AI Purchase Intake & Inventory Synchronizer")
+    st.caption(f"Multi-Store Purchase Intake Engine • **Active Catalog:** `{ACTIVE_STORE_DISPLAY}`")
 
-with nav_col2:
-    st.write("")
-    st.caption(f"STATUS: **🟢 ONLINE** | ACTIVE CATALOG")
-    st.subheader(f"📍 {ACTIVE_STORE_DISPLAY}")
-
-with nav_col3:
+with action_col:
     st.write("")
     with st.popover("⚙️ Quick Actions", use_container_width=True):
         st.markdown("**Workspace Shortcuts**")
@@ -279,14 +287,28 @@ tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
 # TAB 1: BATCH INVOICE PARSER
 # ==========================================
 with tab_parser:
+    # --- STORE HEALTH METRICS BAR ---
+    sm1, sm2, sm3 = st.columns(3)
+    with sm1:
+        with st.container(border=True):
+            st.metric("Master SKUs Registered", len(master_sku_list))
+    with sm2:
+        with st.container(border=True):
+            st.metric("Learned Vendor Rules", len(mapping_memory))
+    with sm3:
+        with st.container(border=True):
+            st.metric("Engine Health", "🟢 Ready")
+
+    st.write("")
+
     col_upload, col_info = st.columns([2.2, 1])
     
     with col_upload:
         with st.container(border=True):
-            st.markdown("### 1. Invoice Image Dropzone")
-            st.caption(f"Target Catalog Environment: **{ACTIVE_STORE_DISPLAY}**")
+            st.markdown("### 1. Ingestion Dropzone")
+            st.caption("Upload purchase bills (PNG, JPG, JPEG) to extract line items.")
             uploaded_files = st.file_uploader(
-                "Upload Bills (PNG, JPG, JPEG)",
+                "Upload Bills",
                 type=["jpg", "jpeg", "png"],
                 accept_multiple_files=True,
                 label_visibility="collapsed"
@@ -294,17 +316,17 @@ with tab_parser:
 
     with col_info:
         with st.container(border=True):
-            st.markdown("### ⚡ Batch Ingestion Status")
+            st.markdown("### ⚡ Ingestion Queue")
             if uploaded_files:
-                st.success(f"📁 **{len(uploaded_files)} File(s)** Ready for Parsing")
-                st.caption("AI Ready to analyze invoice lines, HSN, taxes, and price rates.")
+                st.success(f"📁 **{len(uploaded_files)} File(s)** Ready")
+                st.caption("Multimodal AI ready to parse line items, HSN codes, and tax rates.")
             else:
-                st.info("No invoice files staged.")
-                st.caption("Upload one or multiple purchase bills to start ingestion.")
+                st.info("No files in queue.")
+                st.caption("Drop purchase invoices to begin structured extraction.")
 
     if uploaded_files:
         st.write("")
-        if st.button("🚀 Run AI Invoice Parsing Engine", type="primary", use_container_width=True):
+        if st.button("🚀 Process Invoices with AI", type="primary", use_container_width=True):
             if "parsed_df" in st.session_state:
                 del st.session_state["parsed_df"]
                 
