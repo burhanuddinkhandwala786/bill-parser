@@ -21,21 +21,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- MINIMAL FUNCTIONAL CSS (NO DANGEROUS COLOR OVERRIDES) ---
+# --- CLEAN THEME-SAFE CSS ---
 st.markdown("""
 <style>
-    /* Prevent Streamlit 'Press Enter to apply' text from overlapping input fields */
+    /* Suppress Streamlit Input Watermarks */
     div[data-testid="InputInstructions"] {
         display: none !important;
     }
     
     /* Clean layout spacing */
     .block-container {
-        padding-top: 1.5rem !important;
+        padding-top: 1.2rem !important;
         padding-bottom: 2.5rem !important;
     }
 
-    /* High contrast metric values */
+    /* Metric Visual Upgrades */
     div[data-testid="stMetricValue"] div {
         color: #2563EB !important;
         font-weight: 700 !important;
@@ -287,20 +287,15 @@ tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
 # TAB 1: BATCH INVOICE PARSER
 # ==========================================
 with tab_parser:
+    # CLEAN METRIC GRID (PERFECT ALIGNMENT)
     sm1, sm2, sm3 = st.columns(3)
-    with sm1:
-        with st.container(border=True):
-            st.metric("Master SKUs Registered", len(master_sku_list))
-    with sm2:
-        with st.container(border=True):
-            st.metric("Learned Vendor Rules", len(mapping_memory))
-    with sm3:
-        with st.container(border=True):
-            st.metric("AI Engine Status", "🟢 Ready")
+    sm1.metric("Master SKUs Registered", len(master_sku_list))
+    sm2.metric("Learned Vendor Rules", len(mapping_memory))
+    sm3.metric("AI Engine Status", "🟢 Ready")
 
-    st.write("")
+    st.divider()
 
-    col_upload, col_info = st.columns([2.2, 1])
+    col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
         with st.container(border=True):
@@ -396,15 +391,9 @@ with tab_parser:
         df = st.session_state["parsed_df"]
         
         m1, m2, m3 = st.columns(3)
-        with m1:
-            with st.container(border=True):
-                st.metric("Total Line Items", f"{len(df)} Items")
-        with m2:
-            with st.container(border=True):
-                st.metric("Total Stock Quantity", f"{df['Current Quantity'].sum():,.0f} Units")
-        with m3:
-            with st.container(border=True):
-                st.metric("Taxable Purchase Value", f"₹{(df['Purchase Price'] * df['Current Quantity']).sum():,.2f}")
+        m1.metric("Total Line Items", f"{len(df)} Items")
+        m2.metric("Total Stock Quantity", f"{df['Current Quantity'].sum():,.0f} Units")
+        m3.metric("Taxable Purchase Value (Excl. GST)", f"₹{(df['Purchase Price'] * df['Current Quantity']).sum():,.2f}")
         
         st.write("")
         
