@@ -14,7 +14,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AI Bulk Stock Intake Engine", page_icon="⚡", layout="wide")
 st.title("⚡ AI Invoice-to-Excel Bulk Stock Engine")
-st.caption("Upload purchase bills -> Audit & Review Rates -> Export ready-to-import Excel files for myBillBook / Vyapar / BUSY.")
+st.caption("Upload purchase bills -> Audit & Review Rates -> Export 100% compliant Excel template for direct bulk import.")
 
 # --- SECURE API KEY INITIALIZATION ---
 api_key = None
@@ -114,11 +114,12 @@ def extract_invoice_data(image):
                 "Listed Base Rate": 0.0,
                 "Listed Total Inclusive Rate": 0.0,
                 "GST Rate": 18.0,
+                "HSN Code": "",
                 "Unit": "PCS"
             }
         ]
     }
-    Rules: Rates and GST must be pure numbers. Missing values set to 0. Default Unit to PCS or LTR.
+    Rules: Rates and GST must be pure numbers. HSN Code as string. Missing values set to 0 or "". Default Unit to PCS or LTR.
     """
     
     config = types.GenerateContentConfig(response_mime_type="application/json")
@@ -160,6 +161,7 @@ if uploaded_files:
                     gst_rate = float(row.get("GST Rate") or 18.0)
                     base_rate = float(row.get("Listed Base Rate") or 0.0)
                     total_inclusive = float(row.get("Listed Total Inclusive Rate") or 0.0)
+                    hsn_sac = str(row.get("HSN Code") or "").strip()
                     
                     # Tax computation
                     if base_rate > 0:
@@ -181,13 +183,13 @@ if uploaded_files:
                         "Raw Vendor Item": raw_item_name,
                         "Official SKU": matched_sku,
                         "Match Status": match_type,
-                        "Qty": qty,
-                        "Purchase Price (Excl GST)": round(final_base, 2),
-                        "Total Cost (Incl GST)": round(final_inclusive, 2),
-                        "Selling Price": round(suggested_sale, 2),
-                        "GST %": gst_rate,
+                        "Current Quantity": qty,
                         "Unit": str(row.get("Unit", "PCS")).upper(),
-                        "Category": "General"
+                        "HSN/SAC": hsn_sac,
+                        "Category": "General",
+                        "GST Rate": gst_rate,
+                        "Purchase Price": round(final_base, 2),
+                        "Selling Price": round(suggested_sale, 2),
                     })
             except Exception as e:
                 st.error(f"Error reading {file.name}: {e}")
@@ -202,7 +204,7 @@ if uploaded_files:
 if "parsed_df" in st.session_state:
     st.write("---")
     st.subheader("2. Review & Adjust Before Export")
-    st.info("💡 Double-click any cell below to change prices, correct SKU names, or edit GST %. Memory automatically learns SKU corrections!")
+    st.info("💡 Double-click any cell below to edit item names, prices, quantities, HSN codes, or GST %. Learned SKU memory updates automatically!")
     
     df = st.session_state["parsed_df"]
     
@@ -212,66 +214,75 @@ if "parsed_df" in st.session_state:
         use_container_width=True,
         column_config={
             "Official SKU": st.column_config.SelectboxColumn("Official SKU Name", options=master_sku_list, required=True) if master_sku_list else "Official SKU",
-            "Purchase Price (Excl GST)": st.column_config.NumberColumn("Purchase Price (₹)", format="₹%.2f"),
-            "Total Cost (Incl GST)": st.column_config.NumberColumn("Cost (Incl. GST) ₹", format="₹%.2f"),
+            "Purchase Price": st.column_config.NumberColumn("Purchase Price (₹)", format="₹%.2f"),
             "Selling Price": st.column_config.NumberColumn("Selling Price (₹)", format="₹%.2f"),
-            "Qty": st.column_config.NumberColumn("Qty", min_value=0.1),
-            "GST %": st.column_config.NumberColumn("GST %", min_value=0, max_value=28),
+            "Current Quantity": st.column_config.NumberColumn("Current Quantity", min_value=0.1),
+            "GST Rate": st.column_config.NumberColumn("GST Rate (%)", min_value=0, max_value=28),
+            "HSN/SAC": st.column_config.TextColumn("HSN/SAC"),
         }
     )
     
     st.write("---")
-    col_exp1, col_exp2 = st.columns(2)
+    st.markdown("### 📥 Generate Bulk Import File")
     
-    # FORMAT A: myBillBook Excel Import Format
-    with col_exp1:
-        st.markdown("### 📥 Export for myBillBook / Vyapar")
-        if st.button("Generate myBillBook / Vyapar Excel File", type="primary"):
-            # Update learned memory mappings
-            memory_updated = False
-            for idx, row in edited_df.iterrows():
-                raw = str(row["Raw Vendor Item"]).strip().upper()
-                official = str(row["Official SKU"]).strip()
-                if raw and official and raw != official:
-                    mapping_memory[raw] = official
-                    memory_updated = True
-                    
-            if memory_updated:
-                save_json_memory(mapping_memory)
-                st.toast("🧠 Saved vendor SKU mapping to memory!")
+    if st.button("✅ Download Exact App-Compliant Import File", type="primary"):
+        # Update learned memory mappings
+        memory_updated = False
+        for idx, row in edited_df.iterrows():
+            raw = str(row["Raw Vendor Item"]).strip().upper()
+            official = str(row["Official SKU"]).strip()
+            if raw and official and raw != official:
+                mapping_memory[raw] = official
+                memory_updated = True
                 
-            output_df = pd.DataFrame()
-            output_df["Item Name"] = edited_df["Official SKU"]
-            output_df["Item Code / Barcode"] = ""
-            output_df["Category"] = edited_df["Category"]
-            output_df["Sale Price"] = edited_df["Selling Price"]
-            output_df["Purchase Price"] = edited_df["Purchase Price (Excl GST)"]
-            output_df["Opening Stock"] = edited_df["Qty"]
-            output_df["Measuring Unit"] = edited_df["Unit"]
-            output_df["GST Tax Rate (%)"] = edited_df["GST %"]
-            output_df["Tax Included in Sale Price?"] = "Yes"
+        if memory_updated:
+            save_json_memory(mapping_memory)
+            st.toast("🧠 Saved vendor SKU mapping to memory!")
             
-            buffer = BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                output_df.to_excel(writer, index=False, sheet_name="myBillBook Import")
-                
-            st.download_button(
-                label="✅ Download Excel File (myBillBook Format)",
-                data=buffer.getvalue(),
-                file_name="myBillBook_Stock_Import.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-    # FORMAT B: Standard CSV / Excel Format for BUSY / Tally / Custom
-    with col_exp2:
-        st.markdown("### 📥 Export Standard Bulk Inventory Sheet")
-        buffer_std = BytesIO()
-        with pd.ExcelWriter(buffer_std, engine='openpyxl') as writer:
-            edited_df.to_excel(writer, index=False, sheet_name="Bulk Stock")
+        # Build openpyxl workbook matching the exact template layout
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Items"
+        
+        # Header Metadata Rows (Matching Template Rows 1 to 3)
+        ws.append(["UNIVERSAL HARDWARE AND PLYWOOD STORE"])
+        ws.append(["Items"])
+        ws.append([f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}"])
+        ws.append([]) # Empty Row 4
+        
+        # Row 5: Exact Headers required by App
+        exact_headers = [
+            "S. No.", "Name", "Current Quantity", "Unit", "HSN/SAC",
+            "Category", "GST Rate", "Selling Price", "Selling Price (Secondary)",
+            "Purchase Price", "Purchase Price (Secondary)", "Secondary Unit", "Ratio"
+        ]
+        ws.append(exact_headers)
+        
+        # Row 6+: Data Rows
+        for i, row in edited_df.iterrows():
+            ws.append([
+                i + 1,                              # S. No.
+                str(row["Official SKU"]),           # Name
+                float(row["Current Quantity"]),     # Current Quantity
+                str(row["Unit"]),                   # Unit
+                str(row["HSN/SAC"]),                # HSN/SAC
+                str(row["Category"]),               # Category
+                float(row["GST Rate"]),             # GST Rate
+                float(row["Selling Price"]),        # Selling Price
+                "",                                 # Selling Price (Secondary)
+                float(row["Purchase Price"]),       # Purchase Price
+                "",                                 # Purchase Price (Secondary)
+                "",                                 # Secondary Unit
+                ""                                  # Ratio
+            ])
             
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
         st.download_button(
-            label="✅ Download Standard Inventory Excel Sheet",
-            data=buffer_std.getvalue(),
-            file_name="Universal_Bulk_Stock_Import.xlsx",
+            label="📥 Download Compliant Excel File (Items_Import.xlsx)",
+            data=buffer.getvalue(),
+            file_name="Universal_Items_Import.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
