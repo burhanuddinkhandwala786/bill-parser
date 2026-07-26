@@ -250,7 +250,7 @@ hr{
 }
 
 </style>
-""", unsafe_allow_html=True)
+""", unsafe_allow_html=True,)
 
 # --- MULTI-STORE DIRECTORY & DATA ISOLATION ---
 DATA_DIR = "stores_data"
