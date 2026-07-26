@@ -304,7 +304,7 @@ with st.sidebar.expander("➕ Register New Store"):
             st.success(f"Store '{new_store_name}' initialized!")
             st.rerun()
 
-st.sidebar.markdown("---")
+st.sidebar.divider()
 st.sidebar.markdown("### 🔑 API Configuration")
 
 api_key = None
