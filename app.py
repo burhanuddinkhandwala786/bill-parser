@@ -12,7 +12,7 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-# --- ENTERPRISE SAAS PAGE CONFIGURATION & STYLING ---
+# --- ENTERPRISE SAAS PAGE CONFIGURATION & LUXURY LIGHT STYLING ---
 st.set_page_config(
     page_title="Universal OS | Multi-Store AI Ingestion SaaS",
     page_icon="⚡",
@@ -20,83 +20,209 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Enterprise SaaS CSS System
+# Custom Executive Light Theme CSS System (Apple / macOS Studio Aesthetic)
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
     
+    /* Global Reset & Base Canvas */
     html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-    .stApp {
-        background-color: #0B0F19;
-        color: #F3F4F6;
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        color: #0F172A !important;
+        -webkit-font-smoothing: antialiased;
     }
     
-    /* Hero Banner Styling */
+    .stApp {
+        background-color: #F8FAFC !important;
+    }
+
+    /* Suppress Native Streamlit Header Overlaps */
+    header[data-testid="stHeader"] {
+        display: none !important;
+    }
+    
+    .block-container {
+        padding-top: 1.2rem !important;
+        padding-bottom: 2.5rem !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+        max-width: 100% !important;
+    }
+    
+    /* Hero Banner Styling - Sleek Metallic Glass */
     .saas-header {
-        background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #1E293B 100%);
-        padding: 28px 36px;
-        border-radius: 16px;
-        color: #FFFFFF;
-        margin-bottom: 28px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+        background: linear-gradient(135deg, #FFFFFF 0%, #F1F5F9 100%);
+        padding: 24px 32px;
+        border-radius: 20px;
+        color: #0F172A;
+        margin-bottom: 24px;
+        border: 1px solid #E2E8F0;
+        box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .saas-title-box {
+        display: flex;
+        flex-direction: column;
     }
     .saas-title {
-        font-size: 28px;
+        font-size: 26px;
         font-weight: 700;
         letter-spacing: -0.5px;
         margin: 0;
-        color: #FFFFFF;
+        color: #0F172A;
     }
     .saas-subtitle {
         font-size: 14px;
-        color: #C7D2FE;
-        margin-top: 6px;
+        color: #64748B;
+        margin-top: 4px;
         margin-bottom: 0;
+    }
+    .badge-container {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 8px;
     }
     .status-badge {
         display: inline-block;
-        background-color: #10B981;
-        color: #FFFFFF;
+        background-color: #DCFCE7;
+        color: #15803D;
         font-size: 11px;
         font-weight: 700;
-        padding: 4px 12px;
+        padding: 6px 14px;
         border-radius: 20px;
+        border: 1px solid #BBF7D0;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        float: right;
     }
     .store-badge {
         display: inline-block;
-        background-color: #6366F1;
-        color: #FFFFFF;
+        background-color: #EEF2FF;
+        color: #4338CA;
         font-size: 12px;
         font-weight: 600;
-        padding: 4px 12px;
-        border-radius: 6px;
-        margin-top: 10px;
+        padding: 6px 14px;
+        border-radius: 10px;
+        border: 1px solid #C7D2FE;
+    }
+
+    /* Soft Glass File Dropzone */
+    div[data-testid="stFileUploader"] {
+        background: #FFFFFF !important;
+        border: 1.5px dashed #CBD5E1 !important;
+        border-radius: 16px !important;
+        padding: 16px !important;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03) !important;
+        transition: all 0.2s ease !important;
+    }
+    div[data-testid="stFileUploader"]:hover {
+        border-color: #4338CA !important;
+        background: #F8FAFC !important;
+        box-shadow: 0 6px 16px rgba(67, 56, 202, 0.08) !important;
+    }
+    div[data-testid="stFileUploader"] section {
+        background-color: transparent !important;
     }
     
     /* Metrics Visual Cards */
     div[data-testid="stMetric"] {
-        background-color: #1E293B;
-        border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 16px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        background-color: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 16px !important;
+        padding: 18px 20px !important;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03) !important;
     }
-    div[data-testid="stMetricValue"] {
+    div[data-testid="stMetricLabel"] p {
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        color: #64748B !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.6px !important;
+    }
+    div[data-testid="stMetricValue"] div {
         font-size: 22px !important;
         font-weight: 700 !important;
-        color: #38BDF8 !important;
+        color: #0284C7 !important;
     }
-    
-    .stButton>button {
-        border-radius: 8px;
+
+    /* Executive Tabs Override */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: transparent;
+        border-bottom: 1px solid #E2E8F0;
+        padding-bottom: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 42px;
+        border-radius: 12px;
+        padding: 0 20px;
+        background-color: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        color: #64748B;
         font-weight: 600;
-        transition: all 0.2s ease-in-out;
+        font-size: 13px;
+        transition: all 0.2s ease;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #4338CA !important;
+        color: #FFFFFF !important;
+        border: 1px solid #4338CA !important;
+        box-shadow: 0 4px 12px rgba(67, 56, 202, 0.25) !important;
+    }
+
+    /* High-Contrast Glass Data Editor Grid */
+    div[data-testid="stDataEditor"] {
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 16px !important;
+        overflow: hidden !important;
+        background-color: #FFFFFF !important;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04) !important;
+    }
+
+    /* Clean Touch-Friendly Buttons */
+    .stButton>button, .stDownloadButton>button {
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        font-size: 13px !important;
+        padding: 10px 20px !important;
+        border: 1px solid #CBD5E1 !important;
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04) !important;
+        transition: all 0.2s ease-in-out !important;
+    }
+    .stButton>button:hover, .stDownloadButton>button:hover {
+        border-color: #4338CA !important;
+        color: #4338CA !important;
+        background-color: #F8FAFC !important;
+    }
+    button[kind="primary"] {
+        background: linear-gradient(135deg, #4338CA 0%, #3730A3 100%) !important;
+        border: none !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 4px 14px rgba(67, 56, 202, 0.3) !important;
+    }
+    button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #3730A3 0%, #312E81 100%) !important;
+        box-shadow: 0 6px 18px rgba(67, 56, 202, 0.4) !important;
+    }
+
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #FFFFFF !important;
+        border-right: 1px solid #E2E8F0 !important;
+    }
+
+    /* Card Panels */
+    .info-card {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 16px;
+        padding: 20px;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
+        margin-bottom: 16px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -137,9 +263,9 @@ if st.session_state["last_store_slug"] != selected_store_slug:
     st.rerun()
 
 # Register New Store
-with st.sidebar.expander("➕ Register New Store"):
+with st.sidebar.expander("➕ Register New Store", expanded=False):
     new_store_name = st.text_input("New Store Name:")
-    if st.button("Create Store Environment"):
+    if st.button("Create Store Environment", use_container_width=True):
         if new_store_name.strip():
             slug = sanitize_store_name(new_store_name)
             new_path = os.path.join(DATA_DIR, slug)
@@ -175,13 +301,17 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# Render Banner
+# Render Modernized SaaS Header
 st.markdown(f"""
 <div class="saas-header">
-    <span class="status-badge">🟢 Commercial SaaS Active</span>
-    <p class="saas-title">⚡ Universal OS — AI Intake SaaS</p>
-    <p class="saas-subtitle">Multi-Store Purchase Ingestion & Bulk Inventory Synchronizer</p>
-    <span class="store-badge">📍 Active Store: <b>{ACTIVE_STORE_DISPLAY}</b></span>
+    <div class="saas-title-box">
+        <p class="saas-title">⚡ Universal OS — AI Intake SaaS</p>
+        <p class="saas-subtitle">Multi-Store Purchase Ingestion & Bulk Inventory Synchronizer</p>
+    </div>
+    <div class="badge-container">
+        <span class="status-badge">🟢 Commercial SaaS Active</span>
+        <span class="store-badge">📍 Active Store: <b>{ACTIVE_STORE_DISPLAY}</b></span>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -507,6 +637,7 @@ with tab_master:
     col_add, col_list = st.columns([1, 2])
     
     with col_add:
+        st.markdown('<div class="info-card">', unsafe_allow_html=True)
         st.markdown("#### ➕ Add New SKU")
         add_sku = st.text_input("SKU Name")
         add_cat = st.text_input("Category", value="General")
@@ -514,7 +645,7 @@ with tab_master:
         add_gst = st.selectbox("GST Rate (%)", options=[0, 5, 12, 18, 28], index=3)
         add_price = st.number_input("Selling Price ₹ (Optional)", min_value=0.0, step=10.0)
         
-        if st.button("Save SKU to Master List"):
+        if st.button("Save SKU to Master List", use_container_width=True, type="primary"):
             if add_sku.strip():
                 clean_sku = add_sku.strip()
                 if clean_sku not in master_sku_list:
@@ -531,18 +662,21 @@ with tab_master:
                     st.rerun()
                 else:
                     st.warning("SKU already exists.")
+        st.markdown('</div>', unsafe_allow_html=True)
                     
     with col_list:
         st.markdown("#### 📋 Store SKUs")
         if not master_df.empty:
             st.dataframe(master_df, use_container_width=True)
-            sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
-            if st.button("🗑️ Delete Selected SKU"):
-                if sku_to_delete != "-- None --":
-                    updated = master_df[master_df["Official_SKU_Name"] != sku_to_delete]
-                    save_master(updated, selected_store_slug)
-                    st.success(f"Removed '{sku_to_delete}'!")
-                    st.rerun()
+            st.write(" ")
+            with st.expander("🗑️ Delete Existing SKU"):
+                sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
+                if st.button("Delete Selected SKU", use_container_width=True):
+                    if sku_to_delete != "-- None --":
+                        updated = master_df[master_df["Official_SKU_Name"] != sku_to_delete]
+                        save_master(updated, selected_store_slug)
+                        st.success(f"Removed '{sku_to_delete}'!")
+                        st.rerun()
         else:
             st.info("Master catalog for this store is empty.")
 
@@ -560,6 +694,7 @@ with tab_memory:
         ])
         st.dataframe(mem_df, use_container_width=True)
         
+        st.write(" ")
         if st.button("🗑️ Clear Store Memory Cache"):
             save_json_memory({})
             st.success("Memory cleared!")
@@ -573,9 +708,13 @@ with tab_memory:
 with tab_guide:
     st.markdown("### 📖 Import Guide")
     st.markdown("""
-    1. **Select Store:** Choose your active store in the sidebar or register a new one.
-    2. **Upload Bills:** Upload purchase invoice photos in **Tab 1** and click **Process Invoices**.
-    3. **Review & Audit:** Confirm quantities, HSN codes, and mapped SKUs.
-    4. **Download Excel:** Click **Download Accountune File**.
-    5. **Upload to Accountune:** Open Accountune $\rightarrow$ **Items / Inventory** $\rightarrow$ **Bulk Import**, select the generated `.xlsx` file, and upload.
-    """)
+    <div class="info-card">
+        <ol style="line-height: 1.8; margin-bottom: 0;">
+            <li><b>Select Store:</b> Choose your active store in the sidebar or register a new one.</li>
+            <li><b>Upload Bills:</b> Upload purchase invoice photos in <b>Tab 1</b> and click <b>Process Invoices</b>.</li>
+            <li><b>Review & Audit:</b> Confirm quantities, HSN codes, and mapped SKUs.</li>
+            <li><b>Download Excel:</b> Click <b>Download File</b> to generate your spreadsheet.</li>
+            <li><b>Upload to ERP/Accounting:</b> Open your software → <b>Items / Inventory</b> → <b>Bulk Import</b>, select the generated <code>.xlsx</code> file, and upload.</li>
+        </ol>
+    </div>
+    """, unsafe_allow_html=True)
