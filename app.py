@@ -76,7 +76,7 @@ st.markdown("""
 <div class="saas-header">
     <span class="status-badge">🟢 Enterprise SaaS Active</span>
     <p class="saas-title">⚡ Universal OS — AI Intake SaaS</p>
-    <p class="saas-subtitle">Automated Purchase Bill Parser & Accountune Bulk Inventory Synchronizer</p>
+    <p class="saas-subtitle">Automated Purchase Bill Parser & Bulk Inventory Synchronizer</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -222,7 +222,7 @@ def extract_invoice_data(image):
 tab_parser, tab_memory, tab_guide = st.tabs([
     "📥 Batch Invoice Parser", 
     "📋 Vendor SKU Memory", 
-    "📖 Accountune Import Guide"
+    "📖 Import Guide"
 ])
 
 # ==========================================
@@ -376,8 +376,8 @@ with tab_parser:
         col_gen1, col_gen2 = st.columns([2, 1])
         
         with col_gen1:
-            st.markdown("### 3. Generate Accountune Template")
-            if st.button("✅ Generate & Download Accountune Excel File", type="primary", use_container_width=True):
+            st.markdown("### 3. Generate Template")
+            if st.button("✅ Generate & Download Excel File", type="primary", use_container_width=True):
                 # Save learned memory mappings
                 memory_updated = False
                 for idx, row in edited_df.iterrows():
@@ -472,6 +472,6 @@ with tab_guide:
     3. **Download Excel:** Click **Generate & Download Accountune Excel File**.
     4. **Upload to Accountune:**
        * Open **Accountune Desktop / Web App**.
-       * Navigate to **Items / Inventory** $\rightarrow$ **Bulk Import / Export**.
+       * Navigate to **Items / Inventory** $\ rightarrow$ **Bulk Import / Export**.
        * Select the downloaded `Universal_Items_Import.xlsx` file and confirm the import.
     """)
