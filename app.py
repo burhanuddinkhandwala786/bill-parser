@@ -2,6 +2,7 @@ import os
 import gc
 import json
 import time
+import shutil
 import openpyxl
 import pandas as pd
 import streamlit as st
@@ -35,7 +36,7 @@ def get_store_list():
 def sanitize_store_name(name):
     return "".join([c if c.isalnum() else "_" for c in name.strip()])
 
-# --- SIDEBAR: MULTI-TENANT SWITCHER ---
+# --- SIDEBAR: MULTI-TENANT SWITCHER & RENAME ---
 st.sidebar.title("🏬 Store Workspace")
 existing_stores = get_store_list()
 
@@ -55,9 +56,27 @@ if st.session_state["last_store_slug"] != selected_store_slug:
     st.session_state["last_store_slug"] = selected_store_slug
     st.rerun()
 
-# Register New Store Section
+# ✏️ Edit Current Store Name
+with st.sidebar.expander("✏️ Rename Current Store", expanded=False):
+    current_display = selected_store_slug.replace("_", " ")
+    renamed_input = st.text_input("New Name for Store:", value=current_display)
+    if st.button("Update Store Name", use_container_width=True):
+        if renamed_input.strip() and renamed_input.strip() != current_display:
+            new_slug = sanitize_store_name(renamed_input)
+            old_path = os.path.join(DATA_DIR, selected_store_slug)
+            new_path = os.path.join(DATA_DIR, new_slug)
+            
+            if not os.path.exists(new_path):
+                shutil.move(old_path, new_path)
+                st.session_state["last_store_slug"] = new_slug
+                st.sidebar.success(f"Renamed to '{renamed_input}'!")
+                st.rerun()
+            else:
+                st.sidebar.error("A store with that name already exists.")
+
+# ➕ Register New Store
 with st.sidebar.expander("➕ Register New Store", expanded=False):
-    new_store_name = st.text_input("Store Name:")
+    new_store_name = st.text_input("New Store Name:")
     if st.button("Initialize Store", use_container_width=True, type="primary"):
         if new_store_name.strip():
             slug = sanitize_store_name(new_store_name)
@@ -66,9 +85,7 @@ with st.sidebar.expander("➕ Register New Store", expanded=False):
             st.sidebar.success(f"Store '{new_store_name}' initialized!")
             st.rerun()
 
-st.sidebar.divider()
-st.sidebar.subheader("🔑 Engine Settings")
-
+# --- API KEY AUTHENTICATION (QUIET BACKGROUND CHECK) ---
 api_key = None
 try:
     if "GEMINI_API_KEY" in st.secrets:
@@ -80,10 +97,7 @@ if not api_key:
     api_key = os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
-    api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
-
-if not api_key:
-    st.info("👋 Welcome! Enter your Gemini API Key in the sidebar or Streamlit Secrets to begin.")
+    st.error("⚠️ Gemini API Key missing. Please configure GEMINI_API_KEY in secrets or environment variables.")
     st.stop()
 
 client = genai.Client(api_key=api_key)
