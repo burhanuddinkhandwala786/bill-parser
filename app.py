@@ -12,7 +12,7 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
-# --- ENTERPRISE SAAS PAGE CONFIGURATION & DESIGN SYSTEM ---
+# --- EXECUTIVE RESPONSIVE DESIGN SYSTEM ---
 st.set_page_config(
     page_title="Universal OS | Enterprise Intake Workspace",
     page_icon="⚡",
@@ -20,124 +20,190 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# High-End Dark Executive Design System
+# Deep Fluid-Responsive Custom Injection
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
     
+    /* Reset & Typography */
     html, body, [class*="css"] {
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
     
     .stApp {
-        background-color: #080C14;
-        color: #E2E8F0;
+        background-color: #080B11 !important;
+        color: #F1F5F9 !important;
+    }
+
+    /* Suppress Native Streamlit Header Padding */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        height: 30px !important;
     }
     
-    /* Top Minimal Command Bar */
+    .block-container {
+        padding-top: 0.5rem !important;
+        padding-bottom: 2rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        max-width: 100% !important;
+    }
+
+    /* Fluid Responsive Header Bar */
     .command-bar {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
-        background: rgba(15, 23, 42, 0.75);
-        backdrop-filter: blur(12px);
+        gap: 12px;
+        background: rgba(18, 24, 38, 0.75);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
         border: 1px solid rgba(255, 255, 255, 0.08);
-        padding: 12px 24px;
-        border-radius: 12px;
+        padding: 14px 20px;
+        border-radius: 16px;
         margin-bottom: 20px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
     }
     .brand-logo {
-        font-size: 18px;
+        font-size: 15px;
         font-weight: 700;
-        letter-spacing: -0.4px;
-        color: #F8FAFC;
+        letter-spacing: -0.3px;
+        color: #FFFFFF;
         display: flex;
         align-items: center;
         gap: 8px;
     }
     .brand-badge {
-        background: rgba(99, 102, 241, 0.15);
-        color: #818CF8;
-        border: 1px solid rgba(99, 102, 241, 0.3);
-        font-size: 11px;
-        font-weight: 600;
-        padding: 2px 8px;
-        border-radius: 6px;
-    }
-    .store-pill {
-        background: #1E293B;
-        border: 1px solid #334155;
-        color: #38BDF8;
-        font-size: 12px;
-        font-weight: 600;
-        padding: 4px 12px;
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+        color: #A5B4FC;
+        border: 1px solid rgba(165, 180, 252, 0.3);
+        font-size: 10px;
+        font-weight: 700;
+        padding: 3px 8px;
         border-radius: 20px;
-    }
-    
-    /* Dashboard Surface Cards */
-    .saas-card {
-        background: #0F172A;
-        border: 1px solid rgba(255, 255, 255, 0.07);
-        border-radius: 14px;
-        padding: 20px;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
-        margin-bottom: 20px;
-    }
-    
-    /* Sleek Metric Cards */
-    div[data-testid="stMetric"] {
-        background: #131D31 !important;
-        border: 1px solid rgba(255, 255, 255, 0.06) !important;
-        border-radius: 10px !important;
-        padding: 14px !important;
-    }
-    div[data-testid="stMetricLabel"] {
-        font-size: 12px !important;
-        font-weight: 600 !important;
-        color: #94A3B8 !important;
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
-    div[data-testid="stMetricValue"] {
+    .store-pill {
+        background: rgba(30, 41, 59, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #38BDF8;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 5px 14px;
+        border-radius: 20px;
+    }
+
+    .section-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: #64748B;
+        margin-bottom: 8px;
+    }
+
+    /* Soft Fluid File Dropzone */
+    div[data-testid="stFileUploader"] {
+        background: rgba(18, 24, 38, 0.6) !important;
+        border: 1.5px dashed rgba(99, 102, 241, 0.3) !important;
+        border-radius: 16px !important;
+        padding: 18px !important;
+        transition: all 0.25s ease !important;
+    }
+    div[data-testid="stFileUploader"]:hover {
+        border-color: #6366F1 !important;
+        background: rgba(18, 24, 38, 0.9) !important;
+        box-shadow: 0 0 20px rgba(99, 102, 241, 0.15) !important;
+    }
+    div[data-testid="stFileUploader"] section {
+        background-color: transparent !important;
+    }
+
+    /* Organic Curved Metrics Cards */
+    div[data-testid="stMetric"] {
+        background: rgba(18, 24, 38, 0.75) !important;
+        backdrop-filter: blur(12px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 16px !important;
+        padding: 16px !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25) !important;
+    }
+    div[data-testid="stMetricLabel"] p {
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        color: #64748B !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.6px !important;
+    }
+    div[data-testid="stMetricValue"] div {
         font-size: 22px !important;
         font-weight: 700 !important;
         color: #38BDF8 !important;
     }
 
-    /* Tab Custom Styling */
+    /* Soft Tab Controls */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         background-color: transparent;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        padding-bottom: 8px;
+        padding-bottom: 6px;
+        overflow-x: auto;
     }
     .stTabs [data-baseweb="tab"] {
         height: 40px;
-        border-radius: 8px;
-        padding: 0 16px;
-        background-color: #0F172A;
-        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        padding: 0 18px;
+        background-color: rgba(18, 24, 38, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         color: #94A3B8;
         font-weight: 500;
-        font-size: 13px;
+        font-size: 12px;
+        white-space: nowrap;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #6366F1 !important;
+        background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%) !important;
         color: #FFFFFF !important;
         border: none !important;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3) !important;
     }
 
-    /* Clean Buttons */
+    /* Soft Rounded Data Grid */
+    div[data-testid="stDataEditor"] {
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 16px !important;
+        overflow: hidden !important;
+        background-color: rgba(18, 24, 38, 0.7) !important;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    /* Touch-Optimized Primary Pill Buttons */
     .stButton>button {
-        border-radius: 8px !important;
+        border-radius: 12px !important;
         font-weight: 600 !important;
         font-size: 14px !important;
-        transition: all 0.2s ease;
+        padding: 10px 20px !important;
+        border: none !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3) !important;
+        transition: all 0.2s ease-in-out !important;
+    }
+
+    /* Mobile Breakpoint Enhancements */
+    @media (max-width: 768px) {
+        .command-bar {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .block-container {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- MULTI-STORE DIRECTORY & DATA ISOLATION ---
+# --- MULTI-STORE ISOLATION ---
 DATA_DIR = "stores_data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -152,12 +218,12 @@ def get_store_list():
 def sanitize_store_name(name):
     return "".join([c if c.isalnum() else "_" for c in name.strip()])
 
-# --- SIDEBAR: MULTI-TENANT SWITCHER ---
-st.sidebar.markdown("## 🏬 Store Manager")
+# --- SIDEBAR CONTROL PANEL ---
+st.sidebar.markdown("## 🏬 Store Operations")
 existing_stores = get_store_list()
 
 selected_store_slug = st.sidebar.selectbox(
-    "Active Store Catalog",
+    "Active Catalog Context",
     options=existing_stores,
     format_func=lambda x: x.replace("_", " ")
 )
@@ -171,9 +237,9 @@ if st.session_state["last_store_slug"] != selected_store_slug:
     st.session_state["last_store_slug"] = selected_store_slug
     st.rerun()
 
-with st.sidebar.expander("➕ Register New Store"):
+with st.sidebar.expander("➕ Register Store Environment"):
     new_store_name = st.text_input("Store Name:")
-    if st.button("Create Store Environment"):
+    if st.button("Initialize Environment"):
         if new_store_name.strip():
             slug = sanitize_store_name(new_store_name)
             os.makedirs(os.path.join(DATA_DIR, slug), exist_ok=True)
@@ -181,7 +247,7 @@ with st.sidebar.expander("➕ Register New Store"):
             st.rerun()
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔑 API Access")
+st.sidebar.markdown("### 🔑 API Authentication")
 
 api_key = None
 try:
@@ -211,15 +277,15 @@ ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 st.markdown(f"""
 <div class="command-bar">
     <div class="brand-logo">
-        ⚡ Universal OS <span class="brand-badge">PRO INTAKE</span>
+        ⚡ Universal OS <span class="brand-badge">INTAKE ENGINE</span>
     </div>
     <div class="store-pill">
-        📍 Catalog: <b>{ACTIVE_STORE_DISPLAY}</b>
+        📍 CATALOG: <b>{ACTIVE_STORE_DISPLAY}</b>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# --- STORE DATA LOADERS & PERSISTENCE ---
+# --- DATA LOADERS & PERSISTENCE ---
 def load_json_memory():
     if os.path.exists(MEMORY_FILE):
         try:
@@ -333,9 +399,9 @@ def extract_invoice_data(image):
 
 # --- WORKSPACE TABS ---
 tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
-    "⚡ Batch Intake Workspace", 
+    "⚡ Batch Processing", 
     "⚙️ Master Catalog", 
-    "🧠 AI Memory", 
+    "🧠 Learned Memory", 
     "📖 Integration Guide"
 ])
 
@@ -343,10 +409,10 @@ tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
 # TAB 1: BATCH INGESTION WORKSPACE
 # ==========================================
 with tab_parser:
-    col_intake, col_stats = st.columns([1.8, 1.2])
+    col_intake, col_stats = st.columns([1.5, 1.5])
     
     with col_intake:
-        st.markdown("#### 1. Ingestion Control")
+        st.markdown('<div class="section-label">1. INGESTION CONTROL</div>', unsafe_allow_html=True)
         uploaded_files = st.file_uploader(
             "Drop purchase invoice photos (PNG, JPG, JPEG)",
             type=["jpg", "jpeg", "png"],
@@ -364,7 +430,7 @@ with tab_parser:
                 status_text = st.empty()
                 
                 for idx, file in enumerate(uploaded_files):
-                    status_text.caption(f"Extracting {idx + 1}/{len(uploaded_files)}: **{file.name}**...")
+                    status_text.caption(f"Parsing {idx + 1}/{len(uploaded_files)}: **{file.name}**...")
                     try:
                         file.seek(0)
                         img = Image.open(file)
@@ -415,7 +481,7 @@ with tab_parser:
                     st.rerun()
 
     with col_stats:
-        st.markdown("#### 2. Batch Health Overview")
+        st.markdown('<div class="section-label">2. BATCH HEALTH OVERVIEW</div>', unsafe_allow_html=True)
         if "parsed_df" in st.session_state:
             df_temp = st.session_state["parsed_df"]
             m1, m2 = st.columns(2)
@@ -425,13 +491,13 @@ with tab_parser:
         elif uploaded_files:
             st.info(f"📁 {len(uploaded_files)} File(s) staged. Click 'Process & Extract' to begin.")
         else:
-            st.caption("Upload invoice photos on the left to initialize live audit workspace.")
+            st.caption("Upload purchase bills on the left to activate processing.")
 
     # --- AUDIT WORKSPACE GRID ---
     if "parsed_df" in st.session_state:
         st.markdown("---")
-        st.markdown("#### 3. Data Review & Audit Workspace")
-        st.caption("Double-click cells to adjust items, quantities, or tax values. New SKUs manually entered auto-save to catalog.")
+        st.markdown('<div class="section-label">3. DATA REVIEW & AUDIT WORKSPACE</div>', unsafe_allow_html=True)
+        st.caption("Double-click cells to modify values. Manually entered SKUs automatically save to catalog upon export.")
         
         df = st.session_state["parsed_df"]
         
@@ -450,10 +516,10 @@ with tab_parser:
         )
         
         st.write(" ")
-        col_space, col_export = st.columns([2, 1])
+        col_space, col_export = st.columns([1.5, 1.5])
         
         with col_export:
-            if st.button("✅ Generate Excel Import", type="primary", use_container_width=True):
+            if st.button("✅ Export Accountune Excel Import", type="primary", use_container_width=True):
                 memory_updated = False
                 master_updated = False
                 current_master_skus = set(master_sku_list)
@@ -534,12 +600,12 @@ with tab_parser:
 # TAB 2: STORE MASTER CATALOG MANAGER
 # ==========================================
 with tab_master:
-    st.markdown(f"#### Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
+    st.markdown(f'<div class="section-label">MASTER INVENTORY CATALOG ({ACTIVE_STORE_DISPLAY})</div>', unsafe_allow_html=True)
     
     col_add, col_list = st.columns([1, 2])
     
     with col_add:
-        st.markdown("##### ➕ Add Official SKU")
+        st.markdown("##### ➕ Register SKU")
         add_sku = st.text_input("SKU Name")
         add_cat = st.text_input("Category", value="General")
         add_unit = st.selectbox("Default Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET"])
@@ -565,7 +631,7 @@ with tab_master:
                     st.warning("SKU exists in master list.")
                     
     with col_list:
-        st.markdown("##### 📋 Store Items")
+        st.markdown("##### 📋 Catalog Items")
         if not master_df.empty:
             st.dataframe(master_df, use_container_width=True)
             sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
@@ -582,7 +648,7 @@ with tab_master:
 # TAB 3: VENDOR SKU MEMORY WORKSPACE
 # ==========================================
 with tab_memory:
-    st.markdown(f"#### Learned AI Mappings ({ACTIVE_STORE_DISPLAY})")
+    st.markdown(f'<div class="section-label">LEARNED AI MAPPINGS ({ACTIVE_STORE_DISPLAY})</div>', unsafe_allow_html=True)
     
     if mapping_memory:
         mem_df = pd.DataFrame([
@@ -591,7 +657,7 @@ with tab_memory:
         ])
         st.dataframe(mem_df, use_container_width=True)
         
-        if st.button("🗑️ Clear Store Memory Cache"):
+        if st.button("🗑️ Clear Memory Cache"):
             save_json_memory({})
             st.success("Memory cleared!")
             st.rerun()
@@ -602,11 +668,11 @@ with tab_memory:
 # TAB 4: IMPORT GUIDE
 # ==========================================
 with tab_guide:
-    st.markdown("#### Accountune Integration Steps")
+    st.markdown('<div class="section-label">INTEGRATION STEPS</div>', unsafe_allow_html=True)
     st.markdown("""
     1. **Select Catalog:** Choose active store in sidebar.
     2. **Drop Bills:** Upload purchase photos in **Tab 1** and click **Process & Extract Batch Data**.
     3. **Review & Audit:** Confirm quantities, HSN codes, and mapped SKUs in the grid.
-    4. **Download:** Click **Generate Accountune Excel Import**.
+    4. **Download:** Click **Export Accountune Excel Import**.
     5. **Upload:** Open Accountune $\rightarrow$ **Items / Inventory** $\rightarrow$ **Bulk Import**, select the generated `.xlsx` file, and upload!
     """)
