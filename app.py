@@ -155,12 +155,16 @@ def authenticate_user(email: str, password: str):
     engine = get_db_engine()
     with engine.connect() as conn:
         user = conn.execute(
-            text("SELECT slug, display_name, password FROM stores WHERE email = :email"),
+            text("SELECT slug, display_name, password, phone FROM stores WHERE email = :email"),
             {"email": email.strip().lower()}
         ).fetchone()
         
         if user and user[2] and check_password(password, user[2]):
-            return {"slug": user[0], "display_name": user[1]}
+            return {
+                "slug": user[0], 
+                "display_name": user[1],
+                "phone": user[3] if len(user) > 3 and user[3] else ""
+            }
     return None
 
 def reset_user_password(email: str, new_password: str):
@@ -303,7 +307,7 @@ with header_right:
 
 st.divider()
 
-# --- DATABASE STORE LOADERS & PERSISTENCE ---
+# --- FAST BULK-OPTIMIZED DATABASE STORE LOADERS ---
 def load_json_memory(store_slug: str) -> dict:
     """Loads learned vendor item mappings from Supabase."""
     engine = get_db_engine()
@@ -319,20 +323,23 @@ def load_json_memory(store_slug: str) -> dict:
         return {}
 
 def save_json_memory(store_slug: str, memory_dict: dict):
-    """Saves learned vendor item mappings to Supabase."""
+    """Saves learned vendor item mappings to Supabase using fast bulk upserts."""
+    if not memory_dict:
+        return
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
+    records = [{"store_id": store_id, "raw_name": k, "mapped_sku": v} for k, v in memory_dict.items()]
+    
     with engine.begin() as conn:
-        for raw_name, mapped_sku in memory_dict.items():
-            conn.execute(
-                text("""
-                    INSERT INTO vendor_mappings (store_id, raw_name, mapped_sku)
-                    VALUES (:store_id, :raw_name, :mapped_sku)
-                    ON CONFLICT (store_id, raw_name) 
-                    DO UPDATE SET mapped_sku = EXCLUDED.mapped_sku
-                """),
-                {"store_id": store_id, "raw_name": raw_name, "mapped_sku": mapped_sku}
-            )
+        conn.execute(
+            text("""
+                INSERT INTO vendor_mappings (store_id, raw_name, mapped_sku)
+                VALUES (:store_id, :raw_name, :mapped_sku)
+                ON CONFLICT (store_id, raw_name) 
+                DO UPDATE SET mapped_sku = EXCLUDED.mapped_sku
+            """),
+            records
+        )
 
 @st.cache_data
 def load_master(store_slug: str) -> pd.DataFrame:
@@ -358,7 +365,7 @@ def load_master(store_slug: str) -> pd.DataFrame:
         return pd.DataFrame(columns=["Official_SKU_Name", "Category", "Default_Unit", "GST_Rate", "Selling_Price"])
 
 def save_master(df: pd.DataFrame, store_slug: str):
-    """Saves updated master SKU catalog to Supabase for a given store."""
+    """Saves updated master SKU catalog to Supabase in a single fast bulk transaction."""
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
@@ -368,21 +375,24 @@ def save_master(df: pd.DataFrame, store_slug: str):
             {"store_id": store_id}
         )
         if not df.empty:
-            for _, row in df.iterrows():
-                conn.execute(
-                    text("""
-                        INSERT INTO master_skus (store_id, official_sku_name, category, default_unit, gst_rate, selling_price)
-                        VALUES (:store_id, :official_sku_name, :category, :default_unit, :gst_rate, :selling_price)
-                    """),
-                    {
-                        "store_id": store_id,
-                        "official_sku_name": str(row["Official_SKU_Name"]),
-                        "category": str(row.get("Category", "General")),
-                        "default_unit": str(row.get("Default_Unit", "PCS")),
-                        "gst_rate": float(row.get("GST_Rate", 18.0)),
-                        "selling_price": float(row.get("Selling_Price", 0.0))
-                    }
-                )
+            records = [
+                {
+                    "store_id": store_id,
+                    "official_sku_name": str(row["Official_SKU_Name"]),
+                    "category": str(row.get("Category", "General")),
+                    "default_unit": str(row.get("Default_Unit", "PCS")),
+                    "gst_rate": float(row.get("GST_Rate", 18.0)),
+                    "selling_price": float(row.get("Selling_Price", 0.0))
+                }
+                for _, row in df.iterrows()
+            ]
+            conn.execute(
+                text("""
+                    INSERT INTO master_skus (store_id, official_sku_name, category, default_unit, gst_rate, selling_price)
+                    VALUES (:store_id, :official_sku_name, :category, :default_unit, :gst_rate, :selling_price)
+                """),
+                records
+            )
     st.cache_data.clear()
 
 master_df = load_master(selected_store_slug)
@@ -431,7 +441,7 @@ def extract_invoice_data(image):
     if img_copy.mode in ("RGBA", "P"):
         img_copy = img_copy.convert("RGB")
         
-    img_copy.thumbnail((1600, 1600), Image.Resampling.BILINEAR)
+    img_copy.thumbnail((1400, 1400), Image.Resampling.BILINEAR)
     
     try:
         enhancer = ImageEnhance.Contrast(img_copy)
@@ -442,7 +452,7 @@ def extract_invoice_data(image):
         pass
 
     buffer = BytesIO()
-    img_copy.save(buffer, format="JPEG", quality=90, optimize=True)
+    img_copy.save(buffer, format="JPEG", quality=85, optimize=True)
     buffer.seek(0)
     optimized_img = Image.open(buffer)
 
@@ -516,7 +526,7 @@ def process_single_file_raw(file_bytes):
 # --- REPORTLAB PDF QUOTATION GENERATOR ---
 def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
     if not REPORTLAB_AVAILABLE:
-        raise ModuleNotFoundError("reportlab library is required for PDF generation. Please add 'reportlab' to requirements.txt.")
+        raise ModuleNotFoundError("reportlab library is required for PDF generation.")
         
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
@@ -560,7 +570,6 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
             Paragraph(f"₹{row['Total Value (₹)']:,.2f}", cell_style)
         ])
 
-    # Wrap headers
     table_data[0] = [Paragraph(cell, cell_header_style) for cell in table_data[0]]
 
     item_table = Table(table_data, colWidths=[35, 235, 45, 50, 85, 90])
@@ -831,8 +840,7 @@ with tab_parser:
         with st.expander("📄 Generate Customer Quotation (On-the-go)", expanded=False):
             st.caption("Instantly generate a customer quotation by applying a custom markup % directly to your final GST-Paid cost.")
             
-            # Load stored business contact number
-            saved_phone = get_store_phone(selected_store_slug)
+            saved_phone = st.session_state["user_store"].get("phone") or get_store_phone(selected_store_slug)
             
             col_q1, col_q2, col_q3 = st.columns([2, 2, 1])
             with col_q1:
@@ -842,9 +850,9 @@ with tab_parser:
             with col_q3:
                 markup_pct = st.number_input("Markup (%)", min_value=0.0, value=15.0, step=1.0)
             
-            # Auto-save phone number if edited
             if biz_phone_input.strip() != saved_phone.strip():
                 save_store_phone(selected_store_slug, biz_phone_input.strip())
+                st.session_state["user_store"]["phone"] = biz_phone_input.strip()
             
             if st.button("Preview & Generate PDF Quotation", type="primary", use_container_width=True):
                 quote_items = []
@@ -872,7 +880,6 @@ with tab_parser:
                 st.metric(f"Total Quotation Value (Markup: {markup_pct}% on GST-Paid Cost)", f"₹{total_quote_value:,.2f}")
                 
                 if REPORTLAB_AVAILABLE:
-                    # Build PDF
                     pdf_bytes = generate_quotation_pdf(
                         store_name=st.session_state['user_store']['display_name'],
                         phone_str=biz_phone_input.strip(),
@@ -961,7 +968,6 @@ with tab_master:
                     
                     if new_records:
                         bulk_df = pd.DataFrame(new_records)
-                        # Merge with existing master catalog, avoiding duplicate SKUs
                         combined = pd.concat([master_df, bulk_df], ignore_index=True)
                         combined = combined.drop_duplicates(subset=["Official_SKU_Name"], keep="last")
                         
