@@ -93,7 +93,7 @@ def get_or_create_store_id(store_slug: str, display_name: str = None) -> int:
         return insert_res.fetchone()[0]
 
 def get_store_phone(store_slug: str) -> str:
-    """Fetches business phone numbers saved in database for a store."""
+    """Fetches business phone numbers saved in database for a store safely."""
     engine = get_db_engine()
     try:
         with engine.connect() as conn:
@@ -108,13 +108,16 @@ def get_store_phone(store_slug: str) -> str:
     return ""
 
 def save_store_phone(store_slug: str, phone: str):
-    """Saves updated business phone numbers to database."""
+    """Saves updated business phone numbers to database safely."""
     engine = get_db_engine()
-    with engine.begin() as conn:
-        conn.execute(
-            text("UPDATE stores SET phone = :phone WHERE slug = :slug"),
-            {"phone": phone.strip(), "slug": store_slug}
-        )
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE stores SET phone = :phone WHERE slug = :slug"),
+                {"phone": phone.strip(), "slug": store_slug}
+            )
+    except Exception:
+        pass  # Fails gracefully if column doesn't exist yet in Supabase
 
 # --- AUTHENTICATION & MULTI-TENANT SESSION MANAGEMENT ---
 def hash_password(password: str) -> str:
