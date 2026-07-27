@@ -7,7 +7,6 @@ import bcrypt
 import openpyxl
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from io import BytesIO
 from PIL import Image, ImageEnhance
 from google import genai
@@ -209,44 +208,26 @@ def reset_user_password(email: str, new_password: str):
         )
     return True, "Password updated successfully! Please log in with your new password."
 
-# --- NATIVE LOCALSTORAGE AUTO-LOGIN ENGINE ---
-def persistent_session_bridge():
-    """Injects JavaScript to maintain login session in device LocalStorage."""
-    js_code = """
-    <script>
-    const STORE_KEY = "universal_os_store_session";
-    const urlParams = new URLSearchParams(window.location.search);
-    let sessionParam = urlParams.get("session");
-
-    if (sessionParam) {
-        window.localStorage.setItem(STORE_KEY, sessionParam);
-    } else {
-        let savedSession = window.localStorage.getItem(STORE_KEY);
-        if (savedSession && !urlParams.has("session")) {
-            urlParams.set("session", savedSession);
-            window.location.search = urlParams.toString();
-        }
-    }
-    </script>
-    """
-    components.html(js_code, height=0, width=0)
-
-persistent_session_bridge()
-
-# Session State Initialization
+# --- SESSION & AUTO-LOGIN ENGINE ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "user_store" not in st.session_state:
     st.session_state["user_store"] = None
 
-# Instant session resolution from URL/LocalStorage parameter
+# Native Instant Auto-Login Resolution from URL Parameters
 if not st.session_state["authenticated"]:
-    saved_session_slug = st.query_params.get("session", None)
-    if saved_session_slug:
-        store_data = get_user_by_slug(saved_session_slug)
-        if store_data:
-            st.session_state["authenticated"] = True
-            st.session_state["user_store"] = store_data
+    try:
+        session_slug = st.query_params.get("session", None)
+        if session_slug:
+            if isinstance(session_slug, list):
+                session_slug = session_slug[0]
+            
+            store_data = get_user_by_slug(str(session_slug))
+            if store_data:
+                st.session_state["authenticated"] = True
+                st.session_state["user_store"] = store_data
+    except Exception:
+        pass
 
 # --- LOGIN / SIGNUP / RESET SCREEN ---
 if not st.session_state["authenticated"]:
@@ -271,7 +252,7 @@ if not st.session_state["authenticated"]:
                             st.session_state["authenticated"] = True
                             st.session_state["user_store"] = store_data
                             
-                            # Set URL Parameter to sync with device LocalStorage
+                            # Attach persistent session key to URL bar
                             st.query_params["session"] = store_data["slug"]
                             
                             st.success(f"Welcome back, {store_data['display_name']}!")
@@ -332,19 +313,8 @@ if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.session_state["authenticated"] = False
     st.session_state["user_store"] = None
     
-    # Clear persistence from URL and LocalStorage
-    if "session" in st.query_params:
-        del st.query_params["session"]
-        
-    components.html(
-        """
-        <script>
-        window.localStorage.removeItem("universal_os_store_session");
-        </script>
-        """,
-        height=0,
-        width=0
-    )
+    # Clear URL persistence parameter completely
+    st.query_params.clear()
         
     if "parsed_df" in st.session_state:
         del st.session_state["parsed_df"]
