@@ -270,9 +270,7 @@ def extract_invoice_data(image):
     
     config = types.GenerateContentConfig(response_mime_type="application/json")
     contents = [optimized_img, prompt]
-    
-    # FIX: Valid, existing Google Gemini models
-    candidate_models = ['gemini-2.0-flash', 'gemini-1.5-flash']
+    candidate_models = ['gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash']
     
     last_error = None
     for model_name in candidate_models:
@@ -283,16 +281,12 @@ def extract_invoice_data(image):
             last_error = e
             continue
             
-    raise Exception(f"AI Service failed across models: {last_error}")
+    raise Exception(f"AI Service busy across models: {last_error}")
 
-# FIX: Receive bytes directly to ensure safe execution inside background threads
-def process_single_file(file_bytes):
-    try:
-        img = Image.open(BytesIO(file_bytes))
-        parsed_json = extract_invoice_data(img)
-    except Exception as e:
-        return [{"ERROR": str(e)}]
-        
+def process_single_file(file):
+    file.seek(0)
+    img = Image.open(file)
+    parsed_json = extract_invoice_data(img)
     supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
     
     items = []
@@ -381,19 +375,12 @@ with tab_parser:
                 
             all_parsed_items = []
             
-            # FIX: Read the files safely into memory before spawning threads
-            file_bytes_list = [f.read() for f in uploaded_files]
-            
             with st.status("Parsing purchase bills concurrently with Multimodal AI...", expanded=True) as status_container:
-                with ThreadPoolExecutor(max_workers=min(len(file_bytes_list), 10)) as executor:
-                    results = list(executor.map(process_single_file, file_bytes_list))
+                with ThreadPoolExecutor(max_workers=min(len(uploaded_files), 5)) as executor:
+                    results = list(executor.map(process_single_file, uploaded_files))
                     
                 for res in results:
-                    for item in res:
-                        if "ERROR" in item:
-                            st.error(f"Failed to process a file: {item['ERROR']}")
-                        else:
-                            all_parsed_items.append(item)
+                    all_parsed_items.extend(res)
                     
                 gc.collect()
                 status_container.update(label="✅ Ingestion & Batch Extraction Complete!", state="complete", expanded=False)
