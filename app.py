@@ -13,6 +13,7 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 from concurrent.futures import ThreadPoolExecutor
+from sqlalchemy import create_engine, text
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -49,20 +50,49 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- MULTI-STORE DIRECTORY & DATA ISOLATION ---
-DATA_DIR = "stores_data"
-os.makedirs(DATA_DIR, exist_ok=True)
+# --- DATABASE ENGINE SETUP ---
+@st.cache_resource
+def get_db_engine():
+    db_url = st.secrets["SUPABASE_DB_URL"]
+    return create_engine(db_url, pool_pre_ping=True)
+
+def sanitize_store_slug(name):
+    return "".join([c if c.isalnum() else "_" for c in name.strip()]).lower()
+
+def get_or_create_store_id(store_slug: str, display_name: str = None) -> int:
+    """Gets the database ID for a store slug, creating it if missing."""
+    engine = get_db_engine()
+    slug = sanitize_store_slug(store_slug)
+    if not display_name:
+        display_name = store_slug.replace("_", " ").title()
+    
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("SELECT id FROM stores WHERE slug = :slug"),
+            {"slug": slug}
+        ).fetchone()
+        
+        if result:
+            return result[0]
+        
+        insert_res = conn.execute(
+            text("INSERT INTO stores (slug, display_name) VALUES (:slug, :display_name) RETURNING id"),
+            {"slug": slug, "display_name": display_name}
+        )
+        return insert_res.fetchone()[0]
 
 def get_store_list():
-    stores = [d for d in os.listdir(DATA_DIR) if os.path.isdir(os.path.join(DATA_DIR, d))]
-    if not stores:
-        default_path = os.path.join(DATA_DIR, "Universal_Hardware")
-        os.makedirs(default_path, exist_ok=True)
-        return ["Universal_Hardware"]
-    return sorted(stores)
-
-def sanitize_store_name(name):
-    return "".join([c if c.isalnum() else "_" for c in name.strip()])
+    engine = get_db_engine()
+    try:
+        with engine.connect() as conn:
+            df = pd.read_sql(text("SELECT slug FROM stores ORDER BY slug ASC"), conn)
+            if not df.empty:
+                return df["slug"].tolist()
+    except Exception:
+        pass
+    # Fallback/Default initial store
+    get_or_create_store_id("universal_hardware", "Universal Hardware")
+    return ["universal_hardware"]
 
 # --- SIDEBAR: MULTI-TENANT WORKSPACE ---
 st.sidebar.title("🏬 Store Directory")
@@ -71,7 +101,7 @@ existing_stores = get_store_list()
 selected_store_slug = st.sidebar.selectbox(
     "Active Store Catalog",
     options=existing_stores,
-    format_func=lambda x: x.replace("_", " ")
+    format_func=lambda x: x.replace("_", " ").title()
 )
 
 if "last_store_slug" not in st.session_state:
@@ -87,29 +117,27 @@ st.sidebar.divider()
 
 # --- SIDEBAR STORE ACTIONS ---
 with st.sidebar.expander("✏️ Rename Active Store", expanded=False):
-    current_display = selected_store_slug.replace("_", " ")
+    current_display = selected_store_slug.replace("_", " ").title()
     renamed_input = st.text_input("New Name:", value=current_display, key="rename_input_field")
     if st.button("Save Store Name", use_container_width=True, type="secondary"):
         if renamed_input.strip() and renamed_input.strip() != current_display:
-            new_slug = sanitize_store_name(renamed_input)
-            old_path = os.path.join(DATA_DIR, selected_store_slug)
-            new_path = os.path.join(DATA_DIR, new_slug)
-            
-            if not os.path.exists(new_path):
-                shutil.move(old_path, new_path)
-                st.session_state["last_store_slug"] = new_slug
-                st.sidebar.success("Store name updated!")
-                st.rerun()
-            else:
-                st.sidebar.error("A store with that name already exists.")
+            new_slug = sanitize_store_slug(renamed_input)
+            engine = get_db_engine()
+            with engine.begin() as conn:
+                conn.execute(
+                    text("UPDATE stores SET slug = :new_slug, display_name = :display_name WHERE slug = :old_slug"),
+                    {"new_slug": new_slug, "display_name": renamed_input.strip(), "old_slug": selected_store_slug}
+                )
+            st.session_state["last_store_slug"] = new_slug
+            st.sidebar.success("Store name updated!")
+            st.rerun()
 
 with st.sidebar.expander("➕ Register New Store", expanded=False):
     new_store_name = st.text_input("Store Title:", placeholder="e.g. Metro Hardware", key="add_input_field")
     if st.button("Create Environment", use_container_width=True, type="primary"):
         if new_store_name.strip():
-            slug = sanitize_store_name(new_store_name)
-            new_path = os.path.join(DATA_DIR, slug)
-            os.makedirs(new_path, exist_ok=True)
+            slug = sanitize_store_slug(new_store_name)
+            get_or_create_store_id(slug, new_store_name.strip())
             st.session_state["last_store_slug"] = slug
             st.sidebar.success(f"Store '{new_store_name}' created!")
             st.rerun()
@@ -133,9 +161,6 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-CURRENT_STORE_DIR = os.path.join(DATA_DIR, selected_store_slug)
-MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
-MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
 # --- HEADER SECTION ---
@@ -151,42 +176,91 @@ with header_right:
 
 st.divider()
 
-# --- STORE DATA LOADERS & PERSISTENCE ---
-def load_json_memory():
-    if os.path.exists(MEMORY_FILE):
-        try:
-            with open(MEMORY_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-    return {}
-
-def save_json_memory(memory_dict):
+# --- DATABASE STORE LOADERS & PERSISTENCE ---
+def load_json_memory(store_slug: str) -> dict:
+    """Loads learned vendor item mappings from Supabase."""
+    engine = get_db_engine()
+    store_id = get_or_create_store_id(store_slug)
+    query = "SELECT raw_name, mapped_sku FROM vendor_mappings WHERE store_id = :store_id"
     try:
-        with open(MEMORY_FILE, "w") as f:
-            json.dump(memory_dict, f, indent=4)
-    except Exception as e:
-        st.sidebar.error(f"Memory save alert: {e}")
+        with engine.connect() as conn:
+            df = pd.read_sql(text(query), conn, params={"store_id": store_id})
+        if df.empty:
+            return {}
+        return dict(zip(df["raw_name"], df["mapped_sku"]))
+    except Exception:
+        return {}
+
+def save_json_memory(store_slug: str, memory_dict: dict):
+    """Saves learned vendor item mappings to Supabase."""
+    engine = get_db_engine()
+    store_id = get_or_create_store_id(store_slug)
+    with engine.begin() as conn:
+        for raw_name, mapped_sku in memory_dict.items():
+            conn.execute(
+                text("""
+                    INSERT INTO vendor_mappings (store_id, raw_name, mapped_sku)
+                    VALUES (:store_id, :raw_name, :mapped_sku)
+                    ON CONFLICT (store_id, raw_name) 
+                    DO UPDATE SET mapped_sku = EXCLUDED.mapped_sku
+                """),
+                {"store_id": store_id, "raw_name": raw_name, "mapped_sku": mapped_sku}
+            )
 
 @st.cache_data
-def load_master(store_slug):
-    master_path = os.path.join(DATA_DIR, store_slug, "inventory_master.csv")
+def load_master(store_slug: str) -> pd.DataFrame:
+    """Loads master SKU catalog from Supabase for a given store."""
+    engine = get_db_engine()
+    store_id = get_or_create_store_id(store_slug)
+    query = """
+        SELECT official_sku_name as "Official_SKU_Name", 
+               category as "Category", 
+               default_unit as "Default_Unit", 
+               gst_rate as "GST_Rate", 
+               selling_price as "Selling_Price"
+        FROM master_skus
+        WHERE store_id = :store_id
+    """
     try:
-        df = pd.read_csv(master_path)
-        if "Selling_Price" not in df.columns:
-            df["Selling_Price"] = 0.0
+        with engine.connect() as conn:
+            df = pd.read_sql(text(query), conn, params={"store_id": store_id})
+        if df.empty:
+            return pd.DataFrame(columns=["Official_SKU_Name", "Category", "Default_Unit", "GST_Rate", "Selling_Price"])
         return df
     except Exception:
-        return pd.DataFrame({"Official_SKU_Name": [], "Category": [], "Default_Unit": [], "GST_Rate": [], "Selling_Price": []})
+        return pd.DataFrame(columns=["Official_SKU_Name", "Category", "Default_Unit", "GST_Rate", "Selling_Price"])
 
-def save_master(df, store_slug):
-    master_path = os.path.join(DATA_DIR, store_slug, "inventory_master.csv")
-    df.to_csv(master_path, index=False)
+def save_master(df: pd.DataFrame, store_slug: str):
+    """Saves updated master SKU catalog to Supabase for a given store."""
+    engine = get_db_engine()
+    store_id = get_or_create_store_id(store_slug)
+    
+    with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM master_skus WHERE store_id = :store_id"),
+            {"store_id": store_id}
+        )
+        if not df.empty:
+            for _, row in df.iterrows():
+                conn.execute(
+                    text("""
+                        INSERT INTO master_skus (store_id, official_sku_name, category, default_unit, gst_rate, selling_price)
+                        VALUES (:store_id, :official_sku_name, :category, :default_unit, :gst_rate, :selling_price)
+                    """),
+                    {
+                        "store_id": store_id,
+                        "official_sku_name": str(row["Official_SKU_Name"]),
+                        "category": str(row.get("Category", "General")),
+                        "default_unit": str(row.get("Default_Unit", "PCS")),
+                        "gst_rate": float(row.get("GST_Rate", 18.0)),
+                        "selling_price": float(row.get("Selling_Price", 0.0))
+                    }
+                )
     st.cache_data.clear()
 
 master_df = load_master(selected_store_slug)
 master_sku_list = master_df["Official_SKU_Name"].dropna().tolist() if not master_df.empty else []
-mapping_memory = load_json_memory()
+mapping_memory = load_json_memory(selected_store_slug)
 
 def match_sku(raw_name):
     cleaned_raw = raw_name.strip().upper()
@@ -389,7 +463,7 @@ with tab_parser:
                             "HSN/SAC": hsn_sac,
                             "Category": "General",
                             "GST Rate": gst_rate,
-                            "Purchase Price": round(final_base, 2), # Excl. GST Rate for ERP Import
+                            "Purchase Price": round(final_base, 2),
                             "Line Total Taxable": round(total_taxable_item, 2),
                             "Selling Price": round(known_selling, 2)
                         })
@@ -476,7 +550,7 @@ with tab_parser:
                     master_updated = True
 
             if memory_updated:
-                save_json_memory(mapping_memory)
+                save_json_memory(selected_store_slug, mapping_memory)
                 st.toast("🧠 Learned Vendor Mapping updated!")
                 
             if master_updated:
@@ -547,7 +621,6 @@ with tab_parser:
                 total_quote_value = 0.0
                 
                 for idx, row in edited_df.iterrows():
-                    # Calculates markup on GST-Paid Unit Cost for real-world counter pricing
                     base_gst_paid_cost = float(row["Unit Cost (GST Paid) ₹"])
                     markup_price = round(base_gst_paid_cost * (1 + (markup_pct / 100)), 2)
                     qty = float(row["Current Quantity"])
@@ -665,7 +738,13 @@ with tab_memory:
         st.dataframe(mem_df, use_container_width=True)
         st.write("")
         if st.button("🗑️ Reset Store Memory Cache"):
-            save_json_memory({})
+            engine = get_db_engine()
+            store_id = get_or_create_store_id(selected_store_slug)
+            with engine.begin() as conn:
+                conn.execute(
+                    text("DELETE FROM vendor_mappings WHERE store_id = :store_id"),
+                    {"store_id": store_id}
+                )
             st.success("Memory cache reset!")
             st.rerun()
     else:
