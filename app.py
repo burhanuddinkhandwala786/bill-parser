@@ -147,7 +147,7 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# --- HEADER SECTION (NATIVE CLEAN ALIGNMENT) ---
+# --- HEADER SECTION ---
 header_left, header_right = st.columns([3, 1.5])
 
 with header_left:
@@ -247,10 +247,10 @@ def extract_invoice_data(image):
     optimized_img = Image.open(buffer)
 
     prompt = """
-    Extract all purchase invoice items into strict JSON. CRITICAL INSTRUCTIONS:
-    1. "Unit Price (Excl. Tax)": The standard per-item rate.
-    2. "Line Total Taxable Amount": The total base amount for this line before GST. If UOMs are mixed (e.g. Rate is per Sq.Mtr but Qty is Pcs), extract the FINAL line amount here.
-    3. "Line Total Inclusive Amount": The final amount for this line including GST.
+    Extract all purchase invoice items into strict JSON format. CRITICAL INSTRUCTIONS:
+    1. "Unit Price (Excl. Tax)": Per-item rate before GST.
+    2. "Line Total Taxable Amount": The total line base amount before GST.
+    3. "Line Total Inclusive Amount": The total line amount including GST.
 
     {
         "Supplier Company Name": "Vendor Name",
@@ -267,13 +267,12 @@ def extract_invoice_data(image):
             }
         ]
     }
-    Rules: Rates and GST must be pure numbers. HSN Code as string. Missing values set to 0 or "". Default Unit to PCS or LTR.
+    Rules: Rates and GST must be pure numbers. HSN Code as string. Missing values set to 0 or "". Default Unit to PCS, SQM, or LTR.
     """
     
     config = types.GenerateContentConfig(response_mime_type="application/json")
     contents = [optimized_img, prompt]
     
-    # Supported production models candidate list
     candidate_models = ['gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash']
     
     last_error = None
@@ -313,15 +312,19 @@ def process_single_file(file_bytes):
         line_inclusive = float(row.get("Line Total Inclusive Amount") or 0.0)
         hsn_sac = str(row.get("HSN Code") or "").strip()
         
-        # Absolute Total Reconciliation Math (Solves Mixed UOMs)
+        # Absolute Total Reconciliation
         if line_taxable > 0:
             final_base = line_taxable / qty
+            total_taxable_item = line_taxable
         elif unit_price > 0:
             final_base = unit_price
+            total_taxable_item = unit_price * qty
         elif line_inclusive > 0:
-            final_base = (line_inclusive / (1 + (gst_rate / 100))) / qty
+            total_taxable_item = line_inclusive / (1 + (gst_rate / 100))
+            final_base = total_taxable_item / qty
         else:
             final_base = 0.0
+            total_taxable_item = 0.0
             
         raw_item_name = str(row.get("Item Name", "")).strip()
         matched_sku, match_type = match_sku(raw_item_name)
@@ -338,6 +341,7 @@ def process_single_file(file_bytes):
             "Category": "General",
             "GST Rate": gst_rate,
             "Purchase Price": round(final_base, 2),
+            "Line Total Taxable": round(total_taxable_item, 2),
             "Selling Price": round(known_selling, 2)
         })
     return items
@@ -419,10 +423,24 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
-        m1, m2, m3 = st.columns(3)
+        # Recalculate computed line totals for display
+        df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
+        df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
+        df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
+        
+        total_taxable = df["Line Total (Excl. GST)"].sum()
+        total_gst = df["GST Tax Amount"].sum()
+        grand_total_incl_tax = total_taxable + total_gst
+
+        # Group stock quantities by UOM to avoid mixing meters and pieces
+        uom_groups = df.groupby("Unit")["Current Quantity"].sum()
+        uom_summary_str = " | ".join([f"{val:,.2f} {unit}" for unit, val in uom_groups.items()])
+
+        m1, m2, m3, m4 = st.columns(4)
         m1.metric("Total Line Items", f"{len(df)} Items")
-        m2.metric("Total Stock Quantity", f"{df['Current Quantity'].sum():,.0f} Units")
-        m3.metric("Taxable Purchase Value (Excl. GST)", f"₹{(df['Purchase Price'] * df['Current Quantity']).sum():,.2f}")
+        m2.metric("Stock Quantities by UOM", uom_summary_str)
+        m3.metric("Taxable Total (Excl. GST)", f"₹{total_taxable:,.2f}")
+        m4.metric("Grand Total (Incl. GST)", f"₹{grand_total_incl_tax:,.2f}", delta=f"GST Tax: ₹{total_gst:,.2f}")
         
         st.write("")
         
@@ -432,7 +450,9 @@ with tab_parser:
             use_container_width=True,
             column_config={
                 "Official SKU": st.column_config.SelectboxColumn("Official SKU Name", options=master_sku_list, required=True) if master_sku_list else "Official SKU",
-                "Purchase Price": st.column_config.NumberColumn("Purchase Price (Excl. GST) ₹", format="₹%.2f"),
+                "Purchase Price": st.column_config.NumberColumn("Unit Rate (Excl. GST) ₹", format="₹%.2f"),
+                "Line Total (Excl. GST)": st.column_config.NumberColumn("Line Total (Excl. GST) ₹", format="₹%.2f", disabled=True),
+                "Line Total (Incl. GST)": st.column_config.NumberColumn("Line Total (Incl. GST) ₹", format="₹%.2f", disabled=True),
                 "Selling Price": st.column_config.NumberColumn("Selling Price (Optional) ₹", format="₹%.2f"),
                 "Current Quantity": st.column_config.NumberColumn("Current Quantity", min_value=0.1),
                 "GST Rate": st.column_config.NumberColumn("GST Rate (%)", min_value=0, max_value=28),
