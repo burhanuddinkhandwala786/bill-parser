@@ -208,26 +208,23 @@ def reset_user_password(email: str, new_password: str):
         )
     return True, "Password updated successfully! Please log in with your new password."
 
-# --- SESSION & AUTO-LOGIN ENGINE ---
+# --- FAST SESSION & AUTO-LOGIN RESOLUTION ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "user_store" not in st.session_state:
     st.session_state["user_store"] = None
 
-# Native Instant Auto-Login Resolution from URL Parameters
+# Auto-Login Resolution from URL (Instant, No Loops)
 if not st.session_state["authenticated"]:
-    try:
-        session_slug = st.query_params.get("session", None)
-        if session_slug:
-            if isinstance(session_slug, list):
-                session_slug = session_slug[0]
-            
-            store_data = get_user_by_slug(str(session_slug))
-            if store_data:
-                st.session_state["authenticated"] = True
-                st.session_state["user_store"] = store_data
-    except Exception:
-        pass
+    url_session = st.query_params.get("session", None)
+    if url_session:
+        if isinstance(url_session, list):
+            url_session = url_session[0]
+        
+        store_data = get_user_by_slug(str(url_session))
+        if store_data:
+            st.session_state["authenticated"] = True
+            st.session_state["user_store"] = store_data
 
 # --- LOGIN / SIGNUP / RESET SCREEN ---
 if not st.session_state["authenticated"]:
@@ -241,8 +238,8 @@ if not st.session_state["authenticated"]:
         
         with auth_tab1:
             with st.form("login_form"):
-                login_email = st.text_input("Store Email")
-                login_password = st.text_input("Password", type="password")
+                login_email = st.text_input("Store Email", key="login_email_input")
+                login_password = st.text_input("Password", type="password", key="login_pass_input")
                 submit_login = st.form_submit_button("Log In", use_container_width=True, type="primary")
                 
                 if submit_login:
@@ -252,9 +249,8 @@ if not st.session_state["authenticated"]:
                             st.session_state["authenticated"] = True
                             st.session_state["user_store"] = store_data
                             
-                            # Attach persistent session key to URL bar
+                            # Update URL session parameter without endless rerun
                             st.query_params["session"] = store_data["slug"]
-                            
                             st.success(f"Welcome back, {store_data['display_name']}!")
                             st.rerun()
                         else:
@@ -313,7 +309,7 @@ if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.session_state["authenticated"] = False
     st.session_state["user_store"] = None
     
-    # Clear URL persistence parameter completely
+    # Clean URL parameters on logout
     st.query_params.clear()
         
     if "parsed_df" in st.session_state:
