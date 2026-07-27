@@ -679,11 +679,90 @@ with tab_parser:
 # ==========================================
 with tab_master:
     st.subheader(f"⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
+    
+    # --- BULK CATALOG IMPORT EXPANDER ---
+    with st.expander("📥 Bulk Import Catalog via Excel / CSV", expanded=False):
+        st.caption("Upload a spreadsheet containing your full product catalog to register multiple SKUs at once.")
+        
+        uploaded_catalog = st.file_uploader(
+            "Upload Catalog (.xlsx or .csv)",
+            type=["xlsx", "csv"],
+            key="bulk_catalog_uploader"
+        )
+        
+        if uploaded_catalog is not None:
+            try:
+                if uploaded_catalog.name.endswith(".csv"):
+                    imported_df = pd.read_csv(uploaded_catalog)
+                else:
+                    imported_df = pd.read_excel(uploaded_catalog)
+                
+                st.markdown("**Uploaded File Preview:**")
+                st.dataframe(imported_df.head(5), use_container_width=True)
+                
+                # Column mapping helper
+                col_sku = st.selectbox("Select SKU Name Column:", options=imported_df.columns)
+                
+                col_cat, col_unit, col_gst, col_price = st.columns(4)
+                with col_cat:
+                    opt_cat = st.selectbox("Category Column (Optional):", options=["-- None --"] + list(imported_df.columns))
+                with col_unit:
+                    opt_unit = st.selectbox("Default Unit Column (Optional):", options=["-- None --"] + list(imported_df.columns))
+                with col_gst:
+                    opt_gst = st.selectbox("GST Rate Column (Optional):", options=["-- None --"] + list(imported_df.columns))
+                with col_price:
+                    opt_price = st.selectbox("Selling Price Column (Optional):", options=["-- None --"] + list(imported_df.columns))
+                
+                if st.button("🚀 Import All SKUs into Master Catalog", type="primary", use_container_width=True):
+                    new_records = []
+                    for _, row in imported_df.iterrows():
+                        sku_val = str(row[col_sku]).strip() if pd.notnull(row[col_sku]) else ""
+                        if not sku_val or sku_val.lower() == "nan":
+                            continue
+                            
+                        cat_val = str(row[opt_cat]).strip() if opt_cat != "-- None --" and pd.notnull(row[opt_cat]) else "General"
+                        unit_val = str(row[opt_unit]).strip().upper() if opt_unit != "-- None --" and pd.notnull(row[opt_unit]) else "PCS"
+                        
+                        try:
+                            gst_val = float(row[opt_gst]) if opt_gst != "-- None --" and pd.notnull(row[opt_gst]) else 18.0
+                        except ValueError:
+                            gst_val = 18.0
+                            
+                        try:
+                            price_val = float(row[opt_price]) if opt_price != "-- None --" and pd.notnull(row[opt_price]) else 0.0
+                        except ValueError:
+                            price_val = 0.0
+                            
+                        new_records.append({
+                            "Official_SKU_Name": sku_val,
+                            "Category": cat_val,
+                            "Default_Unit": unit_val,
+                            "GST_Rate": gst_val,
+                            "Selling_Price": price_val
+                        })
+                    
+                    if new_records:
+                        bulk_df = pd.DataFrame(new_records)
+                        # Merge with existing master catalog, avoiding duplicate SKUs
+                        combined = pd.concat([master_df, bulk_df], ignore_index=True)
+                        combined = combined.drop_duplicates(subset=["Official_SKU_Name"], keep="last")
+                        
+                        save_master(combined, selected_store_slug)
+                        st.success(f"Successfully imported {len(new_records)} SKUs into {ACTIVE_STORE_DISPLAY}!")
+                        st.rerun()
+                    else:
+                        st.error("No valid SKU rows found in the uploaded file.")
+                        
+            except Exception as err:
+                st.error(f"Error parsing bulk catalog file: {err}")
+
+    st.divider()
+
     col_add, col_list = st.columns([1, 2])
     
     with col_add:
         with st.container(border=True):
-            st.markdown("#### ➕ Add New Master SKU")
+            st.markdown("#### ➕ Add Single Master SKU")
             add_sku = st.text_input("SKU Name (e.g. Copper Wire 1.5mm)")
             add_cat = st.text_input("Category", value="General")
             add_unit = st.selectbox("Default Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET"])
