@@ -3,8 +3,8 @@ import gc
 import json
 import time
 import shutil
+import bcrypt
 import openpyxl
-import colors
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -14,6 +14,7 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 from concurrent.futures import ThreadPoolExecutor
+from sqlalchemy import create_engine, text
 
 # REPORTLAB PDF ENGINE IMPORTS
 from reportlab.lib import colors
