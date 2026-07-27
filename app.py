@@ -226,12 +226,15 @@ if "user_store" not in st.session_state:
 
 # Auto-Login from Browser Cookie
 if not st.session_state["authenticated"] and cookie_manager:
-    saved_store_slug = cookie_manager.get(cookie="store_session")
-    if saved_store_slug:
-        store_data = get_user_by_slug(saved_store_slug)
-        if store_data:
-            st.session_state["authenticated"] = True
-            st.session_state["user_store"] = store_data
+    try:
+        saved_store_slug = cookie_manager.get(cookie="store_session")
+        if saved_store_slug:
+            store_data = get_user_by_slug(saved_store_slug)
+            if store_data:
+                st.session_state["authenticated"] = True
+                st.session_state["user_store"] = store_data
+    except Exception:
+        pass
 
 # --- LOGIN / SIGNUP / RESET SCREEN ---
 if not st.session_state["authenticated"]:
@@ -256,9 +259,11 @@ if not st.session_state["authenticated"]:
                             st.session_state["authenticated"] = True
                             st.session_state["user_store"] = store_data
                             
-                            # Set persistent cookie for 30 days
                             if cookie_manager:
-                                cookie_manager.set("store_session", store_data["slug"], max_age=30*24*3600)
+                                try:
+                                    cookie_manager.set("store_session", store_data["slug"], max_age=30*24*3600)
+                                except Exception:
+                                    pass
                                 
                             st.success(f"Welcome back, {store_data['display_name']}!")
                             st.rerun()
@@ -303,7 +308,7 @@ if not st.session_state["authenticated"]:
                         else:
                             st.error(msg)
                             
-    st.stop()  # Halt execution so unauthenticated users cannot see app tabs
+    st.stop()
 
 # Active user details post-login
 selected_store_slug = st.session_state["user_store"]["slug"]
@@ -318,7 +323,10 @@ if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.session_state["authenticated"] = False
     st.session_state["user_store"] = None
     if cookie_manager:
-        cookie_manager.delete("store_session")
+        try:
+            cookie_manager.delete("store_session")
+        except Exception:
+            pass
     if "parsed_df" in st.session_state:
         del st.session_state["parsed_df"]
     st.rerun()
@@ -514,6 +522,7 @@ def extract_invoice_data(image):
        - "Item Name": Full product title or description. Read faint or handwritten pen marks carefully.
        - "Quantity": Pure numeric value (e.g. 1.0, 10, 0.5). If missing or unreadable, default to 1.0.
        - "Unit Price (Excl. Tax)": Per-item rate before GST if explicitly printed.
+       - "Discount Amount": Any cash/trade discount deducted for this item line. If none, 0.0.
        - "Line Total Taxable Amount": The line base total before GST (Printed Amount column).
        - "Line Total Inclusive Amount": The total line amount including GST.
        - "GST Rate": GST tax percentage as a pure number (0, 5, 12, 18, 28). Default to 18.0 if unstated.
@@ -521,9 +530,9 @@ def extract_invoice_data(image):
        - "Unit": Unit of measure (PCS, BOX, LTR, KG, NOS, SET, SQM, MTR, PKT). Default to "PCS".
 
     ROBUSTNESS & HANDWRITING RULES:
-    - Faded / Low Contrast Text: Infer numbers by cross-checking quantity * rate = total where possible.
+    - Faded / Low Contrast Text: Infer numbers by cross-checking quantity * rate - discount = total where possible.
     - Handwritten Text: Treat pen strokes and annotations as primary text if printed text is crossed out or modified.
-    - Pure Numbers Only: Rates, quantities, amounts, and GST must be numbers (no currency symbols like ₹ or Rs).
+    - Pure Numbers Only: Rates, quantities, amounts, discounts, and GST must be numbers (no currency symbols like ₹ or Rs).
 
     OUTPUT SCHEMA (STRICT JSON ONLY):
     {
@@ -533,6 +542,7 @@ def extract_invoice_data(image):
                 "Item Name": "description",
                 "Quantity": 1.0,
                 "Unit Price (Excl. Tax)": 0.0,
+                "Discount Amount": 0.0,
                 "Line Total Taxable Amount": 0.0,
                 "Line Total Inclusive Amount": 0.0,
                 "GST Rate": 18.0,
@@ -581,34 +591,34 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     story = []
     styles = getSampleStyleSheet()
 
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=24, leading=28, textColor=colors.HexColor('#1E3A8A'), alignment=0, spaceAfter=4)
-    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=11, leading=14, textColor=colors.HexColor('#4B5563'), spaceAfter=15)
-    meta_style = ParagraphStyle('MetaStyle', parent=styles['Normal'], fontSize=10, leading=14, textColor=colors.HexColor('#1F2937'))
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=22, leading=26, textColor=colors.HexColor('#1E3A8A'), alignment=0, spaceAfter=4)
+    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=10, leading=13, textColor=colors.HexColor('#4B5563'), spaceAfter=12)
+    meta_style = ParagraphStyle('MetaStyle', parent=styles['Normal'], fontSize=9, leading=12, textColor=colors.HexColor('#1F2937'))
 
-    story.append(Paragraph("QUOTATION", title_style))
+    story.append(Paragraph("OFFICIAL QUOTATION", title_style))
     story.append(Paragraph(f"<b>Issued By:</b> {store_name.upper()} | <b>Contact:</b> {phone_str or 'N/A'}", subtitle_style))
     
     meta_data = [
-        [Paragraph(f"<b>Customer Name:</b> {customer_name}", meta_style), Paragraph(f"<b>Date:</b> {time.strftime('%d-%m-%Y %H:%M')}", meta_style)]
+        [Paragraph(f"<b>Customer Reference:</b> {customer_name}", meta_style), Paragraph(f"<b>Date:</b> {time.strftime('%d-%m-%Y %H:%M')}", meta_style)]
     ]
     meta_table = Table(meta_data, colWidths=[300, 240])
     meta_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F3F4F6')),
-        ('PADDING', (0,0), (-1,-1), 8),
+        ('PADDING', (0,0), (-1,-1), 6),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
     ]))
     story.append(meta_table)
-    story.append(Spacer(1, 15))
+    story.append(Spacer(1, 12))
 
     table_data = [["S.No", "Item Description", "Qty", "Unit", "Unit Price (₹)", "Total (₹)"]]
     
-    cell_style = ParagraphStyle('CellStyle', parent=styles['Normal'], fontSize=9, leading=11, textColor=colors.HexColor('#111827'))
-    cell_header_style = ParagraphStyle('HeaderStyle', parent=styles['Normal'], fontSize=10, leading=12, textColor=colors.white, fontName='Helvetica-Bold')
+    cell_style = ParagraphStyle('CellStyle', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=colors.HexColor('#111827'))
+    cell_header_style = ParagraphStyle('HeaderStyle', parent=styles['Normal'], fontSize=9, leading=11, textColor=colors.white, fontName='Helvetica-Bold')
 
     for i, row in quote_df.iterrows():
         table_data.append([
             Paragraph(str(i + 1), cell_style),
-            Paragraph(str(row["Item Name"]), cell_style),
+            Paragraph(str(row["Item Name"]), cell_style),  # Auto-wraps long SKU names safely
             Paragraph(str(row["Quantity"]), cell_style),
             Paragraph(str(row["Unit"]), cell_style),
             Paragraph(f"₹{row['Customer Unit Price (₹)']:,.2f}", cell_style),
@@ -622,15 +632,15 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2563EB')),
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0,0), (-1,0), 8),
-        ('TOPPADDING', (0,0), (-1,0), 8),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6),
+        ('TOPPADDING', (0,0), (-1,0), 6),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
         ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F9FAFB')])
     ]))
     story.append(item_table)
-    story.append(Spacer(1, 15))
+    story.append(Spacer(1, 12))
 
-    summary_style = ParagraphStyle('SummaryStyle', parent=styles['Heading2'], fontSize=14, leading=16, textColor=colors.HexColor('#2563EB'), alignment=2)
+    summary_style = ParagraphStyle('SummaryStyle', parent=styles['Heading2'], fontSize=13, leading=15, textColor=colors.HexColor('#2563EB'), alignment=2)
     story.append(Paragraph(f"<b>Grand Total: ₹{grand_total:,.2f}</b>", summary_style))
 
     doc.build(story)
@@ -705,10 +715,12 @@ with tab_parser:
                         
                         gst_rate = float(row.get("GST Rate") or 18.0)
                         unit_price = float(row.get("Unit Price (Excl. Tax)") or 0.0)
+                        discount = float(row.get("Discount Amount") or 0.0)
                         line_taxable = float(row.get("Line Total Taxable Amount") or 0.0)
                         line_inclusive = float(row.get("Line Total Inclusive Amount") or 0.0)
                         hsn_sac = str(row.get("HSN Code") or "").strip()
                         
+                        # ACCURATE RECONCILIATION MATH WITH DISCOUNT
                         if line_taxable > 0:
                             total_taxable_item = line_taxable
                             final_base = line_taxable / qty
@@ -716,8 +728,8 @@ with tab_parser:
                             total_taxable_item = line_inclusive / (1 + (gst_rate / 100))
                             final_base = total_taxable_item / qty
                         elif unit_price > 0:
-                            final_base = unit_price
-                            total_taxable_item = unit_price * qty
+                            total_taxable_item = (unit_price * qty) - discount
+                            final_base = total_taxable_item / qty if qty > 0 else 0.0
                         else:
                             final_base = 0.0
                             total_taxable_item = 0.0
@@ -780,6 +792,7 @@ with tab_parser:
             df,
             num_rows="dynamic",
             use_container_width=True,
+            key="audit_editor",
             column_config={
                 "Official SKU": st.column_config.SelectboxColumn("Official SKU Name", options=master_sku_list, required=True) if master_sku_list else "Official SKU",
                 "Unit Cost (GST Paid) ₹": st.column_config.NumberColumn("Unit Cost (GST Paid) ₹", format="₹%.2f", disabled=True),
