@@ -25,38 +25,16 @@ st.set_page_config(
 # --- CLEAN THEME-SAFE CSS ---
 st.markdown("""
 <style>
-    /* Suppress Streamlit Input Watermarks */
-    div[data-testid="InputInstructions"] {
-        display: none !important;
-    }
-    
-    /* Clean layout spacing */
-    .block-container {
-        padding-top: 1.2rem !important;
-        padding-bottom: 2.5rem !important;
-    }
-
-    /* Metric Visual Upgrades */
-    div[data-testid="stMetricValue"] div {
-        color: #2563EB !important;
-        font-weight: 700 !important;
-    }
-
-    /* Equalize container heights across adjacent columns */
-    div[data-testid="stColumn"] {
-        display: flex;
-        flex-direction: column;
-    }
-    div[data-testid="stColumn"] > div {
-        flex: 1;
-    }
-    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] {
-        height: 100% !important;
-    }
+    div[data-testid="InputInstructions"] { display: none !important; }
+    .block-container { padding-top: 1.2rem !important; padding-bottom: 2.5rem !important; }
+    div[data-testid="stMetricValue"] div { color: #2563EB !important; font-weight: 700 !important; }
+    div[data-testid="stColumn"] { display: flex; flex-direction: column; }
+    div[data-testid="stColumn"] > div { flex: 1; }
+    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] { height: 100% !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- MULTI-STORE DIRECTORY & DATA ISOLATION ---
+# --- MULTI-STORE DIRECTORY ---
 DATA_DIR = "stores_data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -81,7 +59,6 @@ selected_store_slug = st.sidebar.selectbox(
     format_func=lambda x: x.replace("_", " ")
 )
 
-# Store Switch State Purge Guard
 if "last_store_slug" not in st.session_state:
     st.session_state["last_store_slug"] = selected_store_slug
 
@@ -102,14 +79,13 @@ with st.sidebar.expander("✏️ Rename Active Store", expanded=False):
             new_slug = sanitize_store_name(renamed_input)
             old_path = os.path.join(DATA_DIR, selected_store_slug)
             new_path = os.path.join(DATA_DIR, new_slug)
-            
             if not os.path.exists(new_path):
                 shutil.move(old_path, new_path)
                 st.session_state["last_store_slug"] = new_slug
                 st.sidebar.success("Store name updated!")
                 st.rerun()
             else:
-                st.sidebar.error("A store with that name already exists.")
+                st.sidebar.error("Name already exists.")
 
 with st.sidebar.expander("➕ Register New Store", expanded=False):
     new_store_name = st.text_input("Store Title:", placeholder="e.g. Metro Hardware", key="add_input_field")
@@ -125,18 +101,9 @@ with st.sidebar.expander("➕ Register New Store", expanded=False):
 st.sidebar.divider()
 
 # --- API KEY AUTHENTICATION ---
-api_key = None
-try:
-    if "GEMINI_API_KEY" in st.secrets:
-        api_key = st.secrets["GEMINI_API_KEY"]
-except Exception:
-    pass
-
+api_key = st.secrets.get("GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY"))
 if not api_key:
-    api_key = os.environ.get("GEMINI_API_KEY")
-
-if not api_key:
-    st.error("⚠️ Gemini API Key missing. Please configure GEMINI_API_KEY in secrets or environment variables.")
+    st.error("⚠️ Gemini API Key missing. Please configure GEMINI_API_KEY.")
     st.stop()
 
 client = genai.Client(api_key=api_key)
@@ -147,13 +114,11 @@ MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
 MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
 ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
-# --- HEADER SECTION (NATIVE CLEAN ALIGNMENT) ---
+# --- HEADER SECTION ---
 header_left, header_right = st.columns([3, 1.5])
-
 with header_left:
     st.title("⚡ Universal OS")
     st.caption("Commercial Multi-Store AI Purchase Intake & Inventory Synchronizer")
-
 with header_right:
     st.caption("ACTIVE STORE CATALOG")
     st.markdown(f"📍 **{ACTIVE_STORE_DISPLAY}**")
@@ -164,26 +129,21 @@ st.divider()
 def load_json_memory():
     if os.path.exists(MEMORY_FILE):
         try:
-            with open(MEMORY_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            return {}
+            with open(MEMORY_FILE, "r") as f: return json.load(f)
+        except Exception: return {}
     return {}
 
 def save_json_memory(memory_dict):
     try:
-        with open(MEMORY_FILE, "w") as f:
-            json.dump(memory_dict, f, indent=4)
-    except Exception as e:
-        st.sidebar.error(f"Memory save alert: {e}")
+        with open(MEMORY_FILE, "w") as f: json.dump(memory_dict, f, indent=4)
+    except Exception as e: st.sidebar.error(f"Memory save alert: {e}")
 
 @st.cache_data
 def load_master(store_slug):
     master_path = os.path.join(DATA_DIR, store_slug, "inventory_master.csv")
     try:
         df = pd.read_csv(master_path)
-        if "Selling_Price" not in df.columns:
-            df["Selling_Price"] = 0.0
+        if "Selling_Price" not in df.columns: df["Selling_Price"] = 0.0
         return df
     except Exception:
         return pd.DataFrame({"Official_SKU_Name": [], "Category": [], "Default_Unit": [], "GST_Rate": [], "Selling_Price": []})
@@ -203,8 +163,7 @@ def match_sku(raw_name):
         return mapping_memory[cleaned_raw], "🧠 Learned Memory"
     if master_sku_list:
         match, score, _ = process.extractOne(raw_name, master_sku_list, processor=utils.default_process)
-        if score > 65:
-            return match, f"🔍 Fuzzy ({int(score)}%)"
+        if score > 65: return match, f"🔍 Fuzzy ({int(score)}%)"
     return raw_name, "⚠️ New SKU"
 
 def get_known_selling_price(sku_name):
@@ -212,40 +171,29 @@ def get_known_selling_price(sku_name):
         matched = master_df[master_df["Official_SKU_Name"] == sku_name]
         if not matched.empty:
             price = matched.iloc[0]["Selling_Price"]
-            if pd.notnull(price) and float(price) > 0:
-                return float(price)
+            if pd.notnull(price) and float(price) > 0: return float(price)
     return 0.0
 
-# --- FAIL-SAFE AI ENGINE ---
+# --- FAST AI ENGINE ---
 def is_server_error(exception):
     err_str = str(exception).lower()
-    return "503" in err_str or "unavailable" in err_str or "overloaded" in err_str or "429" in err_str or "resourceexhausted" in err_str
+    return any(e in err_str for e in ["503", "unavailable", "overloaded", "429", "resourceexhausted"])
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1.5, min=1, max=5),
-    retry=retry_if_exception(is_server_error),
-    reraise=True
-)
-def _call_gemini_with_retry(client, model_name, contents, config):
-    return client.models.generate_content(
-        model=model_name,
-        contents=contents,
-        config=config
-    )
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=3), retry=retry_if_exception(is_server_error), reraise=True)
+def _call_gemini_with_retry(client, contents, config):
+    # Locked to the single fastest model for zero latency
+    return client.models.generate_content(model='gemini-2.0-flash', contents=contents, config=config)
 
-def extract_invoice_data(file_bytes):
-    # ACCURACY-FIRST & SPEED-OPTIMIZED PREPROCESSING:
-    # 1. Resize to 1400px max dimension for lightning-fast payload transfer while keeping text crisp
-    img = Image.open(BytesIO(file_bytes))
-    img.thumbnail((1400, 1400), Image.Resampling.LANCZOS)
+def extract_invoice_data(image):
+    # BLISTERING FAST PREPROCESSING: BILINEAR resizing is significantly faster than LANCZOS
+    img_copy = image.copy()
+    img_copy.thumbnail((1200, 1200), Image.Resampling.BILINEAR)
     
-    # 2. Compress to optimized JPEG to eliminate network transfer bottlenecks during bulk uploads
+    if img_copy.mode in ("RGBA", "P"):
+        img_copy = img_copy.convert("RGB")
+    
     buffer = BytesIO()
-    if img.mode in ("RGBA", "P"):
-        img = img.convert("RGB")
-    
-    img.save(buffer, format="JPEG", quality=82, optimize=True)
+    img_copy.save(buffer, format="JPEG", quality=85, optimize=True)
     buffer.seek(0)
     optimized_img = Image.open(buffer)
 
@@ -269,33 +217,21 @@ def extract_invoice_data(file_bytes):
     """
     
     config = types.GenerateContentConfig(response_mime_type="application/json")
-    contents = [optimized_img, prompt]
-    candidate_models = ['gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash']
-    
-    last_error = None
-    for model_name in candidate_models:
-        try:
-            response = _call_gemini_with_retry(client, model_name, contents, config)
-            return json.loads(response.text)
-        except Exception as e:
-            last_error = e
-            continue
-            
-    raise Exception(f"AI Service busy across models: {last_error}")
+    response = _call_gemini_with_retry(client, [optimized_img, prompt], config)
+    return json.loads(response.text)
 
-def process_single_file(file_tuple):
-    file_bytes, store_slug = file_tuple
+def process_single_file(file):
+    file.seek(0)
+    img = Image.open(file)
     try:
-        parsed_json = extract_invoice_data(file_bytes)
-        supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
+        parsed_json = extract_invoice_data(img)
     except Exception as e:
+        st.error(f"Failed processing a bill: {e}")
         return []
-    
-    mapping_memory = load_json_memory()
-    local_master_df = load_master(store_slug)
-    local_sku_list = local_master_df["Official_SKU_Name"].tolist() if not local_master_df.empty else []
 
+    supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
     items = []
+    
     for row in parsed_json.get("Line Items", []):
         qty = float(row.get("Quantity") or 1.0)
         gst_rate = float(row.get("GST Rate") or 18.0)
@@ -303,43 +239,14 @@ def process_single_file(file_tuple):
         total_inclusive = float(row.get("Listed Total Inclusive Rate") or 0.0)
         hsn_sac = str(row.get("HSN Code") or "").strip()
         
-        # Self-Healing Tax Reverse Math & Sanity Guard
-        if base_rate > 0 and total_inclusive <= 0:
-            final_base = base_rate
-        elif total_inclusive > 0 and base_rate <= 0:
-            final_base = total_inclusive / (1 + (gst_rate / 100))
-        elif base_rate > 0 and total_inclusive > 0:
-            expected_base = total_inclusive / (1 + (gst_rate / 100))
-            final_base = expected_base if abs(base_rate - expected_base) / base_rate > 0.01 else base_rate
-        else:
-            final_base = 0.0
-
-        # Catch OCR line-total/unit-price confusion
-        if qty > 1 and final_base > 100000:
-            final_base = final_base / qty
+        # Self-healing tax math
+        if base_rate > 0: final_base = base_rate
+        elif total_inclusive > 0: final_base = total_inclusive / (1 + (gst_rate / 100))
+        else: final_base = 0.0
             
         raw_item_name = str(row.get("Item Name", "")).strip()
-        
-        # Local fuzzy matching lookup
-        cleaned_raw = raw_item_name.strip().upper()
-        if cleaned_raw in mapping_memory:
-            matched_sku, match_type = mapping_memory[cleaned_raw], "🧠 Learned Memory"
-        elif local_sku_list:
-            match, score, _ = process.extractOne(raw_item_name, local_sku_list, processor=utils.default_process)
-            if score > 65:
-                matched_sku, match_type = match, f"🔍 Fuzzy ({int(score)}%)"
-            else:
-                matched_sku, match_type = raw_item_name, "⚠️ New SKU"
-        else:
-            matched_sku, match_type = raw_item_name, "⚠️ New SKU"
-        
-        known_selling = 0.0
-        if not local_master_df.empty and "Selling_Price" in local_master_df.columns:
-            matched_row = local_master_df[local_master_df["Official_SKU_Name"] == matched_sku]
-            if not matched_row.empty:
-                val = matched_row.iloc[0]["Selling_Price"]
-                if pd.notnull(val) and float(val) > 0:
-                    known_selling = float(val)
+        matched_sku, match_type = match_sku(raw_item_name)
+        known_selling = get_known_selling_price(matched_sku)
         
         items.append({
             "Supplier Name": supplier,
@@ -358,34 +265,23 @@ def process_single_file(file_tuple):
 
 # --- WORKSPACE TABS ---
 tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
-    "📥 Batch Invoice Parser", 
-    "⚙️ Master Catalog",
-    "📋 Vendor Memory", 
-    "📖 Operating Guide"
+    "📥 Batch Invoice Parser", "⚙️ Master Catalog", "📋 Vendor Memory", "📖 Operating Guide"
 ])
 
-# ==========================================
-# TAB 1: BATCH INVOICE PARSER
-# ==========================================
 with tab_parser:
     sm1, sm2, sm3 = st.columns(3)
     sm1.metric("Master SKUs Registered", len(master_sku_list))
     sm2.metric("Learned Vendor Rules", len(mapping_memory))
-    sm3.metric("AI Engine Status", "🟢 Ready (Lightning Multi-Thread)")
-
+    sm3.metric("AI Engine Status", "🟢 Ultra-Fast Active")
     st.divider()
 
     col_upload, col_info = st.columns([2, 1])
-    
     with col_upload:
         with st.container(border=True):
             st.subheader("1. Ingestion Dropzone")
-            st.caption("Upload purchase bills (PNG, JPG, JPEG) to extract line items in parallel.")
+            st.caption("Upload purchase bills (PNG, JPG) to extract line items instantly.")
             uploaded_files = st.file_uploader(
-                "Upload Bills",
-                type=["jpg", "jpeg", "png"],
-                accept_multiple_files=True,
-                label_visibility="collapsed"
+                "Upload Bills", type=["jpg", "jpeg", "png"], accept_multiple_files=True, label_visibility="collapsed"
             )
 
     with col_info:
@@ -393,32 +289,25 @@ with tab_parser:
             st.subheader("⚡ Ingestion Queue")
             if uploaded_files:
                 st.success(f"📁 **{len(uploaded_files)} File(s)** Staged")
-                st.caption("High-speed parallel engine primed for concurrent execution.")
             else:
                 st.info("No files queued.")
-                st.caption("Drop 30-40+ purchase invoices to begin bulk extraction.")
 
     if uploaded_files:
         st.write("")
-        if st.button("🚀 Process Invoices with Lightning Parallel AI", type="primary", use_container_width=True):
-            if "parsed_df" in st.session_state:
-                del st.session_state["parsed_df"]
+        if st.button("🚀 Process Invoices Instantly", type="primary", use_container_width=True):
+            if "parsed_df" in st.session_state: del st.session_state["parsed_df"]
                 
             all_parsed_items = []
-            
-            with st.status("Executing high-speed concurrent AI extraction across multiple threads...", expanded=True) as status_container:
-                # Read bytes beforehand to ensure safe thread-pool distribution
-                file_payloads = [(f.read(), selected_store_slug) for f in uploaded_files]
-                
-                # Lightning-fast execution using up to 12 concurrent background threads
-                with ThreadPoolExecutor(max_workers=min(len(file_payloads), 12)) as executor:
-                    results = list(executor.map(process_single_file, file_payloads))
+            with st.status("Executing rapid AI extraction...", expanded=True) as status_container:
+                # Maximized max_workers for instant parallel bursts
+                with ThreadPoolExecutor(max_workers=20) as executor:
+                    results = list(executor.map(process_single_file, uploaded_files))
                     
                 for res in results:
                     all_parsed_items.extend(res)
                     
                 gc.collect()
-                status_container.update(label="✅ Lightning Batch Extraction Complete!", state="complete", expanded=False)
+                status_container.update(label="✅ Extraction Complete!", state="complete", expanded=False)
                 
             if all_parsed_items:
                 st.session_state["parsed_df"] = pd.DataFrame(all_parsed_items)
@@ -428,8 +317,6 @@ with tab_parser:
     if "parsed_df" in st.session_state:
         st.divider()
         st.subheader("2. Live Inventory Audit Workspace")
-        st.caption("Verify AI extraction, mapped SKUs, and rate details before exporting to accounting software.")
-        
         df = st.session_state["parsed_df"]
         
         m1, m2, m3 = st.columns(3)
@@ -437,44 +324,34 @@ with tab_parser:
         m2.metric("Total Stock Quantity", f"{df['Current Quantity'].sum():,.0f} Units")
         m3.metric("Taxable Purchase Value (Excl. GST)", f"₹{(df['Purchase Price'] * df['Current Quantity']).sum():,.2f}")
         
-        st.write("")
-        
         edited_df = st.data_editor(
-            df,
-            num_rows="dynamic",
-            use_container_width=True,
+            df, num_rows="dynamic", use_container_width=True,
             column_config={
                 "Official SKU": st.column_config.SelectboxColumn("Official SKU Name", options=master_sku_list, required=True) if master_sku_list else "Official SKU",
                 "Purchase Price": st.column_config.NumberColumn("Purchase Price (Excl. GST) ₹", format="₹%.2f"),
                 "Selling Price": st.column_config.NumberColumn("Selling Price (Optional) ₹", format="₹%.2f"),
                 "Current Quantity": st.column_config.NumberColumn("Current Quantity", min_value=0.1),
                 "GST Rate": st.column_config.NumberColumn("GST Rate (%)", min_value=0, max_value=28),
-                "HSN/SAC": st.column_config.TextColumn("HSN/SAC"),
             }
         )
         
         st.divider()
-        if st.button("✅ Confirm Audit & Generate Excel Import File", type="primary", use_container_width=True):
-            memory_updated = False
-            master_updated = False
+        if st.button("✅ Confirm Audit & Generate Excel", type="primary", use_container_width=True):
+            memory_updated, master_updated = False, False
             current_master_skus = set(master_sku_list)
             
             for idx, row in edited_df.iterrows():
                 raw = str(row["Raw Vendor Item"]).strip().upper()
                 official = str(row["Official SKU"]).strip()
                 
-                # Update vendor memory mapping
                 if raw and official and raw != official:
                     mapping_memory[raw] = official
                     memory_updated = True
                     
-                # Auto-append new SKUs to Master Catalog if manually typed
                 if official and official not in current_master_skus:
                     new_master_row = pd.DataFrame([{
-                        "Official_SKU_Name": official,
-                        "Category": str(row.get("Category", "General")),
-                        "Default_Unit": str(row.get("Unit", "PCS")),
-                        "GST_Rate": float(row.get("GST Rate", 18.0)),
+                        "Official_SKU_Name": official, "Category": str(row.get("Category", "General")),
+                        "Default_Unit": str(row.get("Unit", "PCS")), "GST_Rate": float(row.get("GST Rate", 18.0)),
                         "Selling_Price": float(row.get("Selling Price", 0.0))
                     }])
                     master_df = pd.concat([master_df, new_master_row], ignore_index=True)
@@ -484,7 +361,6 @@ with tab_parser:
             if memory_updated:
                 save_json_memory(mapping_memory)
                 st.toast("🧠 Learned Vendor Mapping updated!")
-                
             if master_updated:
                 save_master(master_df, selected_store_slug)
                 st.toast("⚙️ Master SKU catalog expanded!")
@@ -492,33 +368,18 @@ with tab_parser:
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "Items"
-            
             ws.append([ACTIVE_STORE_DISPLAY])
             ws.append(["Items"])
             ws.append([f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}"])
-            ws.append([]) # Row 4
-            
-            exact_headers = [
-                "S. No.", "Name", "Current Quantity", "Unit", "HSN/SAC",
-                "Category", "GST Rate", "Selling Price", "Selling Price (Secondary)",
-                "Purchase Price", "Purchase Price (Secondary)", "Secondary Unit", "Ratio"
-            ]
-            ws.append(exact_headers)
+            ws.append([])
+            ws.append(["S. No.", "Name", "Current Quantity", "Unit", "HSN/SAC", "Category", "GST Rate", "Selling Price", "Selling Price (Secondary)", "Purchase Price", "Purchase Price (Secondary)", "Secondary Unit", "Ratio"])
             
             for i, row in edited_df.iterrows():
                 selling_val = float(row["Selling Price"]) if row["Selling Price"] > 0 else ""
                 ws.append([
-                    i + 1,
-                    str(row["Official SKU"]),
-                    float(row["Current Quantity"]),
-                    str(row["Unit"]),
-                    str(row["HSN/SAC"]),
-                    str(row["Category"]),
-                    float(row["GST Rate"]),
-                    selling_val,
-                    "",
-                    float(row["Purchase Price"]),
-                    "", "", ""
+                    i + 1, str(row["Official SKU"]), float(row["Current Quantity"]), str(row["Unit"]),
+                    str(row["HSN/SAC"]), str(row["Category"]), float(row["GST Rate"]), selling_val,
+                    "", float(row["Purchase Price"]), "", "", ""
                 ])
                 
             buffer = BytesIO()
@@ -526,100 +387,48 @@ with tab_parser:
             buffer.seek(0)
             
             st.download_button(
-                label=f"📥 Download Bulk Import Spreadsheet for {ACTIVE_STORE_DISPLAY}",
+                label=f"📥 Download Import File for {ACTIVE_STORE_DISPLAY}",
                 data=buffer.getvalue(),
                 file_name=f"{selected_store_slug}_Inventory_Import.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
 
-# ==========================================
-# TAB 2: STORE MASTER CATALOG MANAGER
-# ==========================================
 with tab_master:
-    st.subheader(f"⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
-    st.caption("Define official product SKUs, tax rates, and default units for this store.")
-    
+    st.subheader(f"⚙️ Master Catalog ({ACTIVE_STORE_DISPLAY})")
     col_add, col_list = st.columns([1, 2])
-    
     with col_add:
         with st.container(border=True):
             st.markdown("#### ➕ Add New Master SKU")
-            add_sku = st.text_input("SKU Name (e.g. Copper Wire 1.5mm)")
+            add_sku = st.text_input("SKU Name")
             add_cat = st.text_input("Category", value="General")
-            add_unit = st.selectbox("Default Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET"])
-            add_gst = st.selectbox("GST Rate (%)", options=[0, 5, 12, 18, 28], index=3)
-            add_price = st.number_input("Selling Price ₹ (Optional)", min_value=0.0, step=10.0)
-            
-            if st.button("Save SKU to Catalog", use_container_width=True, type="primary"):
-                if add_sku.strip():
-                    clean_sku = add_sku.strip()
-                    if clean_sku not in master_sku_list:
-                        new_row = pd.DataFrame([{
-                            "Official_SKU_Name": clean_sku,
-                            "Category": add_cat,
-                            "Default_Unit": add_unit,
-                            "GST_Rate": add_gst,
-                            "Selling_Price": add_price
-                        }])
-                        updated = pd.concat([master_df, new_row], ignore_index=True)
-                        save_master(updated, selected_store_slug)
-                        st.success(f"Added '{clean_sku}'!")
-                        st.rerun()
-                    else:
-                        st.warning("SKU already exists.")
-                    
+            add_unit = st.selectbox("Unit", ["PCS", "BOX", "LTR", "KG", "NOS", "SET"])
+            add_gst = st.selectbox("GST Rate (%)", [0, 5, 12, 18, 28], index=3)
+            add_price = st.number_input("Selling Price ₹", min_value=0.0)
+            if st.button("Save SKU", type="primary", use_container_width=True):
+                if add_sku.strip() and add_sku.strip() not in master_sku_list:
+                    new_row = pd.DataFrame([{"Official_SKU_Name": add_sku.strip(), "Category": add_cat, "Default_Unit": add_unit, "GST_Rate": add_gst, "Selling_Price": add_price}])
+                    save_master(pd.concat([master_df, new_row], ignore_index=True), selected_store_slug)
+                    st.success("Added!")
+                    st.rerun()
     with col_list:
         with st.container(border=True):
-            st.markdown("#### 📋 Catalog Register")
-            if not master_df.empty:
-                st.dataframe(master_df, use_container_width=True)
-                st.write("")
-                with st.expander("🗑️ Delete Catalog SKU"):
-                    sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
-                    if st.button("Delete Selected SKU", use_container_width=True):
-                        if sku_to_delete != "-- None --":
-                            updated = master_df[master_df["Official_SKU_Name"] != sku_to_delete]
-                            save_master(updated, selected_store_slug)
-                            st.success(f"Removed '{sku_to_delete}'!")
-                            st.rerun()
-            else:
-                st.info("Master catalog for this store is currently empty.")
+            if not master_df.empty: st.dataframe(master_df, use_container_width=True)
+            with st.expander("🗑️ Delete SKU"):
+                sku_to_del = st.selectbox("Select SKU:", ["-- None --"] + master_sku_list)
+                if st.button("Delete", use_container_width=True) and sku_to_del != "-- None --":
+                    save_master(master_df[master_df["Official_SKU_Name"] != sku_to_del], selected_store_slug)
+                    st.rerun()
 
-# ==========================================
-# TAB 3: VENDOR SKU MEMORY WORKSPACE
-# ==========================================
 with tab_memory:
-    st.subheader(f"🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
-    st.caption("AI remembers how vendor-specific invoice descriptions map to your store SKUs.")
-    
+    st.subheader(f"🧠 Learned Vendor Memory ({ACTIVE_STORE_DISPLAY})")
     if mapping_memory:
-        mem_df = pd.DataFrame([
-            {"Raw Vendor Item Description": k, "Mapped Store SKU": v}
-            for k, v in mapping_memory.items()
-        ])
-        st.dataframe(mem_df, use_container_width=True)
-        
-        st.write("")
-        if st.button("🗑️ Reset Store Memory Cache"):
+        st.dataframe(pd.DataFrame([{"Vendor Item": k, "Mapped SKU": v} for k, v in mapping_memory.items()]), use_container_width=True)
+        if st.button("🗑️ Reset Memory Cache"):
             save_json_memory({})
-            st.success("Memory cache reset!")
             st.rerun()
-    else:
-        st.info("No learned vendor mappings recorded yet for this store location.")
+    else: st.info("No mappings yet.")
 
-# ==========================================
-# TAB 4: IMPORT GUIDE
-# ==========================================
 with tab_guide:
-    st.subheader("📖 Standard Operating Procedure")
-    with st.container(border=True):
-        st.markdown("""
-        ### How to Process & Sync Invoices:
-        1. **Select Store:** Choose your active store location in the left sidebar directory.
-        2. **Upload Bills:** Drop one or multiple purchase invoice photos in **Tab 1**.
-        3. **Run AI Engine:** Click **Process Invoices with Lightning Parallel AI** to extract structured line items.
-        4. **Audit Workspace:** Check quantities, HSN codes, purchase rates, and mapped SKUs.
-        5. **Download Import File:** Generate the `.xlsx` spreadsheet.
-        6. **Import to ERP:** Open your accounting or ERP software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
-        """)
+    st.subheader("📖 Operating Procedure")
+    st.markdown("1. **Upload** invoices.\n2. Click **Process**.\n3. **Audit** the table.\n4. **Download** the Excel file for your ERP.")
