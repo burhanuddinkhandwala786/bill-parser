@@ -235,30 +235,33 @@ def _call_gemini_with_retry(client, model_name, contents, config):
     )
 
 def extract_invoice_data(image):
-    # ACCURACY-FIRST PREPROCESSING:
-    # 1. Resize to 1800px max dimension (preserves small text, decimals, and dense rows)
     img_copy = image.copy()
-    img_copy.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
+    img_copy.thumbnail((1400, 1400), Image.Resampling.BILINEAR)
     
-    # 2. Convert & compress to high-quality JPEG (90% quality avoids OCR compression artifacts)
     buffer = BytesIO()
     if img_copy.mode in ("RGBA", "P"):
         img_copy = img_copy.convert("RGB")
     
-    img_copy.save(buffer, format="JPEG", quality=90, optimize=True)
+    img_copy.save(buffer, format="JPEG", quality=85, optimize=True)
     buffer.seek(0)
     optimized_img = Image.open(buffer)
 
+    # ENTERPRISE UPDATE: Strict instructions to extract Absolute Totals, preventing UOM math failures
     prompt = """
-    Extract all purchase invoice items into strict JSON:
+    Extract all purchase invoice items into strict JSON. CRITICAL INSTRUCTIONS:
+    1. "Unit Price (Excl. Tax)": The standard per-item rate.
+    2. "Line Total Taxable Amount": The total base amount for this line before GST. If UOMs are mixed (e.g. Rate is per Sq.Mtr but Qty is Pcs), extract the FINAL line amount here.
+    3. "Line Total Inclusive Amount": The final amount for this line including GST.
+
     {
         "Supplier Company Name": "Vendor Name",
         "Line Items": [
             {
                 "Item Name": "description",
                 "Quantity": 1.0,
-                "Listed Base Rate": 0.0,
-                "Listed Total Inclusive Rate": 0.0,
+                "Unit Price (Excl. Tax)": 0.0,
+                "Line Total Taxable Amount": 0.0,
+                "Line Total Inclusive Amount": 0.0,
                 "GST Rate": 18.0,
                 "HSN Code": "",
                 "Unit": "PCS"
@@ -270,7 +273,7 @@ def extract_invoice_data(image):
     
     config = types.GenerateContentConfig(response_mime_type="application/json")
     contents = [optimized_img, prompt]
-    candidate_models = ['gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash']
+    candidate_models = ['gemini-2.0-flash', 'gemini-1.5-flash']
     
     last_error = None
     for model_name in candidate_models:
@@ -283,31 +286,41 @@ def extract_invoice_data(image):
             
     raise Exception(f"AI Service busy across models: {last_error}")
 
-def process_single_file(file):
-    file.seek(0)
-    img = Image.open(file)
-    parsed_json = extract_invoice_data(img)
+def process_single_file(file_bytes):
+    try:
+        img = Image.open(BytesIO(file_bytes))
+        parsed_json = extract_invoice_data(img)
+    except Exception as e:
+        return [{"ERROR": str(e)}]
+        
     supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
     
     items = []
     for row in parsed_json.get("Line Items", []):
         qty = float(row.get("Quantity") or 1.0)
+        if qty <= 0: qty = 1.0
+        
         gst_rate = float(row.get("GST Rate") or 18.0)
-        base_rate = float(row.get("Listed Base Rate") or 0.0)
-        total_inclusive = float(row.get("Listed Total Inclusive Rate") or 0.0)
+        
+        # New Strict Variables
+        unit_price = float(row.get("Unit Price (Excl. Tax)") or 0.0)
+        line_taxable = float(row.get("Line Total Taxable Amount") or 0.0)
+        line_inclusive = float(row.get("Line Total Inclusive Amount") or 0.0)
         hsn_sac = str(row.get("HSN Code") or "").strip()
         
-        # Tax Reverse Math Handling
-        if base_rate > 0:
-            final_base = base_rate
-        elif total_inclusive > 0:
-            final_base = total_inclusive / (1 + (gst_rate / 100))
+        # ENTERPRISE MATH: Absolute Total Reconciliation
+        # Resolves UOM mismatches, implicit freight charges, and tax errors.
+        if line_taxable > 0:
+            final_base = line_taxable / qty
+        elif unit_price > 0:
+            final_base = unit_price
+        elif line_inclusive > 0:
+            final_base = (line_inclusive / (1 + (gst_rate / 100))) / qty
         else:
             final_base = 0.0
             
         raw_item_name = str(row.get("Item Name", "")).strip()
         matched_sku, match_type = match_sku(raw_item_name)
-        
         known_selling = get_known_selling_price(matched_sku)
         
         items.append({
@@ -374,13 +387,18 @@ with tab_parser:
                 del st.session_state["parsed_df"]
                 
             all_parsed_items = []
+            file_bytes_list = [f.read() for f in uploaded_files]
             
             with st.status("Parsing purchase bills concurrently with Multimodal AI...", expanded=True) as status_container:
-                with ThreadPoolExecutor(max_workers=min(len(uploaded_files), 5)) as executor:
-                    results = list(executor.map(process_single_file, uploaded_files))
+                with ThreadPoolExecutor(max_workers=min(len(file_bytes_list), 15)) as executor:
+                    results = list(executor.map(process_single_file, file_bytes_list))
                     
                 for res in results:
-                    all_parsed_items.extend(res)
+                    for item in res:
+                        if "ERROR" in item:
+                            st.error(f"Failed to process a file: {item['ERROR']}")
+                        else:
+                            all_parsed_items.append(item)
                     
                 gc.collect()
                 status_container.update(label="✅ Ingestion & Batch Extraction Complete!", state="complete", expanded=False)
@@ -498,6 +516,77 @@ with tab_parser:
                 use_container_width=True
             )
 
+        # ==========================================
+        # ON-THE-GO CUSTOMER QUOTATION
+        # ==========================================
+        st.write("")
+        with st.expander("📄 Generate Customer Quotation (On-the-go)", expanded=False):
+            st.caption("Instantly generate a final customer quotation by applying a custom markup % to the extracted purchase prices.")
+            
+            col_q1, col_q2 = st.columns(2)
+            with col_q1:
+                customer_name = st.text_input("Customer Name / Reference", value="Walk-in Customer")
+            with col_q2:
+                markup_pct = st.number_input("Markup Percentage (%)", min_value=0.0, value=15.0, step=1.0)
+            
+            if st.button("Preview & Download Quotation"):
+                quote_items = []
+                total_quote_value = 0.0
+                
+                for idx, row in edited_df.iterrows():
+                    base_price = float(row["Purchase Price"])
+                    markup_price = round(base_price * (1 + (markup_pct / 100)), 2)
+                    qty = float(row["Current Quantity"])
+                    line_total = round(markup_price * qty, 2)
+                    
+                    total_quote_value += line_total
+                    
+                    quote_items.append({
+                        "Item Name": str(row["Official SKU"]),
+                        "Quantity": qty,
+                        "Unit": str(row["Unit"]),
+                        "Customer Unit Price (₹)": markup_price,
+                        "Total Value (₹)": line_total
+                    })
+                
+                quote_df = pd.DataFrame(quote_items)
+                st.markdown(f"**Previewing Quote for:** {customer_name}")
+                st.dataframe(quote_df, use_container_width=True)
+                st.metric(f"Total Quotation Value (Markup: {markup_pct}%)", f"₹{total_quote_value:,.2f}")
+                
+                wb_q = openpyxl.Workbook()
+                ws_q = wb_q.active
+                ws_q.title = "Quotation"
+                
+                ws_q.append([f"QUOTATION FOR: {customer_name.upper()}"])
+                ws_q.append([f"Store: {ACTIVE_STORE_DISPLAY}"])
+                ws_q.append([f"Date: {time.strftime('%d-%m-%Y %H:%M:%S')}"])
+                ws_q.append([])
+                ws_q.append(["S.No", "Item Description", "Quantity", "Unit", "Unit Price (₹)", "Total Value (₹)"])
+                
+                for i, r in quote_df.iterrows():
+                    ws_q.append([
+                        i + 1,
+                        r["Item Name"],
+                        r["Quantity"],
+                        r["Unit"],
+                        r["Customer Unit Price (₹)"],
+                        r["Total Value (₹)"]
+                    ])
+                    
+                buffer_q = BytesIO()
+                wb_q.save(buffer_q)
+                buffer_q.seek(0)
+                
+                st.download_button(
+                    label=f"📥 Download Quotation for {customer_name} (.xlsx)",
+                    data=buffer_q.getvalue(),
+                    file_name=f"Quotation_{customer_name.replace(' ', '_')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="secondary",
+                    use_container_width=True
+                )
+
 # ==========================================
 # TAB 2: STORE MASTER CATALOG MANAGER
 # ==========================================
@@ -585,6 +674,7 @@ with tab_guide:
         2. **Upload Bills:** Drop one or multiple purchase invoice photos in **Tab 1**.
         3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
         4. **Audit Workspace:** Check quantities, HSN codes, purchase rates, and mapped SKUs.
-        5. **Download Import File:** Generate the `.xlsx` spreadsheet.
-        6. **Import to ERP:** Open your accounting or ERP software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
+        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer.
+        6. **Download Import File:** Generate the `.xlsx` spreadsheet.
+        7. **Import to ERP:** Open your accounting or ERP software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
         """)
