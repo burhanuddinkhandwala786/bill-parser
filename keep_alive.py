@@ -5,7 +5,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-STREAMLIT_URL = "https://YOUR-APP-NAME.streamlit.app"  # <--- Put your app URL here
+STREAMLIT_URL = "https://ai-bill-converter.streamlit.app/"  # <--- Put your app URL here
 
 def wake_app():
     options = Options()
