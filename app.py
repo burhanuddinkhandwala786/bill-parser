@@ -582,66 +582,131 @@ def process_single_file_raw(file_bytes):
         return {"ERROR": str(e)}
 
 # --- REPORTLAB PDF QUOTATION GENERATOR ---
+# --- REPORTLAB PDF QUOTATION GENERATOR (PROFESSIONAL & FAIL-SAFE) ---
 def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
     if not REPORTLAB_AVAILABLE:
         raise ModuleNotFoundError("reportlab library is required for PDF generation.")
         
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=letter, 
+        rightMargin=36, 
+        leftMargin=36, 
+        topMargin=36, 
+        bottomMargin=36
+    )
     story = []
     styles = getSampleStyleSheet()
 
-    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=22, leading=26, textColor=colors.HexColor('#1E3A8A'), alignment=0, spaceAfter=4)
-    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=10, leading=13, textColor=colors.HexColor('#4B5563'), spaceAfter=12)
-    meta_style = ParagraphStyle('MetaStyle', parent=styles['Normal'], fontSize=9, leading=12, textColor=colors.HexColor('#1F2937'))
+    # --- PROFESSIONAL TYPOGRAPHY STYLES ---
+    title_style = ParagraphStyle(
+        'DocTitle', 
+        parent=styles['Heading1'], 
+        fontSize=20, 
+        leading=24, 
+        textColor=colors.HexColor('#1E3A8A'), 
+        fontName='Helvetica-Bold',
+        spaceAfter=4
+    )
+    subtitle_style = ParagraphStyle(
+        'DocSubtitle', 
+        parent=styles['Normal'], 
+        fontSize=9.5, 
+        leading=13, 
+        textColor=colors.HexColor('#4B5563')
+    )
+    meta_label = ParagraphStyle(
+        'MetaLabel', 
+        parent=styles['Normal'], 
+        fontSize=9, 
+        leading=12, 
+        textColor=colors.HexColor('#374151')
+    )
 
+    # --- HEADER BLOCK ---
     story.append(Paragraph("OFFICIAL QUOTATION", title_style))
-    story.append(Paragraph(f"<b>Issued By:</b> {store_name.upper()} | <b>Contact:</b> {phone_str or 'N/A'}", subtitle_style))
+    story.append(Paragraph(f"<b>Issued By:</b> {store_name.upper()}", subtitle_style))
+    if phone_str:
+        story.append(Paragraph(f"<b>Contact / Mobile:</b> {phone_str}", subtitle_style))
+    story.append(Spacer(1, 10))
     
+    # --- METADATA BANNER ---
     meta_data = [
-        [Paragraph(f"<b>Customer Reference:</b> {customer_name}", meta_style), Paragraph(f"<b>Date:</b> {time.strftime('%d-%m-%Y %H:%M')}", meta_style)]
+        [
+            Paragraph(f"<b>Customer Ref:</b> {customer_name}", meta_label), 
+            Paragraph(f"<b>Date:</b> {time.strftime('%d-%m-%Y %H:%M')}", meta_label)
+        ]
     ]
-    meta_table = Table(meta_data, colWidths=[300, 240])
+    meta_table = Table(meta_data, colWidths=[310, 230])
     meta_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F3F4F6')),
-        ('PADDING', (0,0), (-1,-1), 6),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F3F4F6')),
+        ('PADDING', (0, 0), (-1, -1), 6),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LINEBELOW', (0, 0), (-1, -1), 1, colors.HexColor('#E5E7EB')),
     ]))
     story.append(meta_table)
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 14))
 
-    table_data = [["S.No", "Item Description", "Qty", "Unit", "Unit Price (₹)", "Total (₹)"]]
-    
-    cell_style = ParagraphStyle('CellStyle', parent=styles['Normal'], fontSize=8.5, leading=11, textColor=colors.HexColor('#111827'))
-    cell_header_style = ParagraphStyle('HeaderStyle', parent=styles['Normal'], fontSize=9, leading=11, textColor=colors.white, fontName='Helvetica-Bold')
+    # --- TABLE CELL STYLES ---
+    hdr_left = ParagraphStyle('HdrL', fontSize=9, leading=11, textColor=colors.white, fontName='Helvetica-Bold', alignment=0)
+    hdr_center = ParagraphStyle('HdrC', fontSize=9, leading=11, textColor=colors.white, fontName='Helvetica-Bold', alignment=1)
+    hdr_right = ParagraphStyle('HdrR', fontSize=9, leading=11, textColor=colors.white, fontName='Helvetica-Bold', alignment=2)
 
+    cell_left = ParagraphStyle('CellL', fontSize=8.5, leading=11, textColor=colors.HexColor('#111827'), alignment=0)
+    cell_center = ParagraphStyle('CellC', fontSize=8.5, leading=11, textColor=colors.HexColor('#111827'), alignment=1)
+    cell_right = ParagraphStyle('CellR', fontSize=8.5, leading=11, textColor=colors.HexColor('#111827'), alignment=2)
+
+    # Table Header Row
+    table_data = [[
+        Paragraph("S.No", hdr_center), 
+        Paragraph("Item Description", hdr_left), 
+        Paragraph("Qty", hdr_center), 
+        Paragraph("Unit", hdr_center), 
+        Paragraph("Unit Price (Rs.)", hdr_right), 
+        Paragraph("Total (Rs.)", hdr_right)
+    ]]
+
+    # Populate Item Rows
     for i, row in quote_df.iterrows():
+        unit_price = float(row['Customer Unit Price (₹)'])
+        line_total = float(row['Total Value (₹)'])
+        
         table_data.append([
-            Paragraph(str(i + 1), cell_style),
-            Paragraph(str(row["Item Name"]), cell_style),  # Auto-wraps long SKU names safely
-            Paragraph(str(row["Quantity"]), cell_style),
-            Paragraph(str(row["Unit"]), cell_style),
-            Paragraph(f"₹{row['Customer Unit Price (₹)']:,.2f}", cell_style),
-            Paragraph(f"₹{row['Total Value (₹)']:,.2f}", cell_style)
+            Paragraph(str(i + 1), cell_center),
+            Paragraph(str(row["Item Name"]), cell_left),  # Clean text wrap
+            Paragraph(f"{float(row['Quantity']):g}", cell_center),
+            Paragraph(str(row["Unit"]), cell_center),
+            Paragraph(f"Rs. {unit_price:,.2f}", cell_right),
+            Paragraph(f"Rs. {line_total:,.2f}", cell_right)
         ])
 
-    table_data[0] = [Paragraph(cell, cell_header_style) for cell in table_data[0]]
-
-    item_table = Table(table_data, colWidths=[35, 235, 45, 50, 85, 90])
+    # Table Column Widths (Total: 540pt = 7.5 inches printable width)
+    item_table = Table(table_data, colWidths=[35, 225, 45, 45, 95, 95])
     item_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2563EB')),
-        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0,0), (-1,0), 6),
-        ('TOPPADDING', (0,0), (-1,0), 6),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F9FAFB')])
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, 0), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+        ('TOPPADDING', (0, 1), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E5E7EB')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')])
     ]))
     story.append(item_table)
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 14))
 
-    summary_style = ParagraphStyle('SummaryStyle', parent=styles['Heading2'], fontSize=13, leading=15, textColor=colors.HexColor('#2563EB'), alignment=2)
-    story.append(Paragraph(f"<b>Grand Total: ₹{grand_total:,.2f}</b>", summary_style))
+    # --- GRAND TOTAL BLOCK ---
+    total_style = ParagraphStyle(
+        'GrandTotal', 
+        parent=styles['Heading2'], 
+        fontSize=13, 
+        leading=16, 
+        textColor=colors.HexColor('#1E3A8A'), 
+        fontName='Helvetica-Bold',
+        alignment=2
+    )
+    story.append(Paragraph(f"<b>Grand Total: Rs. {grand_total:,.2f}</b>", total_style))
 
     doc.build(story)
     buffer.seek(0)
