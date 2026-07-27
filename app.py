@@ -8,7 +8,7 @@ import openpyxl
 import pandas as pd
 import streamlit as st
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ImageEnhance
 from google import genai
 from google.genai import types
 from rapidfuzz import process, utils
@@ -393,23 +393,54 @@ def _call_gemini_with_retry(client, model_name, contents, config):
     )
 
 def extract_invoice_data(image):
+    # Copy original image
     img_copy = image.copy()
-    img_copy.thumbnail((1400, 1400), Image.Resampling.BILINEAR)
     
-    buffer = BytesIO()
+    # Standardize orientation/mode
     if img_copy.mode in ("RGBA", "P"):
         img_copy = img_copy.convert("RGB")
+        
+    # Resize to optimal dimensions for Gemini Vision while preserving detail
+    img_copy.thumbnail((1600, 1600), Image.Resampling.BILINEAR)
     
-    img_copy.save(buffer, format="JPEG", quality=85, optimize=True)
+    # Pre-process image for low-light, faint handwriting, or dark paper
+    try:
+        # Boost contrast slightly to make faint/faded text stand out
+        enhancer = ImageEnhance.Contrast(img_copy)
+        img_copy = enhancer.enhance(1.3)
+        # Boost sharpness for crisp text boundaries
+        sharpener = ImageEnhance.Sharpness(img_copy)
+        img_copy = sharpener.enhance(1.4)
+    except Exception:
+        pass  # Fall back to raw image if enhancement fails
+
+    buffer = BytesIO()
+    img_copy.save(buffer, format="JPEG", quality=90, optimize=True)
     buffer.seek(0)
     optimized_img = Image.open(buffer)
 
     prompt = """
-    Extract all purchase invoice items into strict JSON format. CRITICAL INSTRUCTIONS:
-    1. "Line Total Taxable Amount": The total base amount before GST for this item line (Printed Amount column).
-    2. "Line Total Inclusive Amount": The total line amount including GST.
-    3. "Unit Price (Excl. Tax)": Per-item rate before GST if printed.
+    You are an expert OCR and financial vision system built for retail & wholesale purchase bill ingestion.
+    Your task is to extract line items from purchase invoices—including printed, handwritten, low-light, faded thermal receipts, crumpled paper, or skewed photos.
 
+    CRITICAL EXTRACTION INSTRUCTIONS:
+    1. "Supplier Company Name": Extract the vendor/distributor company name at the header. If unclear or handwritten, infer best title or use "Unknown Supplier".
+    2. "Line Items": Extract every purchased item row from the table or receipt list.
+       - "Item Name": Full product title or description. Read faint or handwritten pen marks carefully.
+       - "Quantity": Pure numeric value (e.g. 1.0, 10, 0.5). If missing or unreadable, default to 1.0.
+       - "Unit Price (Excl. Tax)": Per-item rate before GST if explicitly printed.
+       - "Line Total Taxable Amount": The line base total before GST (Printed Amount column).
+       - "Line Total Inclusive Amount": The total line amount including GST.
+       - "GST Rate": GST tax percentage as a pure number (0, 5, 12, 18, 28). Default to 18.0 if unstated.
+       - "HSN Code": HSN or SAC code as string. Empty string "" if missing.
+       - "Unit": Unit of measure (PCS, BOX, LTR, KG, NOS, SET, SQM, MTR, PKT). Default to "PCS".
+
+    ROBUSTNESS & HANDWRITING RULES:
+    - Faded / Low Contrast Text: Infer numbers by cross-checking quantity * rate = total where possible.
+    - Handwritten Text: Treat pen strokes and annotations as primary text if printed text is crossed out or modified.
+    - Pure Numbers Only: Rates, quantities, amounts, and GST must be numbers (no currency symbols like ₹ or Rs).
+
+    OUTPUT SCHEMA (STRICT JSON ONLY):
     {
         "Supplier Company Name": "Vendor Name",
         "Line Items": [
@@ -425,7 +456,6 @@ def extract_invoice_data(image):
             }
         ]
     }
-    Rules: Rates and GST must be pure numbers. HSN Code as string. Missing values set to 0 or "". Default Unit to PCS, SQM, or LTR.
     """
     
     config = types.GenerateContentConfig(response_mime_type="application/json")
