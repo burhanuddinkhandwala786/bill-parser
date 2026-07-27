@@ -16,6 +16,12 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import create_engine, text
 
+# --- REPORTLAB PDF IMPORTS ---
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="Universal OS | Multi-Store AI SaaS",
@@ -81,6 +87,30 @@ def get_or_create_store_id(store_slug: str, display_name: str = None) -> int:
             {"slug": slug, "display_name": display_name}
         )
         return insert_res.fetchone()[0]
+
+def get_store_phone(store_slug: str) -> str:
+    """Fetches business phone numbers saved in database for a store."""
+    engine = get_db_engine()
+    try:
+        with engine.connect() as conn:
+            res = conn.execute(
+                text("SELECT phone FROM stores WHERE slug = :slug"),
+                {"slug": store_slug}
+            ).fetchone()
+            if res and res[0]:
+                return res[0]
+    except Exception:
+        pass
+    return ""
+
+def save_store_phone(store_slug: str, phone: str):
+    """Saves updated business phone numbers to database."""
+    engine = get_db_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE stores SET phone = :phone WHERE slug = :slug"),
+            {"phone": phone.strip(), "slug": store_slug}
+        )
 
 # --- AUTHENTICATION & MULTI-TENANT SESSION MANAGEMENT ---
 def hash_password(password: str) -> str:
@@ -393,26 +423,19 @@ def _call_gemini_with_retry(client, model_name, contents, config):
     )
 
 def extract_invoice_data(image):
-    # Copy original image
     img_copy = image.copy()
-    
-    # Standardize orientation/mode
     if img_copy.mode in ("RGBA", "P"):
         img_copy = img_copy.convert("RGB")
         
-    # Resize to optimal dimensions for Gemini Vision while preserving detail
     img_copy.thumbnail((1600, 1600), Image.Resampling.BILINEAR)
     
-    # Pre-process image for low-light, faint handwriting, or dark paper
     try:
-        # Boost contrast slightly to make faint/faded text stand out
         enhancer = ImageEnhance.Contrast(img_copy)
         img_copy = enhancer.enhance(1.3)
-        # Boost sharpness for crisp text boundaries
         sharpener = ImageEnhance.Sharpness(img_copy)
         img_copy = sharpener.enhance(1.4)
     except Exception:
-        pass  # Fall back to raw image if enhancement fails
+        pass
 
     buffer = BytesIO()
     img_copy.save(buffer, format="JPEG", quality=90, optimize=True)
@@ -485,6 +508,74 @@ def process_single_file_raw(file_bytes):
         return extract_invoice_data(img)
     except Exception as e:
         return {"ERROR": str(e)}
+
+# --- REPORTLAB PDF QUOTATION GENERATOR ---
+def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    story = []
+    styles = getSampleStyleSheet()
+
+    # Title & Subheaders
+    title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=24, leading=28, textColor=colors.HexColor('#1E3A8A'), alignment=0, spaceAfter=4)
+    subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=11, leading=14, textColor=colors.HexColor('#4B5563'), spaceAfter=15)
+    meta_style = ParagraphStyle('MetaStyle', parent=styles['Normal'], fontSize=10, leading=14, textColor=colors.HexColor('#1F2937'))
+
+    story.append(Paragraph("QUOTATION", title_style))
+    story.append(Paragraph(f"<b>Issued By:</b> {store_name.upper()} | <b>Contact:</b> {phone_str or 'N/A'}", subtitle_style))
+    
+    # Metadata Block
+    meta_data = [
+        [Paragraph(f"<b>Customer Name:</b> {customer_name}", meta_style), Paragraph(f"<b>Date:</b> {time.strftime('%d-%m-%Y %H:%M')}", meta_style)]
+    ]
+    meta_table = Table(meta_data, colWidths=[300, 240])
+    meta_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F3F4F6')),
+        ('PADDING', (0,0), (-1,-1), 8),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    story.append(meta_table)
+    story.append(Spacer(1, 15))
+
+    # Items Table Headers
+    table_data = [["S.No", "Item Description", "Qty", "Unit", "Unit Price (₹)", "Total (₹)"]]
+    
+    cell_style = ParagraphStyle('CellStyle', parent=styles['Normal'], fontSize=9, leading=11, textColor=colors.HexColor('#111827'))
+    cell_header_style = ParagraphStyle('HeaderStyle', parent=styles['Normal'], fontSize=10, leading=12, textColor=colors.white, fontName='Helvetica-Bold')
+
+    for i, row in quote_df.iterrows():
+        table_data.append([
+            Paragraph(str(i + 1), cell_style),
+            Paragraph(str(row["Item Name"]), cell_style),
+            Paragraph(str(row["Quantity"]), cell_style),
+            Paragraph(str(row["Unit"]), cell_style),
+            Paragraph(f"₹{row['Customer Unit Price (₹)']:,.2f}", cell_style),
+            Paragraph(f"₹{row['Total Value (₹)']:,.2f}", cell_style)
+        ])
+
+    # Wrap headers
+    table_data[0] = [Paragraph(cell, cell_header_style) for cell in table_data[0]]
+
+    item_table = Table(table_data, colWidths=[35, 235, 45, 50, 85, 90])
+    item_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2563EB')),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 8),
+        ('TOPPADDING', (0,0), (-1,0), 8),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F9FAFB')])
+    ]))
+    story.append(item_table)
+    story.append(Spacer(1, 15))
+
+    # Total Summary
+    summary_style = ParagraphStyle('SummaryStyle', parent=styles['Heading2'], fontSize=14, leading=16, textColor=colors.HexColor('#2563EB'), alignment=2)
+    story.append(Paragraph(f"<b>Grand Total: ₹{grand_total:,.2f}</b>", summary_style))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 # --- WORKSPACE TABS ---
 tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
@@ -733,13 +824,22 @@ with tab_parser:
         with st.expander("📄 Generate Customer Quotation (On-the-go)", expanded=False):
             st.caption("Instantly generate a customer quotation by applying a custom markup % directly to your final GST-Paid cost.")
             
-            col_q1, col_q2 = st.columns(2)
+            # Load stored business contact number
+            saved_phone = get_store_phone(selected_store_slug)
+            
+            col_q1, col_q2, col_q3 = st.columns([2, 2, 1])
             with col_q1:
                 customer_name = st.text_input("Customer Name / Reference", value="Walk-in Customer")
             with col_q2:
-                markup_pct = st.number_input("Markup Percentage (%)", min_value=0.0, value=15.0, step=1.0)
+                biz_phone_input = st.text_input("Business Phone Number(s)", value=saved_phone, placeholder="e.g. +91 9876543210, +91 9123456789")
+            with col_q3:
+                markup_pct = st.number_input("Markup (%)", min_value=0.0, value=15.0, step=1.0)
             
-            if st.button("Preview & Download Quotation"):
+            # Auto-save phone number if edited
+            if biz_phone_input.strip() != saved_phone.strip():
+                save_store_phone(selected_store_slug, biz_phone_input.strip())
+            
+            if st.button("Preview & Generate PDF Quotation", type="primary", use_container_width=True):
                 quote_items = []
                 total_quote_value = 0.0
                 
@@ -764,36 +864,21 @@ with tab_parser:
                 st.dataframe(quote_df, use_container_width=True)
                 st.metric(f"Total Quotation Value (Markup: {markup_pct}% on GST-Paid Cost)", f"₹{total_quote_value:,.2f}")
                 
-                wb_q = openpyxl.Workbook()
-                ws_q = wb_q.active
-                ws_q.title = "Quotation"
-                
-                ws_q.append([f"QUOTATION FOR: {customer_name.upper()}"])
-                ws_q.append([f"Store: {ACTIVE_STORE_DISPLAY}"])
-                ws_q.append([f"Date: {time.strftime('%d-%m-%Y %H:%M:%S')}"])
-                ws_q.append([])
-                ws_q.append(["S.No", "Item Description", "Quantity", "Unit", "Unit Price (₹)", "Total Value (₹)"])
-                
-                for i, r in quote_df.iterrows():
-                    ws_q.append([
-                        i + 1,
-                        r["Item Name"],
-                        r["Quantity"],
-                        r["Unit"],
-                        r["Customer Unit Price (₹)"],
-                        r["Total Value (₹)"]
-                    ])
-                    
-                buffer_q = BytesIO()
-                wb_q.save(buffer_q)
-                buffer_q.seek(0)
+                # Build PDF
+                pdf_bytes = generate_quotation_pdf(
+                    store_name=st.session_state['user_store']['display_name'],
+                    phone_str=biz_phone_input.strip(),
+                    customer_name=customer_name,
+                    quote_df=quote_df,
+                    grand_total=total_quote_value
+                )
                 
                 st.download_button(
-                    label=f"📥 Download Quotation for {customer_name} (.xlsx)",
-                    data=buffer_q.getvalue(),
-                    file_name=f"Quotation_{customer_name.replace(' ', '_')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    type="secondary",
+                    label=f"📄 Download PDF Quotation for {customer_name}",
+                    data=pdf_bytes,
+                    file_name=f"Quotation_{customer_name.replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                    type="primary",
                     use_container_width=True
                 )
 
