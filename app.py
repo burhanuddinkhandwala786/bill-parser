@@ -3,6 +3,7 @@ import gc
 import json
 import time
 import shutil
+import bcrypt
 import openpyxl
 import pandas as pd
 import streamlit as st
@@ -81,66 +82,122 @@ def get_or_create_store_id(store_slug: str, display_name: str = None) -> int:
         )
         return insert_res.fetchone()[0]
 
-def get_store_list():
+# --- AUTHENTICATION & MULTI-TENANT SESSION MANAGEMENT ---
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def check_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+def register_user(store_name: str, email: str, password: str):
     engine = get_db_engine()
-    try:
-        with engine.connect() as conn:
-            df = pd.read_sql(text("SELECT slug FROM stores ORDER BY slug ASC"), conn)
-            if not df.empty:
-                return df["slug"].tolist()
-    except Exception:
-        pass
-    # Fallback/Default initial store
-    get_or_create_store_id("universal_hardware", "Universal Hardware")
-    return ["universal_hardware"]
+    slug = sanitize_store_slug(store_name)
+    hashed_pwd = hash_password(password)
+    
+    with engine.begin() as conn:
+        # Check if email or store slug exists
+        existing = conn.execute(
+            text("SELECT id FROM stores WHERE email = :email OR slug = :slug"),
+            {"email": email.strip().lower(), "slug": slug}
+        ).fetchone()
+        
+        if existing:
+            return False, "Store name or Email already registered!"
+            
+        conn.execute(
+            text("""
+                INSERT INTO stores (slug, display_name, email, password)
+                VALUES (:slug, :display_name, :email, :password)
+            """),
+            {
+                "slug": slug,
+                "display_name": store_name.strip(),
+                "email": email.strip().lower(),
+                "password": hashed_pwd
+            }
+        )
+    return True, "Store registered successfully! Please log in."
 
-# --- SIDEBAR: MULTI-TENANT WORKSPACE ---
-st.sidebar.title("🏬 Store Directory")
-existing_stores = get_store_list()
+def authenticate_user(email: str, password: str):
+    engine = get_db_engine()
+    with engine.connect() as conn:
+        user = conn.execute(
+            text("SELECT slug, display_name, password FROM stores WHERE email = :email"),
+            {"email": email.strip().lower()}
+        ).fetchone()
+        
+        if user and user[2] and check_password(password, user[2]):
+            return {"slug": user[0], "display_name": user[1]}
+    return None
 
-selected_store_slug = st.sidebar.selectbox(
-    "Active Store Catalog",
-    options=existing_stores,
-    format_func=lambda x: x.replace("_", " ").title()
-)
+# Session State Initialization
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+if "user_store" not in st.session_state:
+    st.session_state["user_store"] = None
 
-if "last_store_slug" not in st.session_state:
-    st.session_state["last_store_slug"] = selected_store_slug
+# --- LOGIN / SIGNUP SCREEN ---
+if not st.session_state["authenticated"]:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.title("⚡ Universal OS")
+        st.subheader("Commercial AI Invoice Intake & ERP Synchronizer")
+        st.write("")
+        
+        auth_tab1, auth_tab2 = st.tabs(["🔒 Partner Login", "✨ Register New Store"])
+        
+        with auth_tab1:
+            with st.form("login_form"):
+                login_email = st.text_input("Store Email")
+                login_password = st.text_input("Password", type="password")
+                submit_login = st.form_submit_button("Log In", use_container_width=True, type="primary")
+                
+                if submit_login:
+                    if login_email and login_password:
+                        store_data = authenticate_user(login_email, login_password)
+                        if store_data:
+                            st.session_state["authenticated"] = True
+                            st.session_state["user_store"] = store_data
+                            st.success(f"Welcome back, {store_data['display_name']}!")
+                            st.rerun()
+                        else:
+                            st.error("Invalid email or password.")
+                    else:
+                        st.warning("Please fill in both email and password.")
 
-if st.session_state["last_store_slug"] != selected_store_slug:
-    if "parsed_df" in st.session_state:
-        del st.session_state["parsed_df"]
-    st.session_state["last_store_slug"] = selected_store_slug
-    st.rerun()
+        with auth_tab2:
+            with st.form("register_form"):
+                reg_store = st.text_input("Store Name (e.g. Universal Hardware)")
+                reg_email = st.text_input("Business Email")
+                reg_password = st.text_input("Create Password", type="password")
+                submit_reg = st.form_submit_button("Create Account & Store Environment", use_container_width=True)
+                
+                if submit_reg:
+                    if reg_store and reg_email and reg_password:
+                        success, msg = register_user(reg_store, reg_email, reg_password)
+                        if success:
+                            st.success(msg)
+                        else:
+                            st.error(msg)
+                    else:
+                        st.warning("All fields are required.")
+    st.stop()  # Halt execution so unauthenticated users cannot see app tabs
 
+# Active user details post-login
+selected_store_slug = st.session_state["user_store"]["slug"]
+ACTIVE_STORE_DISPLAY = st.session_state["user_store"]["display_name"].upper()
+
+# --- SIDEBAR (LOGGED IN USER) ---
+st.sidebar.title(f"🏬 {st.session_state['user_store']['display_name']}")
+st.sidebar.caption(f"Active Store ID: `{selected_store_slug}`")
 st.sidebar.divider()
 
-# --- SIDEBAR STORE ACTIONS ---
-with st.sidebar.expander("✏️ Rename Active Store", expanded=False):
-    current_display = selected_store_slug.replace("_", " ").title()
-    renamed_input = st.text_input("New Name:", value=current_display, key="rename_input_field")
-    if st.button("Save Store Name", use_container_width=True, type="secondary"):
-        if renamed_input.strip() and renamed_input.strip() != current_display:
-            new_slug = sanitize_store_slug(renamed_input)
-            engine = get_db_engine()
-            with engine.begin() as conn:
-                conn.execute(
-                    text("UPDATE stores SET slug = :new_slug, display_name = :display_name WHERE slug = :old_slug"),
-                    {"new_slug": new_slug, "display_name": renamed_input.strip(), "old_slug": selected_store_slug}
-                )
-            st.session_state["last_store_slug"] = new_slug
-            st.sidebar.success("Store name updated!")
-            st.rerun()
-
-with st.sidebar.expander("➕ Register New Store", expanded=False):
-    new_store_name = st.text_input("Store Title:", placeholder="e.g. Metro Hardware", key="add_input_field")
-    if st.button("Create Environment", use_container_width=True, type="primary"):
-        if new_store_name.strip():
-            slug = sanitize_store_slug(new_store_name)
-            get_or_create_store_id(slug, new_store_name.strip())
-            st.session_state["last_store_slug"] = slug
-            st.sidebar.success(f"Store '{new_store_name}' created!")
-            st.rerun()
+if st.sidebar.button("🚪 Logout", use_container_width=True):
+    st.session_state["authenticated"] = False
+    st.session_state["user_store"] = None
+    if "parsed_df" in st.session_state:
+        del st.session_state["parsed_df"]
+    st.rerun()
 
 st.sidebar.divider()
 
@@ -160,8 +217,6 @@ if not api_key:
     st.stop()
 
 client = genai.Client(api_key=api_key)
-
-ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
 
 # --- HEADER SECTION ---
 header_left, header_right = st.columns([3, 1.5])
