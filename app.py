@@ -180,12 +180,10 @@ def is_server_error(exception):
     return any(e in err_str for e in ["503", "unavailable", "overloaded", "429", "resourceexhausted"])
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=3), retry=retry_if_exception(is_server_error), reraise=True)
-def _call_gemini_with_retry(client, contents, config):
-    # Locked to the single fastest model for zero latency
-    return client.models.generate_content(model='gemini-2.0-flash', contents=contents, config=config)
+def _call_gemini_with_retry(client, model_name, contents, config):
+    return client.models.generate_content(model=model_name, contents=contents, config=config)
 
 def extract_invoice_data(image):
-    # BLISTERING FAST PREPROCESSING: BILINEAR resizing is significantly faster than LANCZOS
     img_copy = image.copy()
     img_copy.thumbnail((1200, 1200), Image.Resampling.BILINEAR)
     
@@ -217,17 +215,30 @@ def extract_invoice_data(image):
     """
     
     config = types.GenerateContentConfig(response_mime_type="application/json")
-    response = _call_gemini_with_retry(client, [optimized_img, prompt], config)
-    return json.loads(response.text)
+    last_error = None
+    
+    # Fast fallback logic
+    for model_name in ['gemini-2.0-flash', 'gemini-2.5-flash']:
+        try:
+            response = _call_gemini_with_retry(client, model_name, [optimized_img, prompt], config)
+            # Guard against markdown wrapping
+            text = response.text.strip()
+            if text.startswith("```json"): text = text[7:-3].strip()
+            elif text.startswith("```"): text = text[3:-3].strip()
+            return json.loads(text)
+        except Exception as e:
+            last_error = e
+            continue
+            
+    raise Exception(f"AI Models Failed: {last_error}")
 
-def process_single_file(file):
-    file.seek(0)
-    img = Image.open(file)
+def process_single_file(file_bytes):
     try:
+        img = Image.open(BytesIO(file_bytes))
         parsed_json = extract_invoice_data(img)
     except Exception as e:
-        st.error(f"Failed processing a bill: {e}")
-        return []
+        # Return error dict so main thread can display it instead of failing silently
+        return [{"ERROR": str(e)}]
 
     supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
     items = []
@@ -240,9 +251,14 @@ def process_single_file(file):
         hsn_sac = str(row.get("HSN Code") or "").strip()
         
         # Self-healing tax math
-        if base_rate > 0: final_base = base_rate
-        elif total_inclusive > 0: final_base = total_inclusive / (1 + (gst_rate / 100))
+        if base_rate > 0 and total_inclusive <= 0: final_base = base_rate
+        elif total_inclusive > 0 and base_rate <= 0: final_base = total_inclusive / (1 + (gst_rate / 100))
+        elif base_rate > 0 and total_inclusive > 0: 
+            expected_base = total_inclusive / (1 + (gst_rate / 100))
+            final_base = expected_base if abs(base_rate - expected_base) / base_rate > 0.01 else base_rate
         else: final_base = 0.0
+
+        if qty > 1 and final_base > 100000: final_base = final_base / qty
             
         raw_item_name = str(row.get("Item Name", "")).strip()
         matched_sku, match_type = match_sku(raw_item_name)
@@ -296,15 +312,21 @@ with tab_parser:
         st.write("")
         if st.button("🚀 Process Invoices Instantly", type="primary", use_container_width=True):
             if "parsed_df" in st.session_state: del st.session_state["parsed_df"]
-                
+            
+            # FIXED: Read file bytes in the main thread BEFORE passing to background threads
+            file_bytes_list = [f.read() for f in uploaded_files]
+            
             all_parsed_items = []
             with st.status("Executing rapid AI extraction...", expanded=True) as status_container:
-                # Maximized max_workers for instant parallel bursts
                 with ThreadPoolExecutor(max_workers=20) as executor:
-                    results = list(executor.map(process_single_file, uploaded_files))
+                    results = list(executor.map(process_single_file, file_bytes_list))
                     
                 for res in results:
-                    all_parsed_items.extend(res)
+                    for item in res:
+                        if "ERROR" in item:
+                            st.error(f"A file failed to process: {item['ERROR']}")
+                        else:
+                            all_parsed_items.append(item)
                     
                 gc.collect()
                 status_container.update(label="✅ Extraction Complete!", state="complete", expanded=False)
