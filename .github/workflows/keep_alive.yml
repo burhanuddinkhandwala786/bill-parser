@@ -1,27 +1,27 @@
-name: Keep Streamlit Alive via Git Commit
+name: Keep Streamlit Alive 24/7
 
 on:
   schedule:
-    # Runs every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC)
-    # This prevents the app from hitting Streamlit's 12-hour sleep limit
-    - cron: '0 */4 * * *'
-  workflow_dispatch: # Allows manual trigger anytime from Actions tab
-
-permissions:
-  contents: write
+    - cron: '0 */3 * * *'  # Runs every 3 hours
+  workflow_dispatch:        # Allows manual trigger
 
 jobs:
-  keep_alive_commit:
+  keep-alive:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
 
-      - name: Make Empty Commit to Reset Streamlit Timer
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Selenium & Chrome
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git commit --allow-empty -m "chore: keep-alive ping $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-          git push
+          pip install selenium
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Run Keep Alive Script
+        run: python keep_alive.py
