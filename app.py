@@ -824,7 +824,7 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
-        # Calculate full financial totals in background
+        # Compute all financial metrics
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
         df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
@@ -846,7 +846,7 @@ with tab_parser:
         
         st.write("")
         
-        # STREAMLINED TABLE VIEW (Includes Landed GST-Paid Price for Shopkeeper Review)
+        # PROFESSIONAL DUAL TOTALS AUDIT TABLE VIEW
         display_columns = [
             "Match Status",
             "Raw Vendor Item",
@@ -854,9 +854,11 @@ with tab_parser:
             "Current Quantity",
             "Unit",
             "HSN/SAC",
-            "GST Rate",
             "Purchase Price",
+            "Line Total (Excl. GST)",
+            "GST Rate",
             "Unit Cost (GST Paid) ₹",
+            "Line Total (Incl. GST)",
             "Selling Price"
         ]
         
@@ -874,9 +876,11 @@ with tab_parser:
                 "Current Quantity": st.column_config.NumberColumn("Qty", min_value=0.1, format="%.2f"),
                 "Unit": st.column_config.TextColumn("Unit"),
                 "HSN/SAC": st.column_config.TextColumn("HSN/SAC"),
-                "GST Rate": st.column_config.NumberColumn("GST %", min_value=0, max_value=28, format="%d%%"),
                 "Purchase Price": st.column_config.NumberColumn("Unit Rate (Excl. GST) ₹", format="₹%.2f"),
+                "Line Total (Excl. GST)": st.column_config.NumberColumn("Total (Excl. GST) ₹", format="₹%.2f", disabled=True),
+                "GST Rate": st.column_config.NumberColumn("GST %", min_value=0, max_value=28, format="%d%%"),
                 "Unit Cost (GST Paid) ₹": st.column_config.NumberColumn("Unit Cost (GST Paid) ₹", format="₹%.2f", disabled=True),
+                "Line Total (Incl. GST)": st.column_config.NumberColumn("Total (Incl. GST) ₹", format="₹%.2f", disabled=True),
                 "Selling Price": st.column_config.NumberColumn("Selling Price ₹", format="₹%.2f"),
             }
         )
@@ -886,7 +890,7 @@ with tab_parser:
             if col in edited_display_df.columns:
                 df[col] = edited_display_df[col]
                 
-        # Update calculations dynamically
+        # Re-compute dependent line total columns on fly
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
         df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
