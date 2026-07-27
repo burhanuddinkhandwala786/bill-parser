@@ -581,8 +581,7 @@ def process_single_file_raw(file_bytes):
     except Exception as e:
         return {"ERROR": str(e)}
 
-# --- REPORTLAB PDF QUOTATION GENERATOR ---
-# --- REPORTLAB PDF QUOTATION GENERATOR (PROFESSIONAL & FAIL-SAFE) ---
+# --- REPORTLAB PDF QUOTATION GENERATOR (NO BLACK BOXES) ---
 def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
     if not REPORTLAB_AVAILABLE:
         raise ModuleNotFoundError("reportlab library is required for PDF generation.")
@@ -599,7 +598,6 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     story = []
     styles = getSampleStyleSheet()
 
-    # --- PROFESSIONAL TYPOGRAPHY STYLES ---
     title_style = ParagraphStyle(
         'DocTitle', 
         parent=styles['Heading1'], 
@@ -624,14 +622,12 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
         textColor=colors.HexColor('#374151')
     )
 
-    # --- HEADER BLOCK ---
     story.append(Paragraph("OFFICIAL QUOTATION", title_style))
     story.append(Paragraph(f"<b>Issued By:</b> {store_name.upper()}", subtitle_style))
     if phone_str:
         story.append(Paragraph(f"<b>Contact / Mobile:</b> {phone_str}", subtitle_style))
     story.append(Spacer(1, 10))
     
-    # --- METADATA BANNER ---
     meta_data = [
         [
             Paragraph(f"<b>Customer Ref:</b> {customer_name}", meta_label), 
@@ -648,7 +644,6 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     story.append(meta_table)
     story.append(Spacer(1, 14))
 
-    # --- TABLE CELL STYLES ---
     hdr_left = ParagraphStyle('HdrL', fontSize=9, leading=11, textColor=colors.white, fontName='Helvetica-Bold', alignment=0)
     hdr_center = ParagraphStyle('HdrC', fontSize=9, leading=11, textColor=colors.white, fontName='Helvetica-Bold', alignment=1)
     hdr_right = ParagraphStyle('HdrR', fontSize=9, leading=11, textColor=colors.white, fontName='Helvetica-Bold', alignment=2)
@@ -657,7 +652,6 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     cell_center = ParagraphStyle('CellC', fontSize=8.5, leading=11, textColor=colors.HexColor('#111827'), alignment=1)
     cell_right = ParagraphStyle('CellR', fontSize=8.5, leading=11, textColor=colors.HexColor('#111827'), alignment=2)
 
-    # Table Header Row
     table_data = [[
         Paragraph("S.No", hdr_center), 
         Paragraph("Item Description", hdr_left), 
@@ -667,21 +661,19 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
         Paragraph("Total (Rs.)", hdr_right)
     ]]
 
-    # Populate Item Rows
     for i, row in quote_df.iterrows():
         unit_price = float(row['Customer Unit Price (₹)'])
         line_total = float(row['Total Value (₹)'])
         
         table_data.append([
             Paragraph(str(i + 1), cell_center),
-            Paragraph(str(row["Item Name"]), cell_left),  # Clean text wrap
+            Paragraph(str(row["Item Name"]), cell_left),
             Paragraph(f"{float(row['Quantity']):g}", cell_center),
             Paragraph(str(row["Unit"]), cell_center),
             Paragraph(f"Rs. {unit_price:,.2f}", cell_right),
             Paragraph(f"Rs. {line_total:,.2f}", cell_right)
         ])
 
-    # Table Column Widths (Total: 540pt = 7.5 inches printable width)
     item_table = Table(table_data, colWidths=[35, 225, 45, 45, 95, 95])
     item_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
@@ -696,7 +688,6 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     story.append(item_table)
     story.append(Spacer(1, 14))
 
-    # --- GRAND TOTAL BLOCK ---
     total_style = ParagraphStyle(
         'GrandTotal', 
         parent=styles['Heading2'], 
@@ -833,6 +824,7 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
+        # Calculate full financial totals in background
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
         df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
@@ -845,6 +837,7 @@ with tab_parser:
         uom_groups = df.groupby("Unit")["Current Quantity"].sum()
         uom_summary_str = " | ".join([f"{val:,.2f} {unit}" for unit, val in uom_groups.items()])
 
+        # Executive Metrics Header
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Total Line Items", f"{len(df)} Items")
         m2.metric("Stock Quantities by UOM", uom_summary_str)
@@ -853,31 +846,61 @@ with tab_parser:
         
         st.write("")
         
-        edited_df = st.data_editor(
-            df,
+        # STREAMLINED TABLE VIEW (Includes Landed GST-Paid Price for Shopkeeper Review)
+        display_columns = [
+            "Match Status",
+            "Raw Vendor Item",
+            "Official SKU",
+            "Current Quantity",
+            "Unit",
+            "HSN/SAC",
+            "GST Rate",
+            "Purchase Price",
+            "Unit Cost (GST Paid) ₹",
+            "Selling Price"
+        ]
+        
+        available_cols = [c for c in display_columns if c in df.columns]
+        
+        edited_display_df = st.data_editor(
+            df[available_cols],
             num_rows="dynamic",
             use_container_width=True,
             key="audit_editor",
             column_config={
+                "Match Status": st.column_config.TextColumn("Match Status", disabled=True),
+                "Raw Vendor Item": st.column_config.TextColumn("Raw Vendor Item", disabled=True),
                 "Official SKU": st.column_config.SelectboxColumn("Official SKU Name", options=master_sku_list, required=True) if master_sku_list else "Official SKU",
-                "Unit Cost (GST Paid) ₹": st.column_config.NumberColumn("Unit Cost (GST Paid) ₹", format="₹%.2f", disabled=True),
-                "Purchase Price": st.column_config.NumberColumn("Unit Rate (Excl. GST) ₹", format="₹%.2f"),
-                "Line Total (Excl. GST)": st.column_config.NumberColumn("Line Total (Excl. GST) ₹", format="₹%.2f", disabled=True),
-                "Line Total (Incl. GST)": st.column_config.NumberColumn("Line Total (Incl. GST) ₹", format="₹%.2f", disabled=True),
-                "Selling Price": st.column_config.NumberColumn("Selling Price (Optional) ₹", format="₹%.2f"),
-                "Current Quantity": st.column_config.NumberColumn("Current Quantity", min_value=0.1),
-                "GST Rate": st.column_config.NumberColumn("GST Rate (%)", min_value=0, max_value=28),
+                "Current Quantity": st.column_config.NumberColumn("Qty", min_value=0.1, format="%.2f"),
+                "Unit": st.column_config.TextColumn("Unit"),
                 "HSN/SAC": st.column_config.TextColumn("HSN/SAC"),
+                "GST Rate": st.column_config.NumberColumn("GST %", min_value=0, max_value=28, format="%d%%"),
+                "Purchase Price": st.column_config.NumberColumn("Unit Rate (Excl. GST) ₹", format="₹%.2f"),
+                "Unit Cost (GST Paid) ₹": st.column_config.NumberColumn("Unit Cost (GST Paid) ₹", format="₹%.2f", disabled=True),
+                "Selling Price": st.column_config.NumberColumn("Selling Price ₹", format="₹%.2f"),
             }
         )
         
+        # Merge edited values back into main DataFrame
+        for col in available_cols:
+            if col in edited_display_df.columns:
+                df[col] = edited_display_df[col]
+                
+        # Update calculations dynamically
+        df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
+        df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
+        df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
+        df["Unit Cost (GST Paid) ₹"] = (df["Line Total (Incl. GST)"] / df["Current Quantity"]).round(2)
+        
+        st.session_state["parsed_df"] = df
+
         st.divider()
         if st.button("✅ Confirm Audit & Generate Excel Import File", type="primary", use_container_width=True):
             memory_updated = False
             master_updated = False
             current_master_skus = set(master_sku_list)
             
-            for idx, row in edited_df.iterrows():
+            for idx, row in df.iterrows():
                 raw = str(row["Raw Vendor Item"]).strip().upper()
                 official = str(row["Official SKU"]).strip()
                 
@@ -922,7 +945,7 @@ with tab_parser:
             for col_num, header_title in enumerate(exact_headers, 1):
                 ws.cell(row=5, column=col_num, value=header_title)
             
-            for i, row in edited_df.iterrows():
+            for i, row in df.iterrows():
                 row_idx = 6 + i
                 selling_val = float(row["Selling Price"]) if float(row["Selling Price"]) > 0 else ""
                 purchase_val = float(row["Purchase Price"])
@@ -976,7 +999,7 @@ with tab_parser:
                 quote_items = []
                 total_quote_value = 0.0
                 
-                for idx, row in edited_df.iterrows():
+                for idx, row in df.iterrows():
                     base_gst_paid_cost = float(row["Unit Cost (GST Paid) ₹"])
                     markup_price = round(base_gst_paid_cost * (1 + (markup_pct / 100)), 2)
                     qty = float(row["Current Quantity"])
@@ -1043,7 +1066,6 @@ with tab_master:
                 st.markdown("**Uploaded File Preview:**")
                 st.dataframe(imported_df.head(5), use_container_width=True)
                 
-                # Column mapping helper
                 col_sku = st.selectbox("Select SKU Name Column:", options=imported_df.columns)
                 
                 col_cat, col_unit, col_gst, col_price = st.columns(4)
