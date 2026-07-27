@@ -95,7 +95,6 @@ def register_user(store_name: str, email: str, password: str):
     hashed_pwd = hash_password(password)
     
     with engine.begin() as conn:
-        # Check if email or store slug exists
         existing = conn.execute(
             text("SELECT id FROM stores WHERE email = :email OR slug = :slug"),
             {"email": email.strip().lower(), "slug": slug}
@@ -130,13 +129,32 @@ def authenticate_user(email: str, password: str):
             return {"slug": user[0], "display_name": user[1]}
     return None
 
+def reset_user_password(email: str, new_password: str):
+    engine = get_db_engine()
+    hashed_pwd = hash_password(new_password)
+    
+    with engine.begin() as conn:
+        user = conn.execute(
+            text("SELECT id FROM stores WHERE email = :email"),
+            {"email": email.strip().lower()}
+        ).fetchone()
+        
+        if not user:
+            return False, "No store registered with this business email address."
+            
+        conn.execute(
+            text("UPDATE stores SET password = :password WHERE email = :email"),
+            {"password": hashed_pwd, "email": email.strip().lower()}
+        )
+    return True, "Password updated successfully! Please log in with your new password."
+
 # Session State Initialization
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "user_store" not in st.session_state:
     st.session_state["user_store"] = None
 
-# --- LOGIN / SIGNUP SCREEN ---
+# --- LOGIN / SIGNUP / RESET SCREEN ---
 if not st.session_state["authenticated"]:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -144,7 +162,7 @@ if not st.session_state["authenticated"]:
         st.subheader("Commercial AI Invoice Intake & ERP Synchronizer")
         st.write("")
         
-        auth_tab1, auth_tab2 = st.tabs(["🔒 Partner Login", "✨ Register New Store"])
+        auth_tab1, auth_tab2, auth_tab3 = st.tabs(["🔒 Partner Login", "✨ Register New Store", "🔑 Forgot Password"])
         
         with auth_tab1:
             with st.form("login_form"):
@@ -181,6 +199,26 @@ if not st.session_state["authenticated"]:
                             st.error(msg)
                     else:
                         st.warning("All fields are required.")
+
+        with auth_tab3:
+            with st.form("reset_password_form"):
+                reset_email = st.text_input("Registered Business Email")
+                new_pwd = st.text_input("New Password", type="password")
+                confirm_pwd = st.text_input("Confirm New Password", type="password")
+                submit_reset = st.form_submit_button("Reset Password", use_container_width=True)
+                
+                if submit_reset:
+                    if not reset_email or not new_pwd:
+                        st.warning("Please enter your email and a new password.")
+                    elif new_pwd != confirm_pwd:
+                        st.error("Passwords do not match!")
+                    else:
+                        success, msg = reset_user_password(reset_email, new_pwd)
+                        if success:
+                            st.success(msg)
+                        else:
+                            st.error(msg)
+                            
     st.stop()  # Halt execution so unauthenticated users cannot see app tabs
 
 # Active user details post-login
