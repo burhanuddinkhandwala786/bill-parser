@@ -7,6 +7,7 @@ import bcrypt
 import openpyxl
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from io import BytesIO
 from PIL import Image, ImageEnhance
 from google import genai
@@ -208,13 +209,37 @@ def reset_user_password(email: str, new_password: str):
         )
     return True, "Password updated successfully! Please log in with your new password."
 
-# --- SESSION & AUTO-LOGIN PERSISTENCE ENGINE ---
+# --- NATIVE LOCALSTORAGE AUTO-LOGIN ENGINE ---
+def persistent_session_bridge():
+    """Injects JavaScript to maintain login session in device LocalStorage."""
+    js_code = """
+    <script>
+    const STORE_KEY = "universal_os_store_session";
+    const urlParams = new URLSearchParams(window.location.search);
+    let sessionParam = urlParams.get("session");
+
+    if (sessionParam) {
+        window.localStorage.setItem(STORE_KEY, sessionParam);
+    } else {
+        let savedSession = window.localStorage.getItem(STORE_KEY);
+        if (savedSession && !urlParams.has("session")) {
+            urlParams.set("session", savedSession);
+            window.location.search = urlParams.toString();
+        }
+    }
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
+
+persistent_session_bridge()
+
+# Session State Initialization
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "user_store" not in st.session_state:
     st.session_state["user_store"] = None
 
-# Native Instant Auto-Login check from URL parameters
+# Instant session resolution from URL/LocalStorage parameter
 if not st.session_state["authenticated"]:
     saved_session_slug = st.query_params.get("session", None)
     if saved_session_slug:
@@ -246,7 +271,7 @@ if not st.session_state["authenticated"]:
                             st.session_state["authenticated"] = True
                             st.session_state["user_store"] = store_data
                             
-                            # Set URL Parameter for Instant Persistent Login
+                            # Set URL Parameter to sync with device LocalStorage
                             st.query_params["session"] = store_data["slug"]
                             
                             st.success(f"Welcome back, {store_data['display_name']}!")
@@ -307,9 +332,19 @@ if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.session_state["authenticated"] = False
     st.session_state["user_store"] = None
     
-    # Clear persistence parameter
+    # Clear persistence from URL and LocalStorage
     if "session" in st.query_params:
         del st.query_params["session"]
+        
+    components.html(
+        """
+        <script>
+        window.localStorage.removeItem("universal_os_store_session");
+        </script>
+        """,
+        height=0,
+        width=0
+    )
         
     if "parsed_df" in st.session_state:
         del st.session_state["parsed_df"]
@@ -807,13 +842,11 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
-        # Ensure correct numeric types
         df["Current Quantity"] = pd.to_numeric(df["Current Quantity"], errors='coerce').fillna(1.0)
         df["Purchase Price"] = pd.to_numeric(df["Purchase Price"], errors='coerce').fillna(0.0)
         df["GST Rate"] = pd.to_numeric(df["GST Rate"], errors='coerce').fillna(18.0)
         df["Selling Price"] = pd.to_numeric(df.get("Selling Price", 0.0), errors='coerce').fillna(0.0)
         
-        # Calculate full financial metrics
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
         df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
@@ -826,7 +859,6 @@ with tab_parser:
         uom_groups = df.groupby("Unit")["Current Quantity"].sum()
         uom_summary_str = " | ".join([f"{val:,.2f} {unit}" for unit, val in uom_groups.items()])
 
-        # Executive Metrics Header
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Total Line Items", f"{len(df)} Items")
         m2.metric("Stock Quantities by UOM", uom_summary_str)
@@ -835,7 +867,6 @@ with tab_parser:
         
         st.write("")
         
-        # DUAL TOTALS AUDIT TABLE VIEW
         display_columns = [
             "Match Status",
             "Raw Vendor Item",
@@ -874,14 +905,12 @@ with tab_parser:
             }
         )
         
-        # Safely handle row modifications/additions/deletions
         df_updated = edited_display_df.copy()
         df_updated["Current Quantity"] = pd.to_numeric(df_updated["Current Quantity"], errors='coerce').fillna(1.0)
         df_updated["Purchase Price"] = pd.to_numeric(df_updated["Purchase Price"], errors='coerce').fillna(0.0)
         df_updated["GST Rate"] = pd.to_numeric(df_updated["GST Rate"], errors='coerce').fillna(18.0)
         df_updated["Selling Price"] = pd.to_numeric(df_updated.get("Selling Price", 0.0), errors='coerce').fillna(0.0)
 
-        # Re-compute dependent line totals across all rows
         df_updated["Line Total (Excl. GST)"] = (df_updated["Purchase Price"] * df_updated["Current Quantity"]).round(2)
         df_updated["GST Tax Amount"] = (df_updated["Line Total (Excl. GST)"] * (df_updated["GST Rate"] / 100)).round(2)
         df_updated["Line Total (Incl. GST)"] = (df_updated["Line Total (Excl. GST)"] + df_updated["GST Tax Amount"]).round(2)
