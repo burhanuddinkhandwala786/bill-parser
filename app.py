@@ -16,13 +16,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import create_engine, text
 
-# --- SAFE COOKIE MANAGER IMPORT ---
-try:
-    import extra_streamlit_components as stx
-    COOKIE_SUPPORT_AVAILABLE = True
-except ImportError:
-    COOKIE_SUPPORT_AVAILABLE = False
-
 # --- SAFE REPORTLAB PDF IMPORTS ---
 try:
     from reportlab.lib import colors
@@ -215,26 +208,20 @@ def reset_user_password(email: str, new_password: str):
         )
     return True, "Password updated successfully! Please log in with your new password."
 
-# Initialize Cookie Manager
-cookie_manager = stx.CookieManager(key="app_cookie_mgr") if COOKIE_SUPPORT_AVAILABLE else None
-
-# Session State Initialization
+# --- SESSION & AUTO-LOGIN PERSISTENCE ENGINE ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "user_store" not in st.session_state:
     st.session_state["user_store"] = None
 
-# Auto-Login from Browser Cookie
-if not st.session_state["authenticated"] and cookie_manager:
-    try:
-        saved_store_slug = cookie_manager.get(cookie="store_session")
-        if saved_store_slug:
-            store_data = get_user_by_slug(saved_store_slug)
-            if store_data:
-                st.session_state["authenticated"] = True
-                st.session_state["user_store"] = store_data
-    except Exception:
-        pass
+# Native Instant Auto-Login check from URL parameters
+if not st.session_state["authenticated"]:
+    saved_session_slug = st.query_params.get("session", None)
+    if saved_session_slug:
+        store_data = get_user_by_slug(saved_session_slug)
+        if store_data:
+            st.session_state["authenticated"] = True
+            st.session_state["user_store"] = store_data
 
 # --- LOGIN / SIGNUP / RESET SCREEN ---
 if not st.session_state["authenticated"]:
@@ -259,12 +246,9 @@ if not st.session_state["authenticated"]:
                             st.session_state["authenticated"] = True
                             st.session_state["user_store"] = store_data
                             
-                            if cookie_manager:
-                                try:
-                                    cookie_manager.set("store_session", store_data["slug"], max_age=30*24*3600)
-                                except Exception:
-                                    pass
-                                
+                            # Set URL Parameter for Instant Persistent Login
+                            st.query_params["session"] = store_data["slug"]
+                            
                             st.success(f"Welcome back, {store_data['display_name']}!")
                             st.rerun()
                         else:
@@ -322,11 +306,11 @@ st.sidebar.divider()
 if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.session_state["authenticated"] = False
     st.session_state["user_store"] = None
-    if cookie_manager:
-        try:
-            cookie_manager.delete("store_session")
-        except Exception:
-            pass
+    
+    # Clear persistence parameter
+    if "session" in st.query_params:
+        del st.query_params["session"]
+        
     if "parsed_df" in st.session_state:
         del st.session_state["parsed_df"]
     st.rerun()
