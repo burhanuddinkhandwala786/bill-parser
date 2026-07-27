@@ -16,11 +16,15 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import create_engine, text
 
-# --- REPORTLAB PDF IMPORTS ---
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+# --- SAFE REPORTLAB PDF IMPORTS ---
+try:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -511,6 +515,9 @@ def process_single_file_raw(file_bytes):
 
 # --- REPORTLAB PDF QUOTATION GENERATOR ---
 def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
+    if not REPORTLAB_AVAILABLE:
+        raise ModuleNotFoundError("reportlab library is required for PDF generation. Please add 'reportlab' to requirements.txt.")
+        
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     story = []
@@ -864,23 +871,26 @@ with tab_parser:
                 st.dataframe(quote_df, use_container_width=True)
                 st.metric(f"Total Quotation Value (Markup: {markup_pct}% on GST-Paid Cost)", f"₹{total_quote_value:,.2f}")
                 
-                # Build PDF
-                pdf_bytes = generate_quotation_pdf(
-                    store_name=st.session_state['user_store']['display_name'],
-                    phone_str=biz_phone_input.strip(),
-                    customer_name=customer_name,
-                    quote_df=quote_df,
-                    grand_total=total_quote_value
-                )
-                
-                st.download_button(
-                    label=f"📄 Download PDF Quotation for {customer_name}",
-                    data=pdf_bytes,
-                    file_name=f"Quotation_{customer_name.replace(' ', '_')}.pdf",
-                    mime="application/pdf",
-                    type="primary",
-                    use_container_width=True
-                )
+                if REPORTLAB_AVAILABLE:
+                    # Build PDF
+                    pdf_bytes = generate_quotation_pdf(
+                        store_name=st.session_state['user_store']['display_name'],
+                        phone_str=biz_phone_input.strip(),
+                        customer_name=customer_name,
+                        quote_df=quote_df,
+                        grand_total=total_quote_value
+                    )
+                    
+                    st.download_button(
+                        label=f"📄 Download PDF Quotation for {customer_name}",
+                        data=pdf_bytes,
+                        file_name=f"Quotation_{customer_name.replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                        use_container_width=True
+                    )
+                else:
+                    st.warning("⚠️ 'reportlab' library is missing in environment. Please update your requirements.txt file to enable PDF downloading.")
 
 # ==========================================
 # TAB 2: STORE MASTER CATALOG MANAGER
