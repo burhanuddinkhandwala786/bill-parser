@@ -361,8 +361,7 @@ with tab_parser:
                         line_inclusive = float(row.get("Line Total Inclusive Amount") or 0.0)
                         hsn_sac = str(row.get("HSN Code") or "").strip()
                         
-                        # GROUND TRUTH PRIORITY MATH:
-                        # Line Total Taxable Amount on the paper bill is absolute ground truth.
+                        # GROUND TRUTH RECONCILIATION MATH
                         if line_taxable > 0:
                             total_taxable_item = line_taxable
                             final_base = line_taxable / qty
@@ -390,7 +389,7 @@ with tab_parser:
                             "HSN/SAC": hsn_sac,
                             "Category": "General",
                             "GST Rate": gst_rate,
-                            "Purchase Price": round(final_base, 2),
+                            "Purchase Price": round(final_base, 2), # Excl. GST Rate for ERP Import
                             "Line Total Taxable": round(total_taxable_item, 2),
                             "Selling Price": round(known_selling, 2)
                         })
@@ -410,9 +409,13 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
+        # Dual Rate Calculations (Exclusive and GST-Paid)
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
         df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
+        
+        # Calculate Per-Unit GST-Paid Rate
+        df["Unit Cost (GST Paid) ₹"] = (df["Line Total (Incl. GST)"] / df["Current Quantity"]).round(2)
         
         total_taxable = df["Line Total (Excl. GST)"].sum()
         total_gst = df["GST Tax Amount"].sum()
@@ -424,8 +427,8 @@ with tab_parser:
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Total Line Items", f"{len(df)} Items")
         m2.metric("Stock Quantities by UOM", uom_summary_str)
-        m3.metric("Taxable Total (Excl. GST)", f"₹{total_taxable:,.2f}")
-        m4.metric("Grand Total (Incl. GST)", f"₹{grand_total_incl_tax:,.2f}", delta=f"GST Tax: ₹{total_gst:,.2f}")
+        m3.metric("Taxable Base (Excl. GST)", f"₹{total_taxable:,.2f}")
+        m4.metric("Grand Total (GST Paid)", f"₹{grand_total_incl_tax:,.2f}", delta=f"GST Tax: ₹{total_gst:,.2f}")
         
         st.write("")
         
@@ -435,6 +438,7 @@ with tab_parser:
             use_container_width=True,
             column_config={
                 "Official SKU": st.column_config.SelectboxColumn("Official SKU Name", options=master_sku_list, required=True) if master_sku_list else "Official SKU",
+                "Unit Cost (GST Paid) ₹": st.column_config.NumberColumn("Unit Cost (GST Paid) ₹", format="₹%.2f", disabled=True),
                 "Purchase Price": st.column_config.NumberColumn("Unit Rate (Excl. GST) ₹", format="₹%.2f"),
                 "Line Total (Excl. GST)": st.column_config.NumberColumn("Line Total (Excl. GST) ₹", format="₹%.2f", disabled=True),
                 "Line Total (Incl. GST)": st.column_config.NumberColumn("Line Total (Incl. GST) ₹", format="₹%.2f", disabled=True),
@@ -530,7 +534,7 @@ with tab_parser:
         # --- ON-THE-GO CUSTOMER QUOTATION ---
         st.write("")
         with st.expander("📄 Generate Customer Quotation (On-the-go)", expanded=False):
-            st.caption("Instantly generate a customer quotation by applying a markup % to purchase prices.")
+            st.caption("Instantly generate a customer quotation by applying a custom markup % directly to your final GST-Paid cost.")
             
             col_q1, col_q2 = st.columns(2)
             with col_q1:
@@ -543,8 +547,9 @@ with tab_parser:
                 total_quote_value = 0.0
                 
                 for idx, row in edited_df.iterrows():
-                    base_price = float(row["Purchase Price"])
-                    markup_price = round(base_price * (1 + (markup_pct / 100)), 2)
+                    # Calculates markup on GST-Paid Unit Cost for real-world counter pricing
+                    base_gst_paid_cost = float(row["Unit Cost (GST Paid) ₹"])
+                    markup_price = round(base_gst_paid_cost * (1 + (markup_pct / 100)), 2)
                     qty = float(row["Current Quantity"])
                     line_total = round(markup_price * qty, 2)
                     
@@ -561,7 +566,7 @@ with tab_parser:
                 quote_df = pd.DataFrame(quote_items)
                 st.markdown(f"**Previewing Quote for:** {customer_name}")
                 st.dataframe(quote_df, use_container_width=True)
-                st.metric(f"Total Quotation Value (Markup: {markup_pct}%)", f"₹{total_quote_value:,.2f}")
+                st.metric(f"Total Quotation Value (Markup: {markup_pct}% on GST-Paid Cost)", f"₹{total_quote_value:,.2f}")
                 
                 wb_q = openpyxl.Workbook()
                 ws_q = wb_q.active
