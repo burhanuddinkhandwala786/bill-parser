@@ -3,7 +3,6 @@ import gc
 import json
 import time
 import shutil
-import bcrypt
 import openpyxl
 import pandas as pd
 import streamlit as st
@@ -14,7 +13,12 @@ from google.genai import types
 from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 from concurrent.futures import ThreadPoolExecutor
-from sqlalchemy import create_engine, text
+
+# REPORTLAB PDF ENGINE IMPORTS
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -51,191 +55,101 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- DATABASE ENGINE SETUP ---
-@st.cache_resource
-def get_db_engine():
-    db_url = st.secrets["SUPABASE_DB_URL"]
-    return create_engine(db_url, pool_pre_ping=True)
+# --- MULTI-STORE DIRECTORY & DATA ISOLATION ---
+DATA_DIR = "stores_data"
+os.makedirs(DATA_DIR, exist_ok=True)
 
-def sanitize_store_slug(name):
-    return "".join([c if c.isalnum() else "_" for c in name.strip()]).lower()
+def get_store_list():
+    stores = [d for d in os.listdir(DATA_DIR) if os.path.isdir(os.path.join(DATA_DIR, d))]
+    if not stores:
+        default_path = os.path.join(DATA_DIR, "Universal_Hardware")
+        os.makedirs(default_path, exist_ok=True)
+        return ["Universal_Hardware"]
+    return stores
 
-def get_or_create_store_id(store_slug: str, display_name: str = None) -> int:
-    """Gets the database ID for a store slug, creating it if missing."""
-    engine = get_db_engine()
-    slug = sanitize_store_slug(store_slug)
-    if not display_name:
-        display_name = store_slug.replace("_", " ").title()
-    
-    with engine.begin() as conn:
-        result = conn.execute(
-            text("SELECT id FROM stores WHERE slug = :slug"),
-            {"slug": slug}
-        ).fetchone()
-        
-        if result:
-            return result[0]
-        
-        insert_res = conn.execute(
-            text("INSERT INTO stores (slug, display_name) VALUES (:slug, :display_name) RETURNING id"),
-            {"slug": slug, "display_name": display_name}
-        )
-        return insert_res.fetchone()[0]
+def sanitize_store_name(name):
+    return "".join([c if c.isalnum() else "_" for c in name.strip()])
 
-# --- AUTHENTICATION & MULTI-TENANT SESSION MANAGEMENT ---
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+# --- SIDEBAR: MULTI-TENANT WORKSPACE ---
+st.sidebar.title("🏬 Store Directory")
+existing_stores = get_store_list()
 
-def check_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+selected_store_slug = st.sidebar.selectbox(
+    "Active Store Catalog",
+    options=existing_stores,
+    format_func=lambda x: x.replace("_", " ")
+)
 
-def register_user(store_name: str, email: str, password: str):
-    engine = get_db_engine()
-    slug = sanitize_store_slug(store_name)
-    hashed_pwd = hash_password(password)
-    
-    with engine.begin() as conn:
-        existing = conn.execute(
-            text("SELECT id FROM stores WHERE email = :email OR slug = :slug"),
-            {"email": email.strip().lower(), "slug": slug}
-        ).fetchone()
-        
-        if existing:
-            return False, "Store name or Email already registered!"
-            
-        conn.execute(
-            text("""
-                INSERT INTO stores (slug, display_name, email, password)
-                VALUES (:slug, :display_name, :email, :password)
-            """),
-            {
-                "slug": slug,
-                "display_name": store_name.strip(),
-                "email": email.strip().lower(),
-                "password": hashed_pwd
-            }
-        )
-    return True, "Store registered successfully! Please log in."
+if "last_store_slug" not in st.session_state:
+    st.session_state["last_store_slug"] = selected_store_slug
 
-def authenticate_user(email: str, password: str):
-    engine = get_db_engine()
-    with engine.connect() as conn:
-        user = conn.execute(
-            text("SELECT slug, display_name, password FROM stores WHERE email = :email"),
-            {"email": email.strip().lower()}
-        ).fetchone()
-        
-        if user and user[2] and check_password(password, user[2]):
-            return {"slug": user[0], "display_name": user[1]}
-    return None
-
-def reset_user_password(email: str, new_password: str):
-    engine = get_db_engine()
-    hashed_pwd = hash_password(new_password)
-    
-    with engine.begin() as conn:
-        user = conn.execute(
-            text("SELECT id FROM stores WHERE email = :email"),
-            {"email": email.strip().lower()}
-        ).fetchone()
-        
-        if not user:
-            return False, "No store registered with this business email address."
-            
-        conn.execute(
-            text("UPDATE stores SET password = :password WHERE email = :email"),
-            {"password": hashed_pwd, "email": email.strip().lower()}
-        )
-    return True, "Password updated successfully! Please log in with your new password."
-
-# Session State Initialization
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
-if "user_store" not in st.session_state:
-    st.session_state["user_store"] = None
-
-# --- LOGIN / SIGNUP / RESET SCREEN ---
-if not st.session_state["authenticated"]:
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.title("⚡ Universal OS")
-        st.subheader("Commercial AI Invoice Intake & ERP Synchronizer")
-        st.write("")
-        
-        auth_tab1, auth_tab2, auth_tab3 = st.tabs(["🔒 Partner Login", "✨ Register New Store", "🔑 Forgot Password"])
-        
-        with auth_tab1:
-            with st.form("login_form"):
-                login_email = st.text_input("Store Email")
-                login_password = st.text_input("Password", type="password")
-                submit_login = st.form_submit_button("Log In", use_container_width=True, type="primary")
-                
-                if submit_login:
-                    if login_email and login_password:
-                        store_data = authenticate_user(login_email, login_password)
-                        if store_data:
-                            st.session_state["authenticated"] = True
-                            st.session_state["user_store"] = store_data
-                            st.success(f"Welcome back, {store_data['display_name']}!")
-                            st.rerun()
-                        else:
-                            st.error("Invalid email or password.")
-                    else:
-                        st.warning("Please fill in both email and password.")
-
-        with auth_tab2:
-            with st.form("register_form"):
-                reg_store = st.text_input("Store Name (e.g. Universal Hardware)")
-                reg_email = st.text_input("Business Email")
-                reg_password = st.text_input("Create Password", type="password")
-                submit_reg = st.form_submit_button("Create Account & Store Environment", use_container_width=True)
-                
-                if submit_reg:
-                    if reg_store and reg_email and reg_password:
-                        success, msg = register_user(reg_store, reg_email, reg_password)
-                        if success:
-                            st.success(msg)
-                        else:
-                            st.error(msg)
-                    else:
-                        st.warning("All fields are required.")
-
-        with auth_tab3:
-            with st.form("reset_password_form"):
-                reset_email = st.text_input("Registered Business Email")
-                new_pwd = st.text_input("New Password", type="password")
-                confirm_pwd = st.text_input("Confirm New Password", type="password")
-                submit_reset = st.form_submit_button("Reset Password", use_container_width=True)
-                
-                if submit_reset:
-                    if not reset_email or not new_pwd:
-                        st.warning("Please enter your email and a new password.")
-                    elif new_pwd != confirm_pwd:
-                        st.error("Passwords do not match!")
-                    else:
-                        success, msg = reset_user_password(reset_email, new_pwd)
-                        if success:
-                            st.success(msg)
-                        else:
-                            st.error(msg)
-                            
-    st.stop()  # Halt execution so unauthenticated users cannot see app tabs
-
-# Active user details post-login
-selected_store_slug = st.session_state["user_store"]["slug"]
-ACTIVE_STORE_DISPLAY = st.session_state["user_store"]["display_name"].upper()
-
-# --- SIDEBAR (LOGGED IN USER) ---
-st.sidebar.title(f"🏬 {st.session_state['user_store']['display_name']}")
-st.sidebar.caption(f"Active Store ID: `{selected_store_slug}`")
-st.sidebar.divider()
-
-if st.sidebar.button("🚪 Logout", use_container_width=True):
-    st.session_state["authenticated"] = False
-    st.session_state["user_store"] = None
+if st.session_state["last_store_slug"] != selected_store_slug:
     if "parsed_df" in st.session_state:
         del st.session_state["parsed_df"]
+    st.session_state["last_store_slug"] = selected_store_slug
     st.rerun()
+
+st.sidebar.divider()
+
+# --- STORE PROFILE / CONTACT PERSISTENCE ENGINE ---
+CURRENT_STORE_DIR = os.path.join(DATA_DIR, selected_store_slug)
+PROFILE_FILE = os.path.join(CURRENT_STORE_DIR, "store_profile.json")
+
+def load_store_profile():
+    if os.path.exists(PROFILE_FILE):
+        try:
+            with open(PROFILE_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"phone_numbers": "", "business_title": selected_store_slug.replace("_", " ").upper()}
+
+def save_store_profile(profile_dict):
+    try:
+        with open(PROFILE_FILE, "w") as f:
+            json.dump(profile_dict, f, indent=4)
+    except Exception as e:
+        st.sidebar.error(f"Profile save alert: {e}")
+
+store_profile = load_store_profile()
+
+with st.sidebar.expander("📞 Business Contact Details (Saved)", expanded=False):
+    saved_phone = store_profile.get("phone_numbers", "")
+    phone_input = st.text_input("Owner Phone Number(s):", value=saved_phone, placeholder="e.g. +91 9876543210, +91 9123456789")
+    if st.button("Save Contact Profile", use_container_width=True):
+        store_profile["phone_numbers"] = phone_input.strip()
+        save_store_profile(store_profile)
+        st.sidebar.success("Business profile updated!")
+        st.rerun()
+
+# --- SIDEBAR STORE ACTIONS ---
+with st.sidebar.expander("✏️ Rename Active Store", expanded=False):
+    current_display = selected_store_slug.replace("_", " ")
+    renamed_input = st.text_input("New Name:", value=current_display, key="rename_input_field")
+    if st.button("Save Store Name", use_container_width=True, type="secondary"):
+        if renamed_input.strip() and renamed_input.strip() != current_display:
+            new_slug = sanitize_store_name(renamed_input)
+            old_path = os.path.join(DATA_DIR, selected_store_slug)
+            new_path = os.path.join(DATA_DIR, new_slug)
+            
+            if not os.path.exists(new_path):
+                shutil.move(old_path, new_path)
+                st.session_state["last_store_slug"] = new_slug
+                st.sidebar.success("Store name updated!")
+                st.rerun()
+            else:
+                st.sidebar.error("A store with that name already exists.")
+
+with st.sidebar.expander("➕ Register New Store", expanded=False):
+    new_store_name = st.text_input("Store Title:", placeholder="e.g. Metro Hardware", key="add_input_field")
+    if st.button("Create Environment", use_container_width=True, type="primary"):
+        if new_store_name.strip():
+            slug = sanitize_store_name(new_store_name)
+            new_path = os.path.join(DATA_DIR, slug)
+            os.makedirs(new_path, exist_ok=True)
+            st.session_state["last_store_slug"] = slug
+            st.sidebar.success(f"Store '{new_store_name}' created!")
+            st.rerun()
 
 st.sidebar.divider()
 
@@ -256,6 +170,10 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
+MEMORY_FILE = os.path.join(CURRENT_STORE_DIR, "vendor_mappings.json")
+MASTER_FILE = os.path.join(CURRENT_STORE_DIR, "inventory_master.csv")
+ACTIVE_STORE_DISPLAY = selected_store_slug.replace("_", " ").upper()
+
 # --- HEADER SECTION ---
 header_left, header_right = st.columns([3, 1.5])
 
@@ -269,91 +187,42 @@ with header_right:
 
 st.divider()
 
-# --- DATABASE STORE LOADERS & PERSISTENCE ---
-def load_json_memory(store_slug: str) -> dict:
-    """Loads learned vendor item mappings from Supabase."""
-    engine = get_db_engine()
-    store_id = get_or_create_store_id(store_slug)
-    query = "SELECT raw_name, mapped_sku FROM vendor_mappings WHERE store_id = :store_id"
-    try:
-        with engine.connect() as conn:
-            df = pd.read_sql(text(query), conn, params={"store_id": store_id})
-        if df.empty:
+# --- STORE DATA LOADERS & PERSISTENCE ---
+def load_json_memory():
+    if os.path.exists(MEMORY_FILE):
+        try:
+            with open(MEMORY_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
             return {}
-        return dict(zip(df["raw_name"], df["mapped_sku"]))
-    except Exception:
-        return {}
+    return {}
 
-def save_json_memory(store_slug: str, memory_dict: dict):
-    """Saves learned vendor item mappings to Supabase."""
-    engine = get_db_engine()
-    store_id = get_or_create_store_id(store_slug)
-    with engine.begin() as conn:
-        for raw_name, mapped_sku in memory_dict.items():
-            conn.execute(
-                text("""
-                    INSERT INTO vendor_mappings (store_id, raw_name, mapped_sku)
-                    VALUES (:store_id, :raw_name, :mapped_sku)
-                    ON CONFLICT (store_id, raw_name) 
-                    DO UPDATE SET mapped_sku = EXCLUDED.mapped_sku
-                """),
-                {"store_id": store_id, "raw_name": raw_name, "mapped_sku": mapped_sku}
-            )
+def save_json_memory(memory_dict):
+    try:
+        with open(MEMORY_FILE, "w") as f:
+            json.dump(memory_dict, f, indent=4)
+    except Exception as e:
+        st.sidebar.error(f"Memory save alert: {e}")
 
 @st.cache_data
-def load_master(store_slug: str) -> pd.DataFrame:
-    """Loads master SKU catalog from Supabase for a given store."""
-    engine = get_db_engine()
-    store_id = get_or_create_store_id(store_slug)
-    query = """
-        SELECT official_sku_name as "Official_SKU_Name", 
-               category as "Category", 
-               default_unit as "Default_Unit", 
-               gst_rate as "GST_Rate", 
-               selling_price as "Selling_Price"
-        FROM master_skus
-        WHERE store_id = :store_id
-    """
+def load_master(store_slug):
+    master_path = os.path.join(DATA_DIR, store_slug, "inventory_master.csv")
     try:
-        with engine.connect() as conn:
-            df = pd.read_sql(text(query), conn, params={"store_id": store_id})
-        if df.empty:
-            return pd.DataFrame(columns=["Official_SKU_Name", "Category", "Default_Unit", "GST_Rate", "Selling_Price"])
+        df = pd.read_csv(master_path)
+        if "Selling_Price" not in df.columns:
+            df["Selling_Price"] = 0.0
         return df
     except Exception:
-        return pd.DataFrame(columns=["Official_SKU_Name", "Category", "Default_Unit", "GST_Rate", "Selling_Price"])
+        return pd.DataFrame({"Official_SKU_Name": [], "Category": [], "Default_Unit": [], "GST_Rate": [], "Selling_Price": []})
 
-def save_master(df: pd.DataFrame, store_slug: str):
-    """Saves updated master SKU catalog to Supabase for a given store."""
-    engine = get_db_engine()
-    store_id = get_or_create_store_id(store_slug)
-    
-    with engine.begin() as conn:
-        conn.execute(
-            text("DELETE FROM master_skus WHERE store_id = :store_id"),
-            {"store_id": store_id}
-        )
-        if not df.empty:
-            for _, row in df.iterrows():
-                conn.execute(
-                    text("""
-                        INSERT INTO master_skus (store_id, official_sku_name, category, default_unit, gst_rate, selling_price)
-                        VALUES (:store_id, :official_sku_name, :category, :default_unit, :gst_rate, :selling_price)
-                    """),
-                    {
-                        "store_id": store_id,
-                        "official_sku_name": str(row["Official_SKU_Name"]),
-                        "category": str(row.get("Category", "General")),
-                        "default_unit": str(row.get("Default_Unit", "PCS")),
-                        "gst_rate": float(row.get("GST_Rate", 18.0)),
-                        "selling_price": float(row.get("Selling_Price", 0.0))
-                    }
-                )
+def save_master(df, store_slug):
+    master_path = os.path.join(DATA_DIR, store_slug, "inventory_master.csv")
+    df.to_csv(master_path, index=False)
     st.cache_data.clear()
 
 master_df = load_master(selected_store_slug)
-master_sku_list = master_df["Official_SKU_Name"].dropna().tolist() if not master_df.empty else []
-mapping_memory = load_json_memory(selected_store_slug)
+master_sku_list = master_df["Official_SKU_Name"].tolist() if not master_df.empty else []
+mapping_memory = load_json_memory()
 
 def match_sku(raw_name):
     cleaned_raw = raw_name.strip().upper()
@@ -456,6 +325,121 @@ def process_single_file_raw(file_bytes):
     except Exception as e:
         return {"ERROR": str(e)}
 
+# --- PROFESSIONAL PDF QUOTATION GENERATOR ---
+def generate_quotation_pdf(store_name, owner_phones, customer_name, quote_df, grand_total):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    elements = []
+    
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'StoreTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        leading=22,
+        textColor=colors.HexColor('#1E293B'),
+        alignment=0
+    )
+    
+    phone_style = ParagraphStyle(
+        'PhoneStyle',
+        parent=styles['Normal'],
+        fontSize=10,
+        leading=14,
+        textColor=colors.HexColor('#475569')
+    )
+    
+    quote_title_style = ParagraphStyle(
+        'QuoteHeader',
+        parent=styles['Heading1'],
+        fontSize=20,
+        leading=24,
+        textColor=colors.HexColor('#2563EB'),
+        alignment=2
+    )
+
+    date_style = ParagraphStyle(
+        'DateStyle',
+        parent=styles['Normal'],
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor('#64748B'),
+        alignment=2
+    )
+    
+    # 1. Header Layout
+    phone_text = f"Contact: {owner_phones}" if owner_phones else "Contact: N/A"
+    header_data = [
+        [
+            Paragraph(f"<b>{store_name}</b>", title_style),
+            Paragraph("<b>QUOTATION</b>", quote_title_style)
+        ],
+        [
+            Paragraph(phone_text, phone_style),
+            Paragraph(f"Date: {time.strftime('%d-%b-%Y %H:%M')}", date_style)
+        ]
+    ]
+    
+    header_table = Table(header_data, colWidths=[320, 220])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+    ]))
+    elements.append(header_table)
+    elements.append(Spacer(1, 15))
+    
+    # 2. Customer Section Box
+    cust_style = ParagraphStyle('CustStyle', parent=styles['Normal'], fontSize=11, leading=15, textColor=colors.HexColor('#0F172A'))
+    cust_p = Paragraph(f"<b>Quotation Prepared For:</b> {customer_name.upper()}", cust_style)
+    elements.append(cust_p)
+    elements.append(Spacer(1, 12))
+    
+    # 3. Item Table
+    table_data = [["S.No", "Item Description", "Qty", "Unit", "Unit Price (₹)", "Total Value (₹)"]]
+    
+    for idx, row in quote_df.iterrows():
+        table_data.append([
+            str(idx + 1),
+            Paragraph(str(row["Item Name"]), styles['Normal']),
+            f"{row['Quantity']:,.2f}",
+            str(row["Unit"]),
+            f"₹{row['Customer Unit Price (₹)']:,.2f}",
+            f"₹{row['Total Value (₹)']:,.2f}"
+        ])
+    
+    # Total Row
+    table_data.append(["", "", "", "", "Grand Total:", f"₹{grand_total:,.2f}"])
+    
+    item_table = Table(table_data, colWidths=[35, 235, 55, 45, 85, 85])
+    item_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2563EB')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,0), 9),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('ALIGN', (2,0), (-1,-1), 'RIGHT'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6),
+        ('TOPPADDING', (0,0), (-1,0), 6),
+        ('GRID', (0,0), (-1,-2), 0.5, colors.HexColor('#E2E8F0')),
+        ('FONTNAME', (-2,-1), (-1,-1), 'Helvetica-Bold'),
+        ('FONTSIZE', (-2,-1), (-1,-1), 10),
+        ('BACKGROUND', (-2,-1), (-1,-1), colors.HexColor('#F8FAFC')),
+        ('TOPPADDING', (0,1), (-1,-1), 6),
+        ('BOTTOMPADDING', (0,1), (-1,-1), 6),
+    ]))
+    
+    elements.append(item_table)
+    elements.append(Spacer(1, 25))
+    
+    # 4. Footer Note
+    footer_style = ParagraphStyle('FooterNote', parent=styles['Italic'], fontSize=8, leading=11, textColor=colors.HexColor('#64748B'), alignment=1)
+    elements.append(Paragraph("This is a computer-generated estimate quotation. Prices are subject to availability at purchase.", footer_style))
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
 # --- WORKSPACE TABS ---
 tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
     "📥 Batch Invoice Parser", 
@@ -556,7 +540,7 @@ with tab_parser:
                             "HSN/SAC": hsn_sac,
                             "Category": "General",
                             "GST Rate": gst_rate,
-                            "Purchase Price": round(final_base, 2),
+                            "Purchase Price": round(final_base, 2), # Excl. GST Rate for ERP Import
                             "Line Total Taxable": round(total_taxable_item, 2),
                             "Selling Price": round(known_selling, 2)
                         })
@@ -576,12 +560,9 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
-        # Dual Rate Calculations (Exclusive and GST-Paid)
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
         df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
-        
-        # Calculate Per-Unit GST-Paid Rate
         df["Unit Cost (GST Paid) ₹"] = (df["Line Total (Incl. GST)"] / df["Current Quantity"]).round(2)
         
         total_taxable = df["Line Total (Excl. GST)"].sum()
@@ -643,7 +624,7 @@ with tab_parser:
                     master_updated = True
 
             if memory_updated:
-                save_json_memory(selected_store_slug, mapping_memory)
+                save_json_memory(mapping_memory)
                 st.toast("🧠 Learned Vendor Mapping updated!")
                 
             if master_updated:
@@ -698,18 +679,27 @@ with tab_parser:
                 use_container_width=True
             )
 
-        # --- ON-THE-GO CUSTOMER QUOTATION ---
+        # --- ON-THE-GO CUSTOMER QUOTATION (PDF) ---
         st.write("")
-        with st.expander("📄 Generate Customer Quotation (On-the-go)", expanded=False):
-            st.caption("Instantly generate a customer quotation by applying a custom markup % directly to your final GST-Paid cost.")
+        with st.expander("📄 Generate Customer Quotation PDF (On-the-go)", expanded=False):
+            st.caption("Instantly generate a customer PDF quotation by applying a custom markup % directly to your final GST-Paid cost.")
             
-            col_q1, col_q2 = st.columns(2)
+            col_q1, col_q2, col_q3 = st.columns([2, 2, 2])
+            
             with col_q1:
                 customer_name = st.text_input("Customer Name / Reference", value="Walk-in Customer")
+            
             with col_q2:
                 markup_pct = st.number_input("Markup Percentage (%)", min_value=0.0, value=15.0, step=1.0)
             
-            if st.button("Preview & Download Quotation"):
+            with col_q3:
+                current_phone = store_profile.get("phone_numbers", "")
+                phone_override = st.text_input("Business Phone(s):", value=current_phone, help="Saved permanently per store directory.")
+                if phone_override != current_phone:
+                    store_profile["phone_numbers"] = phone_override.strip()
+                    save_store_profile(store_profile)
+
+            if st.button("Generate & Download PDF Quotation", type="primary", use_container_width=True):
                 quote_items = []
                 total_quote_value = 0.0
                 
@@ -730,40 +720,26 @@ with tab_parser:
                     })
                 
                 quote_df = pd.DataFrame(quote_items)
-                st.markdown(f"**Previewing Quote for:** {customer_name}")
+                
+                # Render On-screen Preview
+                st.markdown(f"**Previewing PDF Quotation for:** {customer_name.upper()}")
                 st.dataframe(quote_df, use_container_width=True)
-                st.metric(f"Total Quotation Value (Markup: {markup_pct}% on GST-Paid Cost)", f"₹{total_quote_value:,.2f}")
+                st.metric(f"Total Customer Quotation Amount (Markup: {markup_pct}%)", f"₹{total_quote_value:,.2f}")
                 
-                wb_q = openpyxl.Workbook()
-                ws_q = wb_q.active
-                ws_q.title = "Quotation"
-                
-                ws_q.append([f"QUOTATION FOR: {customer_name.upper()}"])
-                ws_q.append([f"Store: {ACTIVE_STORE_DISPLAY}"])
-                ws_q.append([f"Date: {time.strftime('%d-%m-%Y %H:%M:%S')}"])
-                ws_q.append([])
-                ws_q.append(["S.No", "Item Description", "Quantity", "Unit", "Unit Price (₹)", "Total Value (₹)"])
-                
-                for i, r in quote_df.iterrows():
-                    ws_q.append([
-                        i + 1,
-                        r["Item Name"],
-                        r["Quantity"],
-                        r["Unit"],
-                        r["Customer Unit Price (₹)"],
-                        r["Total Value (₹)"]
-                    ])
-                    
-                buffer_q = BytesIO()
-                wb_q.save(buffer_q)
-                buffer_q.seek(0)
+                # Build PDF File
+                pdf_bytes = generate_quotation_pdf(
+                    store_name=ACTIVE_STORE_DISPLAY,
+                    owner_phones=phone_override,
+                    customer_name=customer_name,
+                    quote_df=quote_df,
+                    grand_total=total_quote_value
+                )
                 
                 st.download_button(
-                    label=f"📥 Download Quotation for {customer_name} (.xlsx)",
-                    data=buffer_q.getvalue(),
-                    file_name=f"Quotation_{customer_name.replace(' ', '_')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    type="secondary",
+                    label=f"📄 Download Formal Quotation PDF for {customer_name}",
+                    data=pdf_bytes,
+                    file_name=f"Quotation_{customer_name.replace(' ', '_')}.pdf",
+                    mime="application/pdf",
                     use_container_width=True
                 )
 
@@ -772,90 +748,11 @@ with tab_parser:
 # ==========================================
 with tab_master:
     st.subheader(f"⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
-    
-    # --- BULK CATALOG IMPORT EXPANDER ---
-    with st.expander("📥 Bulk Import Catalog via Excel / CSV", expanded=False):
-        st.caption("Upload a spreadsheet containing your full product catalog to register multiple SKUs at once.")
-        
-        uploaded_catalog = st.file_uploader(
-            "Upload Catalog (.xlsx or .csv)",
-            type=["xlsx", "csv"],
-            key="bulk_catalog_uploader"
-        )
-        
-        if uploaded_catalog is not None:
-            try:
-                if uploaded_catalog.name.endswith(".csv"):
-                    imported_df = pd.read_csv(uploaded_catalog)
-                else:
-                    imported_df = pd.read_excel(uploaded_catalog)
-                
-                st.markdown("**Uploaded File Preview:**")
-                st.dataframe(imported_df.head(5), use_container_width=True)
-                
-                # Column mapping helper
-                col_sku = st.selectbox("Select SKU Name Column:", options=imported_df.columns)
-                
-                col_cat, col_unit, col_gst, col_price = st.columns(4)
-                with col_cat:
-                    opt_cat = st.selectbox("Category Column (Optional):", options=["-- None --"] + list(imported_df.columns))
-                with col_unit:
-                    opt_unit = st.selectbox("Default Unit Column (Optional):", options=["-- None --"] + list(imported_df.columns))
-                with col_gst:
-                    opt_gst = st.selectbox("GST Rate Column (Optional):", options=["-- None --"] + list(imported_df.columns))
-                with col_price:
-                    opt_price = st.selectbox("Selling Price Column (Optional):", options=["-- None --"] + list(imported_df.columns))
-                
-                if st.button("🚀 Import All SKUs into Master Catalog", type="primary", use_container_width=True):
-                    new_records = []
-                    for _, row in imported_df.iterrows():
-                        sku_val = str(row[col_sku]).strip() if pd.notnull(row[col_sku]) else ""
-                        if not sku_val or sku_val.lower() == "nan":
-                            continue
-                            
-                        cat_val = str(row[opt_cat]).strip() if opt_cat != "-- None --" and pd.notnull(row[opt_cat]) else "General"
-                        unit_val = str(row[opt_unit]).strip().upper() if opt_unit != "-- None --" and pd.notnull(row[opt_unit]) else "PCS"
-                        
-                        try:
-                            gst_val = float(row[opt_gst]) if opt_gst != "-- None --" and pd.notnull(row[opt_gst]) else 18.0
-                        except ValueError:
-                            gst_val = 18.0
-                            
-                        try:
-                            price_val = float(row[opt_price]) if opt_price != "-- None --" and pd.notnull(row[opt_price]) else 0.0
-                        except ValueError:
-                            price_val = 0.0
-                            
-                        new_records.append({
-                            "Official_SKU_Name": sku_val,
-                            "Category": cat_val,
-                            "Default_Unit": unit_val,
-                            "GST_Rate": gst_val,
-                            "Selling_Price": price_val
-                        })
-                    
-                    if new_records:
-                        bulk_df = pd.DataFrame(new_records)
-                        # Merge with existing master catalog, avoiding duplicate SKUs
-                        combined = pd.concat([master_df, bulk_df], ignore_index=True)
-                        combined = combined.drop_duplicates(subset=["Official_SKU_Name"], keep="last")
-                        
-                        save_master(combined, selected_store_slug)
-                        st.success(f"Successfully imported {len(new_records)} SKUs into {ACTIVE_STORE_DISPLAY}!")
-                        st.rerun()
-                    else:
-                        st.error("No valid SKU rows found in the uploaded file.")
-                        
-            except Exception as err:
-                st.error(f"Error parsing bulk catalog file: {err}")
-
-    st.divider()
-
     col_add, col_list = st.columns([1, 2])
     
     with col_add:
         with st.container(border=True):
-            st.markdown("#### ➕ Add Single Master SKU")
+            st.markdown("#### ➕ Add New Master SKU")
             add_sku = st.text_input("SKU Name (e.g. Copper Wire 1.5mm)")
             add_cat = st.text_input("Category", value="General")
             add_unit = st.selectbox("Default Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET"])
@@ -910,13 +807,7 @@ with tab_memory:
         st.dataframe(mem_df, use_container_width=True)
         st.write("")
         if st.button("🗑️ Reset Store Memory Cache"):
-            engine = get_db_engine()
-            store_id = get_or_create_store_id(selected_store_slug)
-            with engine.begin() as conn:
-                conn.execute(
-                    text("DELETE FROM vendor_mappings WHERE store_id = :store_id"),
-                    {"store_id": store_id}
-                )
+            save_json_memory({})
             st.success("Memory cache reset!")
             st.rerun()
     else:
@@ -934,7 +825,7 @@ with tab_guide:
         2. **Upload Bills:** Drop one or multiple purchase invoice photos in **Tab 1**.
         3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
         4. **Audit Workspace:** Check quantities, HSN codes, purchase rates, and mapped SKUs.
-        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer.
+        5. **Generate Quote PDF:** Open the Quotation expander to generate & download a PDF for a customer.
         6. **Download Import File:** Generate the `.xlsx` spreadsheet.
         7. **Import to ERP:** Open your accounting software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
         """)
