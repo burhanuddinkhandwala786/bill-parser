@@ -496,38 +496,66 @@ with tab_parser:
                 save_master(master_df, selected_store_slug)
                 st.toast("⚙️ Master SKU catalog expanded!")
                 
+            # =========================================================
+            # STRICT EXCEL TEMPLATE EXPORT MATCHING YOUR ERP SCREENSHOT
+            # =========================================================
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "Items"
             
-            ws.append([ACTIVE_STORE_DISPLAY])
-            ws.append(["Items"])
-            ws.append([f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}"])
-            ws.append([]) # Row 4
+            # Row 1: Company / Store Display Title (e.g. UNIVERSAL HARDWARE AND PLYWOOD STORE)
+            ws.cell(row=1, column=1, value=ACTIVE_STORE_DISPLAY)
             
+            # Row 2: Header Tag
+            ws.cell(row=2, column=1, value="Items")
+            
+            # Row 3: Timestamp Tag
+            ws.cell(row=3, column=1, value=f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}")
+            
+            # Row 4: Explicit Blank Row
+            
+            # Row 5: Exact 13 Column Headers (Cols A to M)
             exact_headers = [
-                "S. No.", "Name", "Current Quantity", "Unit", "HSN/SAC",
-                "Category", "GST Rate", "Selling Price", "Selling Price (Secondary)",
-                "Purchase Price", "Purchase Price (Secondary)", "Secondary Unit", "Ratio"
+                "S. No.", 
+                "Name", 
+                "Current Quantity", 
+                "Unit", 
+                "HSN/SAC",
+                "Category", 
+                "GST Rate", 
+                "Selling Price", 
+                "Selling Price (Secondary)",
+                "Purchase Price", 
+                "Purchase Price (Secondary)", 
+                "Secondary Unit", 
+                "Ratio"
             ]
-            ws.append(exact_headers)
             
+            for col_num, header_title in enumerate(exact_headers, 1):
+                ws.cell(row=5, column=col_num, value=header_title)
+            
+            # Row 6 Onwards: Item Rows
             for i, row in edited_df.iterrows():
-                selling_val = float(row["Selling Price"]) if row["Selling Price"] > 0 else ""
-                ws.append([
-                    i + 1,
-                    str(row["Official SKU"]),
-                    float(row["Current Quantity"]),
-                    str(row["Unit"]),
-                    str(row["HSN/SAC"]),
-                    str(row["Category"]),
-                    float(row["GST Rate"]),
-                    selling_val,
-                    "",
-                    float(row["Purchase Price"]),
-                    "", "", ""
-                ])
+                row_idx = 6 + i
                 
+                # Format empty string instead of 0 for non-configured prices if required
+                selling_val = float(row["Selling Price"]) if float(row["Selling Price"]) > 0 else ""
+                purchase_val = float(row["Purchase Price"])
+                
+                ws.cell(row=row_idx, column=1, value=i + 1)                             # A: S. No.
+                ws.cell(row=row_idx, column=2, value=str(row["Official SKU"]))           # B: Name
+                ws.cell(row=row_idx, column=3, value=float(row["Current Quantity"]))    # C: Current Quantity
+                ws.cell(row=row_idx, column=4, value=str(row["Unit"]))                  # D: Unit
+                ws.cell(row=row_idx, column=5, value=str(row["HSN/SAC"]))               # E: HSN/SAC
+                ws.cell(row=row_idx, column=6, value=str(row["Category"]))              # F: Category
+                ws.cell(row=row_idx, column=7, value=float(row["GST Rate"]))            # G: GST Rate
+                ws.cell(row=row_idx, column=8, value=selling_val)                       # H: Selling Price
+                ws.cell(row=row_idx, column=9, value="")                                # I: Selling Price (Secondary)
+                ws.cell(row=row_idx, column=10, value=purchase_val)                     # J: Purchase Price
+                ws.cell(row=row_idx, column=11, value="")                               # K: Purchase Price (Secondary)
+                ws.cell(row=row_idx, column=12, value="")                               # L: Secondary Unit
+                ws.cell(row=row_idx, column=13, value="")                               # M: Ratio
+
             buffer = BytesIO()
             wb.save(buffer)
             buffer.seek(0)
@@ -700,5 +728,5 @@ with tab_guide:
         4. **Audit Workspace:** Check quantities, HSN codes, purchase rates, and mapped SKUs.
         5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer.
         6. **Download Import File:** Generate the `.xlsx` spreadsheet.
-        7. **Import to ERP:** Open your accounting or ERP software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
+        7. **Import to ERP:** Open your accounting software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
         """)
