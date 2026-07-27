@@ -216,7 +216,7 @@ def reset_user_password(email: str, new_password: str):
     return True, "Password updated successfully! Please log in with your new password."
 
 # Initialize Cookie Manager
-cookie_manager = stx.CookieManager() if COOKIE_SUPPORT_AVAILABLE else None
+cookie_manager = stx.CookieManager(key="app_cookie_mgr") if COOKIE_SUPPORT_AVAILABLE else None
 
 # Session State Initialization
 if "authenticated" not in st.session_state:
@@ -581,7 +581,7 @@ def process_single_file_raw(file_bytes):
     except Exception as e:
         return {"ERROR": str(e)}
 
-# --- REPORTLAB PDF QUOTATION GENERATOR (NO BLACK BOXES) ---
+# --- REPORTLAB PDF QUOTATION GENERATOR ---
 def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
     if not REPORTLAB_AVAILABLE:
         raise ModuleNotFoundError("reportlab library is required for PDF generation.")
@@ -776,7 +776,6 @@ with tab_parser:
                         line_inclusive = float(row.get("Line Total Inclusive Amount") or 0.0)
                         hsn_sac = str(row.get("HSN Code") or "").strip()
                         
-                        # ACCURATE RECONCILIATION MATH WITH DISCOUNT
                         if line_taxable > 0:
                             total_taxable_item = line_taxable
                             final_base = line_taxable / qty
@@ -824,7 +823,13 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
-        # Compute all financial metrics
+        # Ensure correct numeric types
+        df["Current Quantity"] = pd.to_numeric(df["Current Quantity"], errors='coerce').fillna(1.0)
+        df["Purchase Price"] = pd.to_numeric(df["Purchase Price"], errors='coerce').fillna(0.0)
+        df["GST Rate"] = pd.to_numeric(df["GST Rate"], errors='coerce').fillna(18.0)
+        df["Selling Price"] = pd.to_numeric(df.get("Selling Price", 0.0), errors='coerce').fillna(0.0)
+        
+        # Calculate full financial metrics
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
         df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
@@ -846,7 +851,7 @@ with tab_parser:
         
         st.write("")
         
-        # PROFESSIONAL DUAL TOTALS AUDIT TABLE VIEW
+        # DUAL TOTALS AUDIT TABLE VIEW
         display_columns = [
             "Match Status",
             "Raw Vendor Item",
@@ -885,18 +890,20 @@ with tab_parser:
             }
         )
         
-        # Merge edited values back into main DataFrame
-        for col in available_cols:
-            if col in edited_display_df.columns:
-                df[col] = edited_display_df[col]
-                
-        # Re-compute dependent line total columns on fly
-        df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
-        df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
-        df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
-        df["Unit Cost (GST Paid) ₹"] = (df["Line Total (Incl. GST)"] / df["Current Quantity"]).round(2)
+        # Safely handle row modifications/additions/deletions
+        df_updated = edited_display_df.copy()
+        df_updated["Current Quantity"] = pd.to_numeric(df_updated["Current Quantity"], errors='coerce').fillna(1.0)
+        df_updated["Purchase Price"] = pd.to_numeric(df_updated["Purchase Price"], errors='coerce').fillna(0.0)
+        df_updated["GST Rate"] = pd.to_numeric(df_updated["GST Rate"], errors='coerce').fillna(18.0)
+        df_updated["Selling Price"] = pd.to_numeric(df_updated.get("Selling Price", 0.0), errors='coerce').fillna(0.0)
+
+        # Re-compute dependent line totals across all rows
+        df_updated["Line Total (Excl. GST)"] = (df_updated["Purchase Price"] * df_updated["Current Quantity"]).round(2)
+        df_updated["GST Tax Amount"] = (df_updated["Line Total (Excl. GST)"] * (df_updated["GST Rate"] / 100)).round(2)
+        df_updated["Line Total (Incl. GST)"] = (df_updated["Line Total (Excl. GST)"] + df_updated["GST Tax Amount"]).round(2)
+        df_updated["Unit Cost (GST Paid) ₹"] = (df_updated["Line Total (Incl. GST)"] / df_updated["Current Quantity"]).round(2)
         
-        st.session_state["parsed_df"] = df
+        st.session_state["parsed_df"] = df_updated
 
         st.divider()
         if st.button("✅ Confirm Audit & Generate Excel Import File", type="primary", use_container_width=True):
@@ -904,9 +911,9 @@ with tab_parser:
             master_updated = False
             current_master_skus = set(master_sku_list)
             
-            for idx, row in df.iterrows():
-                raw = str(row["Raw Vendor Item"]).strip().upper()
-                official = str(row["Official SKU"]).strip()
+            for idx, row in df_updated.iterrows():
+                raw = str(row.get("Raw Vendor Item", "")).strip().upper()
+                official = str(row.get("Official SKU", "")).strip()
                 
                 if raw and official and raw != official:
                     mapping_memory[raw] = official
@@ -949,7 +956,7 @@ with tab_parser:
             for col_num, header_title in enumerate(exact_headers, 1):
                 ws.cell(row=5, column=col_num, value=header_title)
             
-            for i, row in df.iterrows():
+            for i, row in df_updated.iterrows():
                 row_idx = 6 + i
                 selling_val = float(row["Selling Price"]) if float(row["Selling Price"]) > 0 else ""
                 purchase_val = float(row["Purchase Price"])
@@ -959,7 +966,7 @@ with tab_parser:
                 ws.cell(row=row_idx, column=3, value=float(row["Current Quantity"]))
                 ws.cell(row=row_idx, column=4, value=str(row["Unit"]))
                 ws.cell(row=row_idx, column=5, value=str(row["HSN/SAC"]))
-                ws.cell(row=row_idx, column=6, value=str(row["Category"]))
+                ws.cell(row=row_idx, column=6, value=str(row.get("Category", "General")))
                 ws.cell(row=row_idx, column=7, value=float(row["GST Rate"]))
                 ws.cell(row=row_idx, column=8, value=selling_val)
                 ws.cell(row=row_idx, column=9, value="")
@@ -1003,7 +1010,7 @@ with tab_parser:
                 quote_items = []
                 total_quote_value = 0.0
                 
-                for idx, row in df.iterrows():
+                for idx, row in df_updated.iterrows():
                     base_gst_paid_cost = float(row["Unit Cost (GST Paid) ₹"])
                     markup_price = round(base_gst_paid_cost * (1 + (markup_pct / 100)), 2)
                     qty = float(row["Current Quantity"])
