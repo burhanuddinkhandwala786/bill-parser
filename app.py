@@ -59,7 +59,7 @@ def get_store_list():
         default_path = os.path.join(DATA_DIR, "Universal_Hardware")
         os.makedirs(default_path, exist_ok=True)
         return ["Universal_Hardware"]
-    return stores
+    return sorted(stores)
 
 def sanitize_store_name(name):
     return "".join([c if c.isalnum() else "_" for c in name.strip()])
@@ -185,7 +185,7 @@ def save_master(df, store_slug):
     st.cache_data.clear()
 
 master_df = load_master(selected_store_slug)
-master_sku_list = master_df["Official_SKU_Name"].tolist() if not master_df.empty else []
+master_sku_list = master_df["Official_SKU_Name"].dropna().tolist() if not master_df.empty else []
 mapping_memory = load_json_memory()
 
 def match_sku(raw_name):
