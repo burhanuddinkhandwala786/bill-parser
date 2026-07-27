@@ -5,3 +5,5 @@ openpyxl
 pillow
 rapidfuzz
 tenacity
+sqlalchemy
+psycopg2-binary
