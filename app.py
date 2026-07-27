@@ -16,6 +16,13 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import create_engine, text
 
+# --- SAFE COOKIE MANAGER IMPORT ---
+try:
+    import extra_streamlit_components as stx
+    COOKIE_SUPPORT_AVAILABLE = True
+except ImportError:
+    COOKIE_SUPPORT_AVAILABLE = False
+
 # --- SAFE REPORTLAB PDF IMPORTS ---
 try:
     from reportlab.lib import colors
@@ -117,7 +124,7 @@ def save_store_phone(store_slug: str, phone: str):
                 {"phone": phone.strip(), "slug": store_slug}
             )
     except Exception:
-        pass  # Fails gracefully if column doesn't exist yet in Supabase
+        pass
 
 # --- AUTHENTICATION & MULTI-TENANT SESSION MANAGEMENT ---
 def hash_password(password: str) -> str:
@@ -170,6 +177,25 @@ def authenticate_user(email: str, password: str):
             }
     return None
 
+def get_user_by_slug(slug: str):
+    engine = get_db_engine()
+    try:
+        with engine.connect() as conn:
+            user = conn.execute(
+                text("SELECT slug, display_name, phone FROM stores WHERE slug = :slug"),
+                {"slug": slug.strip().lower()}
+            ).fetchone()
+            
+            if user:
+                return {
+                    "slug": user[0],
+                    "display_name": user[1],
+                    "phone": user[2] if len(user) > 2 and user[2] else ""
+                }
+    except Exception:
+        pass
+    return None
+
 def reset_user_password(email: str, new_password: str):
     engine = get_db_engine()
     hashed_pwd = hash_password(new_password)
@@ -189,11 +215,23 @@ def reset_user_password(email: str, new_password: str):
         )
     return True, "Password updated successfully! Please log in with your new password."
 
+# Initialize Cookie Manager
+cookie_manager = stx.CookieManager() if COOKIE_SUPPORT_AVAILABLE else None
+
 # Session State Initialization
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "user_store" not in st.session_state:
     st.session_state["user_store"] = None
+
+# Auto-Login from Browser Cookie
+if not st.session_state["authenticated"] and cookie_manager:
+    saved_store_slug = cookie_manager.get(cookie="store_session")
+    if saved_store_slug:
+        store_data = get_user_by_slug(saved_store_slug)
+        if store_data:
+            st.session_state["authenticated"] = True
+            st.session_state["user_store"] = store_data
 
 # --- LOGIN / SIGNUP / RESET SCREEN ---
 if not st.session_state["authenticated"]:
@@ -217,6 +255,11 @@ if not st.session_state["authenticated"]:
                         if store_data:
                             st.session_state["authenticated"] = True
                             st.session_state["user_store"] = store_data
+                            
+                            # Set persistent cookie for 30 days
+                            if cookie_manager:
+                                cookie_manager.set("store_session", store_data["slug"], max_age=30*24*3600)
+                                
                             st.success(f"Welcome back, {store_data['display_name']}!")
                             st.rerun()
                         else:
@@ -274,6 +317,8 @@ st.sidebar.divider()
 if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.session_state["authenticated"] = False
     st.session_state["user_store"] = None
+    if cookie_manager:
+        cookie_manager.delete("store_session")
     if "parsed_df" in st.session_state:
         del st.session_state["parsed_df"]
     st.rerun()
@@ -536,7 +581,6 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     story = []
     styles = getSampleStyleSheet()
 
-    # Title & Subheaders
     title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=24, leading=28, textColor=colors.HexColor('#1E3A8A'), alignment=0, spaceAfter=4)
     subtitle_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=11, leading=14, textColor=colors.HexColor('#4B5563'), spaceAfter=15)
     meta_style = ParagraphStyle('MetaStyle', parent=styles['Normal'], fontSize=10, leading=14, textColor=colors.HexColor('#1F2937'))
@@ -544,7 +588,6 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     story.append(Paragraph("QUOTATION", title_style))
     story.append(Paragraph(f"<b>Issued By:</b> {store_name.upper()} | <b>Contact:</b> {phone_str or 'N/A'}", subtitle_style))
     
-    # Metadata Block
     meta_data = [
         [Paragraph(f"<b>Customer Name:</b> {customer_name}", meta_style), Paragraph(f"<b>Date:</b> {time.strftime('%d-%m-%Y %H:%M')}", meta_style)]
     ]
@@ -557,7 +600,6 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     story.append(meta_table)
     story.append(Spacer(1, 15))
 
-    # Items Table Headers
     table_data = [["S.No", "Item Description", "Qty", "Unit", "Unit Price (₹)", "Total (₹)"]]
     
     cell_style = ParagraphStyle('CellStyle', parent=styles['Normal'], fontSize=9, leading=11, textColor=colors.HexColor('#111827'))
@@ -588,7 +630,6 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     story.append(item_table)
     story.append(Spacer(1, 15))
 
-    # Total Summary
     summary_style = ParagraphStyle('SummaryStyle', parent=styles['Heading2'], fontSize=14, leading=16, textColor=colors.HexColor('#2563EB'), alignment=2)
     story.append(Paragraph(f"<b>Grand Total: ₹{grand_total:,.2f}</b>", summary_style))
 
@@ -668,7 +709,6 @@ with tab_parser:
                         line_inclusive = float(row.get("Line Total Inclusive Amount") or 0.0)
                         hsn_sac = str(row.get("HSN Code") or "").strip()
                         
-                        # GROUND TRUTH RECONCILIATION MATH
                         if line_taxable > 0:
                             total_taxable_item = line_taxable
                             final_base = line_taxable / qty
@@ -716,12 +756,9 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
-        # Dual Rate Calculations (Exclusive and GST-Paid)
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
         df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
-        
-        # Calculate Per-Unit GST-Paid Rate
         df["Unit Cost (GST Paid) ₹"] = (df["Line Total (Incl. GST)"] / df["Current Quantity"]).round(2)
         
         total_taxable = df["Line Total (Excl. GST)"].sum()
