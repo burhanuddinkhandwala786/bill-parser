@@ -246,7 +246,6 @@ def extract_invoice_data(image):
     buffer.seek(0)
     optimized_img = Image.open(buffer)
 
-    # ENTERPRISE UPDATE: Strict instructions to extract Absolute Totals, preventing UOM math failures
     prompt = """
     Extract all purchase invoice items into strict JSON. CRITICAL INSTRUCTIONS:
     1. "Unit Price (Excl. Tax)": The standard per-item rate.
@@ -273,18 +272,25 @@ def extract_invoice_data(image):
     
     config = types.GenerateContentConfig(response_mime_type="application/json")
     contents = [optimized_img, prompt]
-    candidate_models = ['gemini-2.0-flash', 'gemini-1.5-flash']
+    
+    # Supported production models candidate list
+    candidate_models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite']
     
     last_error = None
     for model_name in candidate_models:
         try:
             response = _call_gemini_with_retry(client, model_name, contents, config)
-            return json.loads(response.text)
+            text = response.text.strip()
+            if text.startswith("```json"):
+                text = text[7:-3].strip()
+            elif text.startswith("```"):
+                text = text[3:-3].strip()
+            return json.loads(text)
         except Exception as e:
             last_error = e
             continue
             
-    raise Exception(f"AI Service busy across models: {last_error}")
+    raise Exception(f"AI Service error across models: {last_error}")
 
 def process_single_file(file_bytes):
     try:
@@ -302,14 +308,12 @@ def process_single_file(file_bytes):
         
         gst_rate = float(row.get("GST Rate") or 18.0)
         
-        # New Strict Variables
         unit_price = float(row.get("Unit Price (Excl. Tax)") or 0.0)
         line_taxable = float(row.get("Line Total Taxable Amount") or 0.0)
         line_inclusive = float(row.get("Line Total Inclusive Amount") or 0.0)
         hsn_sac = str(row.get("HSN Code") or "").strip()
         
-        # ENTERPRISE MATH: Absolute Total Reconciliation
-        # Resolves UOM mismatches, implicit freight charges, and tax errors.
+        # Absolute Total Reconciliation Math (Solves Mixed UOMs)
         if line_taxable > 0:
             final_base = line_taxable / qty
         elif unit_price > 0:
@@ -390,7 +394,7 @@ with tab_parser:
             file_bytes_list = [f.read() for f in uploaded_files]
             
             with st.status("Parsing purchase bills concurrently with Multimodal AI...", expanded=True) as status_container:
-                with ThreadPoolExecutor(max_workers=min(len(file_bytes_list), 15)) as executor:
+                with ThreadPoolExecutor(max_workers=min(len(file_bytes_list), 10)) as executor:
                     results = list(executor.map(process_single_file, file_bytes_list))
                     
                 for res in results:
