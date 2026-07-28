@@ -41,12 +41,6 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* Global App Background & Font Styling */
-    .stApp {
-        background-color: #F8FAFC;
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    }
-    
     /* Hide Streamlit input instruction prompts */
     div[data-testid="InputInstructions"] {
         display: none !important;
@@ -59,19 +53,24 @@ st.markdown("""
         max-width: 95% !important;
     }
     
-    /* Modern Card Containers */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #FFFFFF !important;
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 10px !important;
-        padding: 1rem !important;
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    /* Force readable text color for all body and markdown text */
+    body, p, span, label, div[data-testid="stMarkdownContainer"] {
+        color: #1E293B !important;
     }
     
     /* Professional Metrics Styling */
     div[data-testid="stMetricValue"] div {
         color: #2563EB !important;
         font-weight: 700 !important;
+    }
+    
+    /* Safe Column Layout Fixes */
+    div[data-testid="stColumn"] {
+        display: flex;
+        flex-direction: column;
+    }
+    div[data-testid="stColumn"] > div {
+        flex: 1;
     }
 </style>
 """, unsafe_allow_html=True)
