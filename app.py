@@ -489,7 +489,6 @@ def extract_invoice_data(image):
     if img_copy.mode in ("RGBA", "P"):
         img_copy = img_copy.convert("RGB")
         
-    # HIGH-PRECISION OCR CANVAS (1500px at 90% Quality): Guarantees zero loss for handwritten/faint details
     img_copy.thumbnail((1500, 1500), Image.Resampling.LANCZOS)
 
     buffer = BytesIO()
@@ -541,12 +540,9 @@ def extract_invoice_data(image):
     config = types.GenerateContentConfig(response_mime_type="application/json")
     contents = [optimized_img, prompt]
     
-    # Fast, high-capacity models first for speed, fallbacks for reliability
     candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
-    
     last_error = None
     
-    # Rotate through available API keys in the pool
     for api_key in API_KEYS_POOL:
         try:
             client = genai.Client(api_key=api_key)
@@ -567,6 +563,42 @@ def extract_invoice_data(image):
             continue
             
     raise Exception(f"AI Service error across all keys and models: {last_error}")
+
+def parse_item_names_from_image(image):
+    """Fast Vision Parser that extracts ONLY item product titles from handwritten/printed lists."""
+    img_copy = image.copy()
+    if img_copy.mode in ("RGBA", "P"):
+        img_copy = img_copy.convert("RGB")
+    img_copy.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+    
+    buffer = BytesIO()
+    img_copy.save(buffer, format="JPEG", quality=85)
+    buffer.seek(0)
+    opt_img = Image.open(buffer)
+
+    prompt = """
+    Extract ONLY the product/item names from this image or handwritten note list.
+    Ignore quantities, rates, prices, or header titles if present.
+    Return JSON format: {"Item Names": ["Item 1", "Item 2", "Item 3"]}
+    """
+    config = types.GenerateContentConfig(response_mime_type="application/json")
+    candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash']
+    
+    for api_key in API_KEYS_POOL:
+        try:
+            client = genai.Client(api_key=api_key)
+            for model in candidate_models:
+                try:
+                    res = _call_gemini_with_retry(client, model, [opt_img, prompt], config)
+                    txt = res.text.strip()
+                    if txt.startswith("```json"): txt = txt[7:-3].strip()
+                    elif txt.startswith("```"): txt = txt[3:-3].strip()
+                    return json.loads(txt).get("Item Names", [])
+                except Exception:
+                    continue
+        except Exception:
+            continue
+    return []
 
 def process_single_file_raw(file_bytes):
     try:
@@ -646,7 +678,6 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     cell_center = ParagraphStyle('CellC', fontSize=8, leading=11, textColor=colors.HexColor('#111827'), alignment=1)
     cell_right = ParagraphStyle('CellR', fontSize=8, leading=11, textColor=colors.HexColor('#111827'), alignment=2)
 
-    # Professional 8-Column Layout
     table_data = [[
         Paragraph("S.No", hdr_center), 
         Paragraph("Item Description", hdr_left), 
@@ -731,7 +762,7 @@ with tab_parser:
         
         q_tab_manual, q_tab_bill = st.tabs(["✍️ Quick Manual Entry (No Bill Needed)", "📥 From Parsed Purchase Bill"])
         
-        # --- MODE 1: MANUAL QUICK QUOTATION ---
+        # --- MODE 1: MANUAL QUICK QUOTATION (WITH QUICK ITEM NAME UPLOADER) ---
         with q_tab_manual:
             col_m1, col_m2 = st.columns([2, 2])
             with col_m1:
@@ -742,6 +773,22 @@ with tab_parser:
             if man_phone_input.strip() != saved_phone.strip():
                 save_store_phone(selected_store_slug, man_phone_input.strip())
                 st.session_state["user_store"]["phone"] = man_phone_input.strip()
+
+            # QUICK ITEM NAME IMPORTER EXPANDER
+            with st.expander("⚡ Quick-Load Item Names from Image or Photo Slip", expanded=False):
+                st.caption("Snap or upload a customer's handwritten list or order slip to auto-fill Item Descriptions below!")
+                quick_item_file = st.file_uploader("Upload List Photo / Image", type=["jpg", "jpeg", "png"], key="quick_item_uploader")
+                if quick_item_file is not None:
+                    if st.button("✨ Extract & Populate Item Names", key="btn_extract_items"):
+                        with st.spinner("Extracting product names from order list..."):
+                            extracted_names = parse_item_names_from_image(Image.open(quick_item_file))
+                            if extracted_names:
+                                new_rows = [{"Item Name": name, "Quantity": 1.0, "Unit": "PCS", "MRP (₹)": 0.0, "Discount (%)": 0.0} for name in extracted_names]
+                                st.session_state["manual_quote_data"] = pd.DataFrame(new_rows)
+                                st.success(f"Populated {len(extracted_names)} item names!")
+                                st.rerun()
+                            else:
+                                st.error("No item names detected in image.")
                 
             st.write("**Enter Quotation Items (MRP & Optional Discount):**")
             
@@ -950,7 +997,6 @@ with tab_parser:
                         qty = float(row.get("Quantity") or 1.0)
                         if qty <= 0: qty = 1.0
                         
-                        # --- GST TOGGLE OVERRIDE ---
                         if gst_bill_type == "Non-GST / Net Rate Bill (0% Tax)":
                             gst_rate = 0.0
                         else:
@@ -1333,7 +1379,7 @@ with tab_guide:
         2. **Upload Bills:** Drop image files or click a photo directly with your camera in **Tab 1**. Select whether the bill is Taxable GST or Non-GST.
         3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
         4. **Audit Workspace:** Check quantities, HSN codes, purchase rates, and mapped SKUs.
-        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer (Manual entry or from Bill with MRP/Discount).
+        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer (Manual entry with Quick Item list uploader or from Bill with MRP/Discount).
         6. **Download Import File:** Generate the `.xlsx` spreadsheet.
         7. **Import to ERP:** Open your accounting software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
         """)
