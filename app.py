@@ -764,7 +764,6 @@ with tab_parser:
                 }
             )
             
-            # Non-blocking state update
             calc_manual_df = edited_manual_df.copy()
             calc_manual_df["Quantity"] = pd.to_numeric(calc_manual_df["Quantity"], errors='coerce').fillna(1.0)
             calc_manual_df["MRP (₹)"] = pd.to_numeric(calc_manual_df.get("MRP (₹)", 0.0), errors='coerce').fillna(0.0)
@@ -875,7 +874,7 @@ with tab_parser:
 
     st.divider()
 
-    # --- INGESTION DROPZONE ---
+    # --- INGESTION DROPZONE (WITH GST PAID / NON-GST TOGGLE SWITCH) ---
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
@@ -883,12 +882,22 @@ with tab_parser:
             st.subheader("1. Ingestion Dropzone")
             st.caption("Upload files or click a photo directly using your phone or webcam.")
             
-            upload_mode = st.radio(
-                "Input Mode:", 
-                ["📸 Direct Camera Snap", "📁 File Upload"], 
-                horizontal=True,
-                key="dropzone_mode_switch"
-            )
+            c_mode, c_tax = st.columns([1, 1])
+            with c_mode:
+                upload_mode = st.radio(
+                    "Input Mode:", 
+                    ["📸 Direct Camera Snap", "📁 File Upload"], 
+                    horizontal=True,
+                    key="dropzone_mode_switch"
+                )
+            with c_tax:
+                gst_bill_type = st.radio(
+                    "Bill Tax Status:", 
+                    ["Taxable GST Bill", "Non-GST / Net Rate Bill (0% Tax)"], 
+                    horizontal=True,
+                    key="gst_bill_type_toggle",
+                    help="Non-GST overrides tax rate to 0% across all extracted items."
+                )
             
             staged_file_bytes = []
             
@@ -912,7 +921,8 @@ with tab_parser:
             st.subheader("⚡ Ingestion Queue")
             if staged_file_bytes:
                 st.success(f"📁 **{len(staged_file_bytes)} File(s)** Staged & Ready")
-                st.caption("Parallel AI engine ready to parse staged images concurrently.")
+                tax_status_str = "0% Tax Override" if gst_bill_type == "Non-GST / Net Rate Bill (0% Tax)" else "Standard Tax Extraction"
+                st.caption(f"Mode: **{tax_status_str}**")
             else:
                 st.info("No files staged.")
                 st.caption("Snap a photo or drop purchase bills to begin structured extraction.")
@@ -940,7 +950,12 @@ with tab_parser:
                         qty = float(row.get("Quantity") or 1.0)
                         if qty <= 0: qty = 1.0
                         
-                        gst_rate = float(row.get("GST Rate") or 18.0)
+                        # --- GST TOGGLE OVERRIDE ---
+                        if gst_bill_type == "Non-GST / Net Rate Bill (0% Tax)":
+                            gst_rate = 0.0
+                        else:
+                            gst_rate = float(row.get("GST Rate") or 18.0)
+                            
                         unit_price = float(row.get("Unit Price (Excl. Tax)") or 0.0)
                         discount = float(row.get("Discount Amount") or 0.0)
                         line_taxable = float(row.get("Line Total Taxable Amount") or 0.0)
@@ -1315,7 +1330,7 @@ with tab_guide:
         st.markdown("""
         ### How to Process & Sync Invoices:
         1. **Select Store:** Choose your active store location in the left sidebar directory.
-        2. **Upload Bills:** Drop image files or click a photo directly with your camera in **Tab 1**.
+        2. **Upload Bills:** Drop image files or click a photo directly with your camera in **Tab 1**. Select whether the bill is Taxable GST or Non-GST.
         3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
         4. **Audit Workspace:** Check quantities, HSN codes, purchase rates, and mapped SKUs.
         5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer (Manual entry or from Bill with MRP/Discount).
