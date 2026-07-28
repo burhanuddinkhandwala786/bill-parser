@@ -71,7 +71,6 @@ def sanitize_store_slug(name):
     return "".join([c if c.isalnum() else "_" for c in name.strip()]).lower()
 
 def get_or_create_store_id(store_slug: str, display_name: str = None) -> int:
-    """Gets the database ID for a store slug, creating it if missing."""
     engine = get_db_engine()
     slug = sanitize_store_slug(store_slug)
     if not display_name:
@@ -93,7 +92,6 @@ def get_or_create_store_id(store_slug: str, display_name: str = None) -> int:
         return insert_res.fetchone()[0]
 
 def get_store_phone(store_slug: str) -> str:
-    """Fetches business phone numbers saved in database for a store safely."""
     engine = get_db_engine()
     try:
         with engine.connect() as conn:
@@ -108,7 +106,6 @@ def get_store_phone(store_slug: str) -> str:
     return ""
 
 def save_store_phone(store_slug: str, phone: str):
-    """Saves updated business phone numbers to database safely."""
     engine = get_db_engine()
     try:
         with engine.begin() as conn:
@@ -439,12 +436,12 @@ mapping_memory = load_json_memory(selected_store_slug)
 def match_sku(raw_name):
     cleaned_raw = raw_name.strip().upper()
     if cleaned_raw in mapping_memory:
-        return mapping_memory[cleaned_raw], "🧠 Learned Memory"
+        return mapping_memory[cleaned_raw]
     if master_sku_list:
         match, score, _ = process.extractOne(raw_name, master_sku_list, processor=utils.default_process)
         if score > 65:
-            return match, f"🔍 Fuzzy ({int(score)}%)"
-    return raw_name, "⚠️ New SKU"
+            return match
+    return raw_name
 
 def get_known_selling_price(sku_name):
     if not master_df.empty and "Selling_Price" in master_df.columns:
@@ -539,41 +536,6 @@ def extract_invoice_data(image):
             continue
             
     raise Exception(f"AI Service error across all keys and models: {last_error}")
-
-def parse_item_names_from_image(image):
-    img_copy = image.copy()
-    if img_copy.mode in ("RGBA", "P"):
-        img_copy = img_copy.convert("RGB")
-    img_copy.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
-    
-    buffer = BytesIO()
-    img_copy.save(buffer, format="JPEG", quality=85)
-    buffer.seek(0)
-    opt_img = Image.open(buffer)
-
-    prompt = """
-    Extract item details from this order slip or handwritten list into JSON.
-    Format: {"Items": [{"Item Name": "Description", "Quantity": 1.0, "MRP": 0.0}]}
-    If Quantity or MRP are unreadable, default Quantity to 1.0 and MRP to 0.0.
-    """
-    config = types.GenerateContentConfig(response_mime_type="application/json")
-    candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash']
-    
-    for api_key in API_KEYS_POOL:
-        try:
-            client = genai.Client(api_key=api_key)
-            for model in candidate_models:
-                try:
-                    res = _call_gemini_with_retry(client, model, [opt_img, prompt], config)
-                    txt = res.text.strip()
-                    if txt.startswith("```json"): txt = txt[7:-3].strip()
-                    elif txt.startswith("```"): txt = txt[3:-3].strip()
-                    return json.loads(txt).get("Items", [])
-                except Exception:
-                    continue
-        except Exception:
-            continue
-    return []
 
 def process_single_file_raw(file_bytes):
     try:
@@ -734,7 +696,7 @@ with tab_parser:
         st.caption("Create a professional PDF quote instantly either by manual quick entry or auto-calculating from an audited purchase bill.")
         
         saved_phone = st.session_state["user_store"].get("phone") or get_store_phone(selected_store_slug)
-        q_tab_manual, q_tab_bill = st.tabs(["✍️ Quick Manual / Slip Entry", "📥 Auto-Quote from Parsed Bill"])
+        q_tab_manual, q_tab_bill = st.tabs(["✍️ Quick Manual Entry", "📥 Auto-Quote from Parsed Bill"])
         
         # --- MODE 1: MANUAL QUICK QUOTATION ---
         with q_tab_manual:
@@ -748,29 +710,6 @@ with tab_parser:
                 save_store_phone(selected_store_slug, man_phone_input.strip())
                 st.session_state["user_store"]["phone"] = man_phone_input.strip()
 
-            with st.expander("📸 Auto-Fill Items from Photo / Order Slip", expanded=False):
-                st.caption("Snap or upload a photo of an order slip to auto-fill product descriptions and quantities!")
-                quick_item_file = st.file_uploader("Upload Slip Photo", type=["jpg", "jpeg", "png"], key="quick_item_uploader")
-                if quick_item_file is not None:
-                    if st.button("✨ Auto-Populate Items", key="btn_extract_items"):
-                        with st.spinner("Parsing items from slip..."):
-                            extracted_items = parse_item_names_from_image(Image.open(quick_item_file))
-                            if extracted_items:
-                                new_rows = []
-                                for item in extracted_items:
-                                    new_rows.append({
-                                        "Item Name": str(item.get("Item Name", "Item")),
-                                        "Quantity": float(item.get("Quantity") or 1.0),
-                                        "Unit": "PCS",
-                                        "MRP (₹)": float(item.get("MRP") or 0.0),
-                                        "Discount (%)": 0.0
-                                    })
-                                st.session_state["manual_quote_data"] = pd.DataFrame(new_rows)
-                                st.success(f"Populated {len(extracted_items)} items!")
-                                st.rerun()
-                            else:
-                                st.error("No items detected in photo.")
-                
             st.write("**Enter Quotation Items (MRP & Optional Discount):**")
             
             if "manual_quote_data" not in st.session_state:
@@ -946,7 +885,16 @@ with tab_parser:
 
     if staged_file_bytes:
         st.write("")
-        if st.button("🚀 Process Invoices with Fast AI Engine", type="primary", use_container_width=True):
+        c_btn1, c_btn2 = st.columns([3, 1])
+        with c_btn1:
+            process_btn = st.button("🚀 Process Invoices with Fast AI Engine", type="primary", use_container_width=True)
+        with c_btn2:
+            if st.button("🧹 Clear Queue", use_container_width=True):
+                if "parsed_df" in st.session_state:
+                    del st.session_state["parsed_df"]
+                st.rerun()
+
+        if process_btn:
             if "parsed_df" in st.session_state:
                 del st.session_state["parsed_df"]
                 
@@ -972,22 +920,19 @@ with tab_parser:
                         else:
                             gst_rate = float(row.get("GST Rate") or 18.0)
                             
-                        # ANCHORED MATH: Printed Taxable Amount is Ground Truth!
                         printed_taxable = float(row.get("Printed Taxable Amount") or 0.0)
                         hsn_sac = str(row.get("HSN Code") or "").strip()
                         
-                        # Effective base purchase rate per primary physical piece
                         base_rate_per_pc = printed_taxable / qty if qty > 0 else 0.0
                         
                         raw_item_name = str(row.get("Item Name", "")).strip()
-                        matched_sku, match_type = match_sku(raw_item_name)
+                        matched_sku = match_sku(raw_item_name)
                         known_selling = get_known_selling_price(matched_sku)
                         
                         all_parsed_items.append({
                             "Supplier Name": supplier,
                             "Raw Vendor Item": raw_item_name,
                             "Official SKU": matched_sku,
-                            "Match Status": match_type,
                             "Current Quantity": qty,
                             "Unit": str(row.get("Unit", "PCS")).upper(),
                             "HSN/SAC": hsn_sac,
@@ -995,7 +940,7 @@ with tab_parser:
                             "GST Rate": gst_rate,
                             "Purchase Price": round(base_rate_per_pc, 2),
                             "Line Total Taxable": round(printed_taxable, 2),
-                            "Selling Price": round(known_selling, 2)
+                            "Selling Price": round(known_selling, 0.0)
                         })
                     
                 status_container.update(label="✅ Ingestion & Batch Extraction Complete!", state="complete", expanded=False)
@@ -1009,11 +954,10 @@ with tab_parser:
     if "parsed_df" in st.session_state:
         st.divider()
         st.subheader("2. Live Inventory Audit Workspace")
-        st.caption("Verify AI extraction, mapped SKUs, and landed costs before exporting to accounting software or assigning Selling Prices (SP).")
+        st.caption("Verify AI extraction, mapped SKUs, and landed costs before exporting to accounting software.")
         
         df = st.session_state["parsed_df"]
         
-        # --- SAFE COLUMN ASSIGNMENTS (PREVENTS CRASHES) ---
         df["Current Quantity"] = pd.to_numeric(df["Current Quantity"], errors='coerce').fillna(1.0)
         df["Purchase Price"] = pd.to_numeric(df["Purchase Price"], errors='coerce').fillna(0.0)
         df["GST Rate"] = pd.to_numeric(df["GST Rate"], errors='coerce').fillna(18.0)
@@ -1022,27 +966,28 @@ with tab_parser:
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
         df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
-        
-        # TRUE LANDED COST PER PIECE (GST PAID)
         df["Unit Cost (GST Paid) ₹"] = (df["Line Total (Incl. GST)"] / df["Current Quantity"]).round(2)
         
         total_taxable = df["Line Total (Excl. GST)"].sum()
         total_gst = df["GST Tax Amount"].sum()
-        grand_total_incl_tax = total_taxable + total_gst
+        subtotal_incl_tax = total_taxable + total_gst
 
         uom_groups = df.groupby("Unit")["Current Quantity"].sum()
         uom_summary_str = " | ".join([f"{val:,.2f} {unit}" for unit, val in uom_groups.items()])
 
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Total Line Items", f"{len(df)} Items")
-        m2.metric("Stock Quantities by UOM", uom_summary_str)
-        m3.metric("Taxable Base (Excl. GST)", f"₹{total_taxable:,.2f}")
-        m4.metric("Grand Total (GST Paid)", f"₹{grand_total_incl_tax:,.2f}", delta=f"GST Tax: ₹{total_gst:,.2f}")
+        # ROUND OFF ADJUSTMENT (PRACTICAL REAL-WORLD FEATURE)
+        c_m1, c_m2, c_m3, c_m4 = st.columns([1, 1, 1, 1])
+        c_m1.metric("Total Line Items", f"{len(df)} Items")
+        c_m2.metric("Stock Quantities by UOM", uom_summary_str)
+        c_m3.metric("Taxable Base (Excl. GST)", f"₹{total_taxable:,.2f}")
+        
+        round_off_val = st.sidebar.number_input("Bill Round-Off Adjustment (₹)", value=0.0, step=0.05, format="%.2f", help="Adjust to match paper invoice total exactly.")
+        final_bill_total = subtotal_incl_tax + round_off_val
+        c_m4.metric("Grand Total (GST Paid)", f"₹{final_bill_total:,.2f}", delta=f"GST Tax: ₹{total_gst:,.2f}")
         
         st.write("")
         
         display_columns = [
-            "Match Status",
             "Raw Vendor Item",
             "Official SKU",
             "Current Quantity",
@@ -1064,7 +1009,6 @@ with tab_parser:
             use_container_width=True,
             key="audit_editor",
             column_config={
-                "Match Status": st.column_config.TextColumn("Match Status", disabled=True),
                 "Raw Vendor Item": st.column_config.TextColumn("Raw Vendor Item", disabled=True),
                 "Official SKU": st.column_config.SelectboxColumn("Official SKU Name", options=master_sku_list, required=True) if master_sku_list else "Official SKU",
                 "Current Quantity": st.column_config.NumberColumn("Qty (Pcs/Sheets)", min_value=0.01, format="%.2f"),
