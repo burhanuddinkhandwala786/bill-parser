@@ -471,14 +471,10 @@ def _call_gemini_with_retry(client, model_name, contents, config):
     )
 
 def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
-    """Handles both Image files (JPG/PNG) and Native PDF documents seamlessly."""
-    
     if "pdf" in mime_type.lower():
-        # Native PDF content payload
         file_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
         contents = [file_part]
     else:
-        # High-precision Image canvas optimization (1500px at 90% JPEG quality)
         img = Image.open(BytesIO(file_bytes))
         img_copy = img.copy()
         if img_copy.mode in ("RGBA", "P"):
@@ -722,11 +718,18 @@ with tab_parser:
                 save_store_phone(selected_store_slug, man_phone_input.strip())
                 st.session_state["user_store"]["phone"] = man_phone_input.strip()
 
+            # MARKUP & DISCOUNT SLIDERS FOR MANUAL QUOTE
+            col_mk1, col_mk2 = st.columns([1, 1])
+            with col_mk1:
+                manual_markup_pct = st.number_input("Profit Markup (% On Base MRP/Cost)", min_value=0.0, value=0.0, step=1.0, key="man_markup_input")
+            with col_mk2:
+                manual_disc_pct = st.number_input("Overall Discount (%)", min_value=0.0, max_value=100.0, value=0.0, step=1.0, key="man_disc_input")
+
             st.write("**Enter Quotation Items (MRP & Optional Discount):**")
             
             if "manual_quote_data" not in st.session_state:
                 st.session_state["manual_quote_data"] = pd.DataFrame([
-                    {"Item Name": "Plywood 18mm Commercial", "Quantity": 2.0, "Unit": "PCS", "MRP (₹)": 1800.0, "Discount (%)": 5.0},
+                    {"Item Name": "Plywood 18mm Commercial", "Quantity": 2.0, "Unit": "PCS", "MRP / Base Rate (₹)": 1800.0, "Disc %": 5.0},
                 ])
                 
             edited_manual_df = st.data_editor(
@@ -738,8 +741,8 @@ with tab_parser:
                     "Item Name": st.column_config.TextColumn("Item Description", required=True),
                     "Quantity": st.column_config.NumberColumn("Qty", min_value=0.01, format="%.2f", default=1.0),
                     "Unit": st.column_config.SelectboxColumn("Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET", "MTR", "SQM", "PKT", "BTL"], default="PCS"),
-                    "MRP (₹)": st.column_config.NumberColumn("MRP / Rate (₹)", min_value=0.0, format="₹%.2f", default=0.0),
-                    "Discount (%)": st.column_config.NumberColumn("Disc %", min_value=0.0, max_value=100.0, format="%.1f%%", default=0.0),
+                    "MRP / Base Rate (₹)": st.column_config.NumberColumn("MRP / Base Rate (₹)", min_value=0.0, format="₹%.2f", default=0.0),
+                    "Disc %": st.column_config.NumberColumn("Item Disc %", min_value=0.0, max_value=100.0, format="%.1f%%", default=0.0),
                 }
             )
             
@@ -747,8 +750,16 @@ with tab_parser:
             
             calc_manual_df = edited_manual_df.copy()
             calc_manual_df["Quantity"] = pd.to_numeric(calc_manual_df["Quantity"], errors='coerce').fillna(1.0)
-            calc_manual_df["MRP (₹)"] = pd.to_numeric(calc_manual_df.get("MRP (₹)", 0.0), errors='coerce').fillna(0.0)
-            calc_manual_df["Discount (%)"] = pd.to_numeric(calc_manual_df.get("Discount (%)", 0.0), errors='coerce').fillna(0.0)
+            calc_manual_df["MRP (₹)"] = pd.to_numeric(calc_manual_df.get("MRP / Base Rate (₹)", 0.0), errors='coerce').fillna(0.0)
+            
+            # Combine item-level discount + global profit markup
+            item_disc = pd.to_numeric(calc_manual_df.get("Disc %", 0.0), errors='coerce').fillna(0.0)
+            combined_disc = (item_disc + manual_disc_pct).clip(upper=100.0)
+            calc_manual_df["Discount (%)"] = combined_disc
+            
+            # Apply Profit Markup
+            marked_up_mrp = (calc_manual_df["MRP (₹)"] * (1 + (manual_markup_pct / 100))).round(2)
+            calc_manual_df["MRP (₹)"] = marked_up_mrp
             
             calc_manual_df["Customer Unit Price (₹)"] = (calc_manual_df["MRP (₹)"] * (1 - (calc_manual_df["Discount (%)"] / 100))).round(2)
             calc_manual_df["Total Value (₹)"] = (calc_manual_df["Quantity"] * calc_manual_df["Customer Unit Price (₹)"]).round(2)
@@ -782,7 +793,6 @@ with tab_parser:
                             key="dl_man_pdf"
                         )
                         
-                        # 1-CLICK WHATSAPP SHARE DEEP LINK
                         clean_num = ''.join(filter(str.isdigit, man_phone_input))
                         wa_msg = urllib.parse.quote(f"Hello {man_cust_name},\nHere is your official quotation from {ACTIVE_STORE_DISPLAY}.\nTotal Amount: ₹{man_grand_total:,.2f}\nThank you!")
                         wa_url = f"https://wa.me/{clean_num}?text={wa_msg}" if clean_num else f"https://wa.me/?text={wa_msg}"
@@ -801,7 +811,7 @@ with tab_parser:
                 with col_q2:
                     biz_phone_input = st.text_input("Phone", value=saved_phone, key="bill_phone_input")
                 with col_q3:
-                    markup_pct = st.number_input("Markup %", min_value=0.0, value=15.0, step=1.0, key="bill_markup_input")
+                    markup_pct = st.number_input("Profit Markup (% On Landed Cost)", min_value=0.0, value=15.0, step=1.0, key="bill_markup_input")
                 with col_q4:
                     disc_pct_bill = st.number_input("Discount %", min_value=0.0, max_value=100.0, value=0.0, step=1.0, key="bill_disc_input")
                 
@@ -852,7 +862,7 @@ with tab_parser:
 
     st.divider()
 
-    # --- INGESTION DROPZONE (WITH NATIVE PDF + IMAGE SUPPORT) ---
+    # --- INGESTION DROPZONE ---
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
@@ -968,7 +978,7 @@ with tab_parser:
                             "GST Rate": gst_rate,
                             "Purchase Price": round(base_rate_per_pc, 2),
                             "Line Total Taxable": round(printed_taxable, 2),
-                            "Selling Price": round(known_selling, 0.0)
+                            "Selling Price": round(known_selling, 2)  # FIXED: Pure int decimal places
                         })
                     
                 status_container.update(label="✅ Ingestion & Batch Extraction Complete!", state="complete", expanded=False)
@@ -1310,7 +1320,7 @@ with tab_guide:
         2. **Upload Bills:** Drop images, PDFs, or click a photo directly with your camera in **Tab 1**. Select whether the bill is Taxable GST or Non-GST.
         3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
         4. **Audit Workspace:** Check quantities, HSN codes, landed purchase rates, and mapped SKUs.
-        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer and send via WhatsApp.
+        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer with your Profit Markup (%) and send via WhatsApp.
         6. **Download Import File:** Generate the `.xlsx` spreadsheet.
         7. **Import to ERP:** Open your accounting software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
         """)
