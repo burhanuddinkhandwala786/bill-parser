@@ -33,7 +33,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CLEAN THEME-SAFE CSS ---
+# --- PRO-GRADE VISUAL SYSTEM (GRAPHITE / COBALT / BRASS) ---
 st.markdown("""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -51,29 +51,29 @@ st.markdown("""
         --uos-border: #E2E4E9;
         --uos-border-subtle: #EDEEF1;
         --uos-border-strong: #CDD1D9;
- 
+
         /* -- Command Sidebar (Graphite) -- */
         --uos-graphite: #0E0F13;
         --uos-graphite-elevated: #1A1C22;
         --uos-graphite-border: #2A2D35;
         --uos-graphite-text: #E7E8EC;
         --uos-graphite-text-muted: #8D9099;
- 
+
         /* -- Functional Accent (Cobalt) -- */
         --uos-accent: #2851E3;
         --uos-accent-hover: #1E3FC0;
         --uos-accent-subtle: #EAF0FE;
         --uos-accent-text: #1B3ACC;
- 
+
         /* -- Signature Accent (Brass) -- */
         --uos-brass: #B08D3E;
         --uos-brass-soft: #E8DCC0;
- 
+
         /* -- Status -- */
         --uos-success: #0E9F6E;
         --uos-success-subtle: #E7F8F1;
         --uos-danger: #D0362E;
- 
+
         /* -- Geometry -- */
         --uos-radius-sm: 6px;
         --uos-radius: 8px;
@@ -82,7 +82,7 @@ st.markdown("""
         --uos-shadow-card: 0 1px 2px rgba(10, 11, 13, 0.04), 0 8px 24px -12px rgba(10, 11, 13, 0.10);
         --uos-shadow-lifted: 0 2px 4px rgba(10, 11, 13, 0.06), 0 16px 40px -16px rgba(10, 11, 13, 0.16);
     }
- 
+
     /* ============ GLOBAL CANVAS & TYPE ============ */
     html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
@@ -116,13 +116,13 @@ st.markdown("""
     }
     div[data-testid="InputInstructions"] { display: none !important; }
     ::selection { background: var(--uos-accent-subtle); color: var(--uos-accent-text); }
- 
+
     /* Focus ring, everywhere, always visible */
     *:focus-visible {
         outline: 2px solid var(--uos-accent) !important;
         outline-offset: 2px !important;
     }
- 
+
     /* ============ DISPLAY TYPOGRAPHY ============ */
     h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
         font-family: 'Manrope', 'Inter', sans-serif !important;
@@ -152,13 +152,13 @@ st.markdown("""
         border-color: var(--uos-border) !important;
         margin: 1.5rem 0 !important;
     }
- 
+
     /* Monospace treatment for codes, IDs, and figures — reads as engineered data */
     code, .stCodeBlock, [data-testid="stMetricValue"] div {
         font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
         font-variant-numeric: tabular-nums;
     }
- 
+
     /* ============ COMMAND SIDEBAR (GRAPHITE) ============ */
     [data-testid="stSidebar"] {
         background-color: var(--uos-graphite) !important;
@@ -212,7 +212,7 @@ st.markdown("""
         letter-spacing: 0.06em;
         font-weight: 600 !important;
     }
- 
+
     /* ============ CARDS & CONTAINERS ============ */
     [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stForm"], [data-testid="stExpander"] {
         background-color: var(--uos-surface) !important;
@@ -226,7 +226,7 @@ st.markdown("""
         font-weight: 700 !important;
         color: var(--uos-ink) !important;
     }
- 
+
     /* ============ METRIC CARDS ============ */
     [data-testid="stMetric"] {
         background: linear-gradient(180deg, var(--uos-surface) 0%, var(--uos-surface-hover) 100%) !important;
@@ -254,7 +254,7 @@ st.markdown("""
         font-family: 'JetBrains Mono', monospace !important;
         font-size: 0.75rem !important;
     }
- 
+
     /* ============ BUTTONS ============ */
     .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
         font-family: 'Inter', sans-serif !important;
@@ -287,7 +287,7 @@ st.markdown("""
         background: var(--uos-accent-hover) !important;
         border-color: var(--uos-accent-hover) !important;
     }
- 
+
     /* ============ INPUT FIELDS & FORMS ============ */
     .stTextInput input, .stNumberInput input, .stTextArea textarea,
     div[data-baseweb="input"] input, div[data-baseweb="select"] > div {
@@ -315,7 +315,7 @@ st.markdown("""
         text-transform: none !important;
         letter-spacing: normal !important;
     }
- 
+
     /* ============ DATA TABLES & EDITORS ============ */
     [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
         border: 1px solid var(--uos-border) !important;
@@ -337,7 +337,7 @@ st.markdown("""
         font-family: 'Inter', sans-serif !important;
         font-variant-numeric: tabular-nums;
     }
- 
+
     /* ============ TABS ============ */
     .stTabs [data-baseweb="tab-list"] {
         gap: 4px;
@@ -364,7 +364,7 @@ st.markdown("""
         font-weight: 800 !important;
         border-bottom-color: var(--uos-brass) !important;
     }
- 
+
     /* ============ FILE UPLOADER DROPZONE ============ */
     [data-testid="stFileUploaderDropzone"] {
         background-color: var(--uos-surface-sunken) !important;
@@ -375,13 +375,13 @@ st.markdown("""
         border-color: var(--uos-accent) !important;
         background-color: var(--uos-accent-subtle) !important;
     }
- 
+
     /* ============ ALERTS / STATUS ============ */
     [data-testid="stAlertContainer"] {
         border-radius: var(--uos-radius) !important;
         border: 1px solid var(--uos-border) !important;
     }
- 
+
     /* ============ CAMERA INPUT ============ */
     [data-testid="stCameraInput"] {
         border-radius: var(--uos-radius-lg) !important;
