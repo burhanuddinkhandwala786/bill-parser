@@ -388,6 +388,67 @@ st.markdown("""
         overflow: hidden;
         border: 1px solid var(--uos-border) !important;
     }
+
+    /* ============ HARDENING PATCHES ============
+       These components pull color from Streamlit's theme engine before
+       page CSS runs (expander header bar, tab active indicator, number
+       input steppers, alert boxes). We pin them explicitly so they never
+       fall back to a mismatched theme default. */
+
+    [data-testid="stExpander"] summary,
+    [data-testid="stExpander"] details > summary {
+        background-color: var(--uos-surface) !important;
+        border-radius: var(--uos-radius-lg) var(--uos-radius-lg) 0 0 !important;
+    }
+    [data-testid="stExpander"] summary:hover {
+        background-color: var(--uos-surface-hover) !important;
+    }
+
+    /* Tab active indicator can render as its own sliding highlight element
+       in addition to (or instead of) the tab's own border-bottom. */
+    [data-baseweb="tab-highlight"] {
+        background-color: var(--uos-brass) !important;
+        height: 2px !important;
+    }
+    [data-baseweb="tab-border"] {
+        background-color: var(--uos-border) !important;
+    }
+
+    /* Number input +/- steppers */
+    button[data-testid="stNumberInputStepUp"],
+    button[data-testid="stNumberInputStepDown"] {
+        background-color: var(--uos-surface) !important;
+        border: 1px solid var(--uos-border) !important;
+        color: var(--uos-ink) !important;
+    }
+    button[data-testid="stNumberInputStepUp"]:hover,
+    button[data-testid="stNumberInputStepDown"]:hover {
+        background-color: var(--uos-surface-hover) !important;
+        border-color: var(--uos-accent) !important;
+    }
+
+    /* Radio / checkbox accent dot should match cobalt, not a stray theme default */
+    [data-baseweb="radio"] div:first-child, [data-baseweb="checkbox"] div:first-child {
+        border-color: var(--uos-border-strong) !important;
+    }
+
+    /* Alerts (st.info / st.success / st.warning / st.error) — neutral, on-brand tints */
+    [data-testid="stAlertContainer"] {
+        border-radius: var(--uos-radius) !important;
+        border: 1px solid var(--uos-border) !important;
+        background-color: var(--uos-surface-sunken) !important;
+    }
+    [data-testid="stAlertContainer"] p {
+        color: var(--uos-ink-secondary) !important;
+    }
+    [data-testid="stAlertContainer"]:has(svg[color="rgb(9, 171, 59)"]),
+    div[data-baseweb="notification"][kind="positive"] {
+        background-color: var(--uos-success-subtle) !important;
+        border-color: var(--uos-success) !important;
+    }
+
+    /* stDataFrame / stDataEditor read their palette from theme.toml directly
+       (they render on canvas) — see .streamlit/config.toml for those colors. */
 </style>
 """, unsafe_allow_html=True)
 
