@@ -485,7 +485,6 @@ def extract_invoice_data(image):
     buffer.seek(0)
     optimized_img = Image.open(buffer)
 
-    # ENTERPRISE OCR PROMPT WITH PRINTED LINE TOTAL ANCHORING
     prompt = """
     You are an enterprise financial OCR system for wholesale, retail, plywood, hardware, and building material invoices.
 
@@ -730,12 +729,12 @@ with tab_parser:
 
     st.divider()
 
-    # --- DUAL QUOTATION GENERATOR EXPANDER ---
+    # --- EASY STREAMLINED QUOTATION GENERATOR ---
     with st.expander("📄 Generate Customer Quotation (On-the-go)", expanded=False):
         st.caption("Create a professional PDF quote instantly either by manual quick entry or auto-calculating from an audited purchase bill.")
         
         saved_phone = st.session_state["user_store"].get("phone") or get_store_phone(selected_store_slug)
-        q_tab_manual, q_tab_bill = st.tabs(["✍️ Quick Manual Entry (No Bill Needed)", "📥 From Parsed Purchase Bill"])
+        q_tab_manual, q_tab_bill = st.tabs(["✍️ Quick Manual / Slip Entry", "📥 Auto-Quote from Parsed Bill"])
         
         # --- MODE 1: MANUAL QUICK QUOTATION ---
         with q_tab_manual:
@@ -743,17 +742,17 @@ with tab_parser:
             with col_m1:
                 man_cust_name = st.text_input("Customer Name / Reference", value="Walk-in Customer", key="man_cust_input")
             with col_m2:
-                man_phone_input = st.text_input("Business Phone Number(s)", value=saved_phone, key="man_phone_input")
+                man_phone_input = st.text_input("Contact Phone", value=saved_phone, key="man_phone_input")
                 
             if man_phone_input.strip() != saved_phone.strip():
                 save_store_phone(selected_store_slug, man_phone_input.strip())
                 st.session_state["user_store"]["phone"] = man_phone_input.strip()
 
-            with st.expander("⚡ Quick-Load Items from Handwritten Order Slip or Photo", expanded=False):
+            with st.expander("📸 Auto-Fill Items from Photo / Order Slip", expanded=False):
                 st.caption("Snap or upload a photo of an order slip to auto-fill product descriptions and quantities!")
                 quick_item_file = st.file_uploader("Upload Slip Photo", type=["jpg", "jpeg", "png"], key="quick_item_uploader")
                 if quick_item_file is not None:
-                    if st.button("✨ Extract & Populate Items", key="btn_extract_items"):
+                    if st.button("✨ Auto-Populate Items", key="btn_extract_items"):
                         with st.spinner("Parsing items from slip..."):
                             extracted_items = parse_item_names_from_image(Image.open(quick_item_file))
                             if extracted_items:
@@ -767,7 +766,7 @@ with tab_parser:
                                         "Discount (%)": 0.0
                                     })
                                 st.session_state["manual_quote_data"] = pd.DataFrame(new_rows)
-                                st.success(f"Populated {len(extracted_items)} items into quotation table!")
+                                st.success(f"Populated {len(extracted_items)} items!")
                                 st.rerun()
                             else:
                                 st.error("No items detected in photo.")
@@ -776,7 +775,7 @@ with tab_parser:
             
             if "manual_quote_data" not in st.session_state:
                 st.session_state["manual_quote_data"] = pd.DataFrame([
-                    {"Item Name": "Sample Product A", "Quantity": 1.0, "Unit": "PCS", "MRP (₹)": 500.0, "Discount (%)": 10.0},
+                    {"Item Name": "Plywood 18mm Commercial", "Quantity": 2.0, "Unit": "PCS", "MRP (₹)": 1800.0, "Discount (%)": 5.0},
                 ])
                 
             edited_manual_df = st.data_editor(
@@ -788,8 +787,8 @@ with tab_parser:
                     "Item Name": st.column_config.TextColumn("Item Description", required=True),
                     "Quantity": st.column_config.NumberColumn("Qty", min_value=0.01, format="%.2f", default=1.0),
                     "Unit": st.column_config.SelectboxColumn("Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET", "MTR", "SQM", "PKT", "BTL"], default="PCS"),
-                    "MRP (₹)": st.column_config.NumberColumn("MRP (₹)", min_value=0.0, format="₹%.2f", default=0.0),
-                    "Discount (%)": st.column_config.NumberColumn("Discount %", min_value=0.0, max_value=100.0, format="%.1f%%", default=0.0),
+                    "MRP (₹)": st.column_config.NumberColumn("MRP / Rate (₹)", min_value=0.0, format="₹%.2f", default=0.0),
+                    "Discount (%)": st.column_config.NumberColumn("Disc %", min_value=0.0, max_value=100.0, format="%.1f%%", default=0.0),
                 }
             )
             
@@ -804,16 +803,12 @@ with tab_parser:
             calc_manual_df["Total Value (₹)"] = (calc_manual_df["Quantity"] * calc_manual_df["Customer Unit Price (₹)"]).round(2)
             
             man_grand_total = calc_manual_df["Total Value (₹)"].sum()
-            st.metric("Quotation Grand Total", f"₹{man_grand_total:,.2f}")
+            st.metric("Quotation Total", f"₹{man_grand_total:,.2f}")
             
-            if st.button("Preview & Generate Manual PDF Quotation", type="primary", use_container_width=True, key="btn_man_quote"):
+            if st.button("📄 Generate & Download PDF Quotation", type="primary", use_container_width=True, key="btn_man_quote"):
                 if calc_manual_df.empty or man_grand_total <= 0:
-                    st.warning("Please enter at least one valid item with an MRP/Rate greater than 0.")
+                    st.warning("Please enter at least one valid item with a price.")
                 else:
-                    st.markdown(f"**Previewing Quote for:** {man_cust_name}")
-                    preview_cols = ["Item Name", "Quantity", "Unit", "MRP (₹)", "Discount (%)", "Customer Unit Price (₹)", "Total Value (₹)"]
-                    st.dataframe(calc_manual_df[[c for c in preview_cols if c in calc_manual_df.columns]], use_container_width=True)
-                    
                     if REPORTLAB_AVAILABLE:
                         pdf_bytes = generate_quotation_pdf(
                             store_name=st.session_state['user_store']['display_name'],
@@ -823,7 +818,7 @@ with tab_parser:
                             grand_total=man_grand_total
                         )
                         st.download_button(
-                            label=f"📄 Download PDF Quotation for {man_cust_name}",
+                            label=f"⬇️ Click Here to Download PDF for {man_cust_name}",
                             data=pdf_bytes,
                             file_name=f"Quotation_{man_cust_name.replace(' ', '_')}.pdf",
                             mime="application/pdf",
@@ -837,23 +832,19 @@ with tab_parser:
         # --- MODE 2: AUTO-QUOTATION FROM PARSED BILL ---
         with q_tab_bill:
             if "parsed_df" not in st.session_state or st.session_state["parsed_df"].empty:
-                st.info("ℹ️ No parsed purchase bill found. Upload and process a purchase bill in Tab 1 below, or use the 'Quick Manual Entry' tab above.")
+                st.info("ℹ️ No parsed bill found. Upload a bill below or use 'Quick Manual Entry' above.")
             else:
                 col_q1, col_q2, col_q3, col_q4 = st.columns([2, 2, 1, 1])
                 with col_q1:
-                    customer_name = st.text_input("Customer Name / Reference", value="Walk-in Customer", key="bill_cust_input")
+                    customer_name = st.text_input("Customer Name", value="Walk-in Customer", key="bill_cust_input")
                 with col_q2:
-                    biz_phone_input = st.text_input("Business Phone Number(s)", value=saved_phone, placeholder="e.g. +91 9876543210", key="bill_phone_input")
+                    biz_phone_input = st.text_input("Phone", value=saved_phone, key="bill_phone_input")
                 with col_q3:
-                    markup_pct = st.number_input("Markup (%)", min_value=0.0, value=15.0, step=1.0, key="bill_markup_input")
+                    markup_pct = st.number_input("Markup %", min_value=0.0, value=15.0, step=1.0, key="bill_markup_input")
                 with col_q4:
-                    disc_pct_bill = st.number_input("Discount (%)", min_value=0.0, max_value=100.0, value=0.0, step=1.0, key="bill_disc_input")
+                    disc_pct_bill = st.number_input("Discount %", min_value=0.0, max_value=100.0, value=0.0, step=1.0, key="bill_disc_input")
                 
-                if biz_phone_input.strip() != saved_phone.strip():
-                    save_store_phone(selected_store_slug, biz_phone_input.strip())
-                    st.session_state["user_store"]["phone"] = biz_phone_input.strip()
-                
-                if st.button("Preview & Generate PDF Quotation from Parsed Bill", type="primary", use_container_width=True, key="btn_bill_quote"):
+                if st.button("📄 Generate PDF Quote from Ingested Bill", type="primary", use_container_width=True, key="btn_bill_quote"):
                     df_bill_source = st.session_state["parsed_df"].copy()
                     quote_items = []
                     total_quote_value = 0.0
@@ -878,8 +869,6 @@ with tab_parser:
                         })
                     
                     quote_df = pd.DataFrame(quote_items)
-                    st.markdown(f"**Previewing Quote for:** {customer_name}")
-                    st.dataframe(quote_df, use_container_width=True)
                     st.metric("Total Quotation Value", f"₹{total_quote_value:,.2f}")
                     
                     if REPORTLAB_AVAILABLE:
@@ -890,9 +879,8 @@ with tab_parser:
                             quote_df=quote_df,
                             grand_total=total_quote_value
                         )
-                        
                         st.download_button(
-                            label=f"📄 Download PDF Quotation for {customer_name}",
+                            label=f"⬇️ Click Here to Download PDF for {customer_name}",
                             data=pdf_bytes,
                             file_name=f"Quotation_{customer_name.replace(' ', '_')}.pdf",
                             mime="application/pdf",
@@ -900,8 +888,6 @@ with tab_parser:
                             use_container_width=True,
                             key="dl_bill_pdf"
                         )
-                    else:
-                        st.warning("⚠️ 'reportlab' library is missing in environment.")
 
     st.divider()
 
@@ -1028,10 +1014,14 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
+        # --- SAFE COLUMN ASSIGNMENTS (PREVENTS ATTRIBUTE ERRORS) ---
         df["Current Quantity"] = pd.to_numeric(df["Current Quantity"], errors='coerce').fillna(1.0)
         df["Purchase Price"] = pd.to_numeric(df["Purchase Price"], errors='coerce').fillna(0.0)
         df["GST Rate"] = pd.to_numeric(df["GST Rate"], errors='coerce').fillna(18.0)
-        df["Target Profit Margin (%)"] = pd.to_numeric(df.get("Target Profit Margin (%)", 15.0), errors='coerce').fillna(15.0)
+        
+        if "Target Profit Margin (%)" not in df.columns:
+            df["Target Profit Margin (%)"] = 15.0
+        df["Target Profit Margin (%)"] = pd.to_numeric(df["Target Profit Margin (%)"], errors='coerce').fillna(15.0)
         
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
@@ -1106,7 +1096,10 @@ with tab_parser:
         df_updated["Current Quantity"] = pd.to_numeric(df_updated["Current Quantity"], errors='coerce').fillna(1.0)
         df_updated["Purchase Price"] = pd.to_numeric(df_updated["Purchase Price"], errors='coerce').fillna(0.0)
         df_updated["GST Rate"] = pd.to_numeric(df_updated["GST Rate"], errors='coerce').fillna(18.0)
-        df_updated["Target Profit Margin (%)"] = pd.to_numeric(df_updated.get("Target Profit Margin (%)", 15.0), errors='coerce').fillna(15.0)
+        
+        if "Target Profit Margin (%)" not in df_updated.columns:
+            df_updated["Target Profit Margin (%)"] = 15.0
+        df_updated["Target Profit Margin (%)"] = pd.to_numeric(df_updated["Target Profit Margin (%)"], errors='coerce').fillna(15.0)
 
         df_updated["Line Total (Excl. GST)"] = (df_updated["Purchase Price"] * df_updated["Current Quantity"]).round(2)
         df_updated["GST Tax Amount"] = (df_updated["Line Total (Excl. GST)"] * (df_updated["GST Rate"] / 100)).round(2)
