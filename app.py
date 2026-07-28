@@ -573,7 +573,7 @@ def process_single_file_raw(file_bytes):
     except Exception as e:
         return {"ERROR": str(e)}
 
-# --- HIGH-GRADE REPORTLAB PDF QUOTATION GENERATOR ---
+# --- HIGH-GRADE REPORTLAB PDF QUOTATION GENERATOR (WITH MRP & DISCOUNT SUPPORT) ---
 def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
     if not REPORTLAB_AVAILABLE:
         raise ModuleNotFoundError("reportlab library is required for PDF generation.")
@@ -636,25 +636,30 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     story.append(meta_table)
     story.append(Spacer(1, 14))
 
-    hdr_left = ParagraphStyle('HdrL', fontSize=9, leading=11, textColor=colors.white, fontName='Helvetica-Bold', alignment=0)
-    hdr_center = ParagraphStyle('HdrC', fontSize=9, leading=11, textColor=colors.white, fontName='Helvetica-Bold', alignment=1)
-    hdr_right = ParagraphStyle('HdrR', fontSize=9, leading=11, textColor=colors.white, fontName='Helvetica-Bold', alignment=2)
+    hdr_left = ParagraphStyle('HdrL', fontSize=8.5, leading=11, textColor=colors.white, fontName='Helvetica-Bold', alignment=0)
+    hdr_center = ParagraphStyle('HdrC', fontSize=8.5, leading=11, textColor=colors.white, fontName='Helvetica-Bold', alignment=1)
+    hdr_right = ParagraphStyle('HdrR', fontSize=8.5, leading=11, textColor=colors.white, fontName='Helvetica-Bold', alignment=2)
 
-    cell_left = ParagraphStyle('CellL', fontSize=8.5, leading=11, textColor=colors.HexColor('#111827'), alignment=0)
-    cell_center = ParagraphStyle('CellC', fontSize=8.5, leading=11, textColor=colors.HexColor('#111827'), alignment=1)
-    cell_right = ParagraphStyle('CellR', fontSize=8.5, leading=11, textColor=colors.HexColor('#111827'), alignment=2)
+    cell_left = ParagraphStyle('CellL', fontSize=8, leading=11, textColor=colors.HexColor('#111827'), alignment=0)
+    cell_center = ParagraphStyle('CellC', fontSize=8, leading=11, textColor=colors.HexColor('#111827'), alignment=1)
+    cell_right = ParagraphStyle('CellR', fontSize=8, leading=11, textColor=colors.HexColor('#111827'), alignment=2)
 
+    # Professional 7-Column Table (S.No | Description | Qty | Unit | MRP | Disc % | Net Rate | Total)
     table_data = [[
         Paragraph("S.No", hdr_center), 
         Paragraph("Item Description", hdr_left), 
         Paragraph("Qty", hdr_center), 
         Paragraph("Unit", hdr_center), 
-        Paragraph("Unit Price (Rs.)", hdr_right), 
+        Paragraph("MRP (Rs.)", hdr_right),
+        Paragraph("Disc (%)", hdr_center),
+        Paragraph("Final Rate (Rs.)", hdr_right), 
         Paragraph("Total (Rs.)", hdr_right)
     ]]
 
     for i, row in quote_df.iterrows():
-        unit_price = float(row['Customer Unit Price (₹)'])
+        mrp_val = float(row.get('MRP (₹)', row.get('Customer Unit Price (₹)', 0.0)))
+        disc_val = float(row.get('Discount (%)', 0.0))
+        final_rate = float(row['Customer Unit Price (₹)'])
         line_total = float(row['Total Value (₹)'])
         
         table_data.append([
@@ -662,11 +667,13 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
             Paragraph(str(row["Item Name"]), cell_left),
             Paragraph(f"{float(row['Quantity']):g}", cell_center),
             Paragraph(str(row["Unit"]), cell_center),
-            Paragraph(f"Rs. {unit_price:,.2f}", cell_right),
+            Paragraph(f"Rs. {mrp_val:,.2f}", cell_right),
+            Paragraph(f"{disc_val:g}%" if disc_val > 0 else "-", cell_center),
+            Paragraph(f"Rs. {final_rate:,.2f}", cell_right),
             Paragraph(f"Rs. {line_total:,.2f}", cell_right)
         ])
 
-    item_table = Table(table_data, colWidths=[35, 225, 45, 45, 95, 95])
+    item_table = Table(table_data, colWidths=[25, 175, 35, 35, 70, 45, 75, 80])
     item_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
@@ -722,7 +729,7 @@ with tab_parser:
         
         q_tab_manual, q_tab_bill = st.tabs(["✍️ Quick Manual Entry (No Bill Needed)", "📥 From Parsed Purchase Bill"])
         
-        # --- MODE 1: MANUAL QUICK QUOTATION ---
+        # --- MODE 1: MANUAL QUICK QUOTATION (WITH MRP & DISCOUNT) ---
         with q_tab_manual:
             col_m1, col_m2 = st.columns([2, 2])
             with col_m1:
@@ -734,11 +741,11 @@ with tab_parser:
                 save_store_phone(selected_store_slug, man_phone_input.strip())
                 st.session_state["user_store"]["phone"] = man_phone_input.strip()
                 
-            st.write("**Enter Quotation Items (Final Selling Rates):**")
+            st.write("**Enter Quotation Items (MRP & Optional Discount):**")
             
             if "manual_quote_data" not in st.session_state:
                 st.session_state["manual_quote_data"] = pd.DataFrame([
-                    {"Item Name": "Sample Item 1", "Quantity": 1.0, "Unit": "PCS", "Customer Unit Price (₹)": 100.0},
+                    {"Item Name": "Sample Product A", "Quantity": 1.0, "Unit": "PCS", "MRP (₹)": 500.0, "Discount (%)": 10.0},
                 ])
                 
             edited_manual_df = st.data_editor(
@@ -750,15 +757,21 @@ with tab_parser:
                     "Item Name": st.column_config.TextColumn("Item Description", required=True),
                     "Quantity": st.column_config.NumberColumn("Qty", min_value=0.01, format="%.2f", default=1.0),
                     "Unit": st.column_config.SelectboxColumn("Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET", "MTR", "SQM", "PKT", "BTL"], default="PCS"),
-                    "Customer Unit Price (₹)": st.column_config.NumberColumn("Unit Rate (₹)", min_value=0.0, format="₹%.2f", default=0.0),
+                    "MRP (₹)": st.column_config.NumberColumn("MRP (₹)", min_value=0.0, format="₹%.2f", default=0.0),
+                    "Discount (%)": st.column_config.NumberColumn("Discount %", min_value=0.0, max_value=100.0, format="%.1f%%", default=0.0),
                 }
             )
             
             st.session_state["manual_quote_data"] = edited_manual_df.copy()
             
+            # Real-time MRP & Discount Calculations
             calc_manual_df = edited_manual_df.copy()
             calc_manual_df["Quantity"] = pd.to_numeric(calc_manual_df["Quantity"], errors='coerce').fillna(1.0)
-            calc_manual_df["Customer Unit Price (₹)"] = pd.to_numeric(calc_manual_df["Customer Unit Price (₹)"], errors='coerce').fillna(0.0)
+            calc_manual_df["MRP (₹)"] = pd.to_numeric(calc_manual_df.get("MRP (₹)", 0.0), errors='coerce').fillna(0.0)
+            calc_manual_df["Discount (%)"] = pd.to_numeric(calc_manual_df.get("Discount (%)", 0.0), errors='coerce').fillna(0.0)
+            
+            # Final rate after discount
+            calc_manual_df["Customer Unit Price (₹)"] = (calc_manual_df["MRP (₹)"] * (1 - (calc_manual_df["Discount (%)"] / 100))).round(2)
             calc_manual_df["Total Value (₹)"] = (calc_manual_df["Quantity"] * calc_manual_df["Customer Unit Price (₹)"]).round(2)
             
             man_grand_total = calc_manual_df["Total Value (₹)"].sum()
@@ -769,7 +782,8 @@ with tab_parser:
                     st.warning("Please enter at least one valid item with a rate greater than 0.")
                 else:
                     st.markdown(f"**Previewing Quote for:** {man_cust_name}")
-                    st.dataframe(calc_manual_df, use_container_width=True)
+                    preview_cols = ["Item Name", "Quantity", "Unit", "MRP (₹)", "Discount (%)", "Customer Unit Price (₹)", "Total Value (₹)"]
+                    st.dataframe(calc_manual_df[[c for c in preview_cols if c in calc_manual_df.columns]], use_container_width=True)
                     
                     if REPORTLAB_AVAILABLE:
                         pdf_bytes = generate_quotation_pdf(
@@ -796,13 +810,15 @@ with tab_parser:
             if "parsed_df" not in st.session_state or st.session_state["parsed_df"].empty:
                 st.info("ℹ️ No parsed purchase bill found. Upload and process a purchase bill in Tab 1 below, or use the 'Quick Manual Entry' tab above.")
             else:
-                col_q1, col_q2, col_q3 = st.columns([2, 2, 1])
+                col_q1, col_q2, col_q3, col_q4 = st.columns([2, 2, 1, 1])
                 with col_q1:
                     customer_name = st.text_input("Customer Name / Reference", value="Walk-in Customer", key="bill_cust_input")
                 with col_q2:
                     biz_phone_input = st.text_input("Business Phone Number(s)", value=saved_phone, placeholder="e.g. +91 9876543210", key="bill_phone_input")
                 with col_q3:
                     markup_pct = st.number_input("Markup (%)", min_value=0.0, value=15.0, step=1.0, key="bill_markup_input")
+                with col_q4:
+                    disc_pct_bill = st.number_input("Discount (%)", min_value=0.0, max_value=100.0, value=0.0, step=1.0, key="bill_disc_input")
                 
                 if biz_phone_input.strip() != saved_phone.strip():
                     save_store_phone(selected_store_slug, biz_phone_input.strip())
@@ -815,9 +831,10 @@ with tab_parser:
                     
                     for idx, row in df_bill_source.iterrows():
                         base_gst_paid_cost = float(row.get("Unit Cost (GST Paid) ₹", 0.0))
-                        markup_price = round(base_gst_paid_cost * (1 + (markup_pct / 100)), 2)
+                        mrp_price = round(base_gst_paid_cost * (1 + (markup_pct / 100)), 2)
+                        final_price = round(mrp_price * (1 - (disc_pct_bill / 100)), 2)
                         qty = float(row.get("Current Quantity", 1.0))
-                        line_total = round(markup_price * qty, 2)
+                        line_total = round(final_price * qty, 2)
                         
                         total_quote_value += line_total
                         
@@ -825,14 +842,16 @@ with tab_parser:
                             "Item Name": str(row.get("Official SKU", "")),
                             "Quantity": qty,
                             "Unit": str(row.get("Unit", "PCS")),
-                            "Customer Unit Price (₹)": markup_price,
+                            "MRP (₹)": mrp_price,
+                            "Discount (%)": disc_pct_bill,
+                            "Customer Unit Price (₹)": final_price,
                             "Total Value (₹)": line_total
                         })
                     
                     quote_df = pd.DataFrame(quote_items)
                     st.markdown(f"**Previewing Quote for:** {customer_name}")
                     st.dataframe(quote_df, use_container_width=True)
-                    st.metric(f"Total Quotation Value (Markup: {markup_pct}% on GST-Paid Cost)", f"₹{total_quote_value:,.2f}")
+                    st.metric("Total Quotation Value", f"₹{total_quote_value:,.2f}")
                     
                     if REPORTLAB_AVAILABLE:
                         pdf_bytes = generate_quotation_pdf(
@@ -1299,7 +1318,7 @@ with tab_guide:
         2. **Upload Bills:** Drop image files or click a photo directly with your camera in **Tab 1**.
         3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
         4. **Audit Workspace:** Check quantities, HSN codes, purchase rates, and mapped SKUs.
-        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer.
+        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer (Manual entry or from Bill with MRP/Discount).
         6. **Download Import File:** Generate the `.xlsx` spreadsheet.
         7. **Import to ERP:** Open your accounting software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
         """)
