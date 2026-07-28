@@ -995,8 +995,7 @@ with tab_parser:
                             "GST Rate": gst_rate,
                             "Purchase Price": round(base_rate_per_pc, 2),
                             "Line Total Taxable": round(printed_taxable, 2),
-                            "Selling Price": round(known_selling, 2),
-                            "Target Profit Margin (%)": 15.0
+                            "Selling Price": round(known_selling, 2)
                         })
                     
                 status_container.update(label="✅ Ingestion & Batch Extraction Complete!", state="complete", expanded=False)
@@ -1014,14 +1013,11 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
-        # --- SAFE COLUMN ASSIGNMENTS (PREVENTS ATTRIBUTE ERRORS) ---
+        # --- SAFE COLUMN ASSIGNMENTS (PREVENTS CRASHES) ---
         df["Current Quantity"] = pd.to_numeric(df["Current Quantity"], errors='coerce').fillna(1.0)
         df["Purchase Price"] = pd.to_numeric(df["Purchase Price"], errors='coerce').fillna(0.0)
         df["GST Rate"] = pd.to_numeric(df["GST Rate"], errors='coerce').fillna(18.0)
-        
-        if "Target Profit Margin (%)" not in df.columns:
-            df["Target Profit Margin (%)"] = 15.0
-        df["Target Profit Margin (%)"] = pd.to_numeric(df["Target Profit Margin (%)"], errors='coerce').fillna(15.0)
+        df["Selling Price"] = pd.to_numeric(df.get("Selling Price", 0.0), errors='coerce').fillna(0.0)
         
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
@@ -1029,13 +1025,6 @@ with tab_parser:
         
         # TRUE LANDED COST PER PIECE (GST PAID)
         df["Unit Cost (GST Paid) ₹"] = (df["Line Total (Incl. GST)"] / df["Current Quantity"]).round(2)
-        
-        # AUTO-CALCULATED SUGGESTED SELLING PRICE (SP) IF NOT SET
-        for idx, row in df.iterrows():
-            if float(row.get("Selling Price", 0.0)) <= 0:
-                landed = float(row["Unit Cost (GST Paid) ₹"])
-                margin = float(row["Target Profit Margin (%)"])
-                df.at[idx, "Selling Price"] = round(landed * (1 + (margin / 100)), 2)
         
         total_taxable = df["Line Total (Excl. GST)"].sum()
         total_gst = df["GST Tax Amount"].sum()
@@ -1064,7 +1053,6 @@ with tab_parser:
             "GST Rate",
             "Unit Cost (GST Paid) ₹",
             "Line Total (Incl. GST)",
-            "Target Profit Margin (%)",
             "Selling Price"
         ]
         
@@ -1087,8 +1075,7 @@ with tab_parser:
                 "GST Rate": st.column_config.NumberColumn("GST %", min_value=0, max_value=28, format="%d%%"),
                 "Unit Cost (GST Paid) ₹": st.column_config.NumberColumn("Landed Cost (GST Paid) ₹/Pc", format="₹%.2f", disabled=True),
                 "Line Total (Incl. GST)": st.column_config.NumberColumn("Total (Incl. GST) ₹", format="₹%.2f", disabled=True),
-                "Target Profit Margin (%)": st.column_config.NumberColumn("Profit Margin %", min_value=0.0, format="%.1f%%"),
-                "Selling Price": st.column_config.NumberColumn("Final Selling Price (SP) ₹", format="₹%.2f"),
+                "Selling Price": st.column_config.NumberColumn("Selling Price (SP) ₹", format="₹%.2f"),
             }
         )
         
@@ -1096,10 +1083,7 @@ with tab_parser:
         df_updated["Current Quantity"] = pd.to_numeric(df_updated["Current Quantity"], errors='coerce').fillna(1.0)
         df_updated["Purchase Price"] = pd.to_numeric(df_updated["Purchase Price"], errors='coerce').fillna(0.0)
         df_updated["GST Rate"] = pd.to_numeric(df_updated["GST Rate"], errors='coerce').fillna(18.0)
-        
-        if "Target Profit Margin (%)" not in df_updated.columns:
-            df_updated["Target Profit Margin (%)"] = 15.0
-        df_updated["Target Profit Margin (%)"] = pd.to_numeric(df_updated["Target Profit Margin (%)"], errors='coerce').fillna(15.0)
+        df_updated["Selling Price"] = pd.to_numeric(df_updated.get("Selling Price", 0.0), errors='coerce').fillna(0.0)
 
         df_updated["Line Total (Excl. GST)"] = (df_updated["Purchase Price"] * df_updated["Current Quantity"]).round(2)
         df_updated["GST Tax Amount"] = (df_updated["Line Total (Excl. GST)"] * (df_updated["GST Rate"] / 100)).round(2)
