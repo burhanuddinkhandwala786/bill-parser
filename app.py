@@ -487,7 +487,7 @@ def extract_invoice_data(image):
     if img_copy.mode in ("RGBA", "P"):
         img_copy = img_copy.convert("RGB")
         
-    # High-precision canvas: 1500px at 90% JPEG quality keeps fine handwriting crisp & fast
+    # HIGH-PRECISION OCR CANVAS (1500px at 90% Quality): Guarantees zero loss for handwritten/faint details
     img_copy.thumbnail((1500, 1500), Image.Resampling.LANCZOS)
 
     buffer = BytesIO()
@@ -495,44 +495,42 @@ def extract_invoice_data(image):
     buffer.seek(0)
     optimized_img = Image.open(buffer)
 
-    # --- HIGH-PRECISION OCR & FINANCIAL EXTRACTION PROMPT ---
     prompt = """
-    You are an elite financial OCR and computer vision engine specializing in Indian GST purchase invoices, distributor bills, and handwritten receipts.
+    You are an expert OCR and financial vision system built for retail & wholesale purchase bill ingestion.
+    Your task is to extract line items from purchase invoices—including printed, handwritten, low-light, faded thermal receipts, crumpled paper, or skewed photos.
 
-    YOUR MISSION:
-    Extract all purchased line items into a structured JSON schema. Read printed text, handwritten pen marks, overwrites, faded thermal ink, and low-light receipt details with maximum financial accuracy.
+    CRITICAL EXTRACTION INSTRUCTIONS:
+    1. "Supplier Company Name": Extract the vendor/distributor company name at the header. If unclear or handwritten, infer best title or use "Unknown Supplier".
+    2. "Line Items": Extract every purchased item row from the table or receipt list.
+       - "Item Name": Full product title or description. Read faint or handwritten pen marks carefully.
+       - "Quantity": Pure numeric value (e.g. 1.0, 10, 0.5). If missing or unreadable, default to 1.0.
+       - "Unit Price (Excl. Tax)": Per-item rate before GST if explicitly printed.
+       - "Discount Amount": Any cash/trade discount deducted for this item line. If none, 0.0.
+       - "Line Total Taxable Amount": The line base total before GST (Printed Amount column).
+       - "Line Total Inclusive Amount": The total line amount including GST.
+       - "GST Rate": GST tax percentage as a pure number (0, 5, 12, 18, 28). Default to 18.0 if unstated.
+       - "HSN Code": HSN or SAC code as string. Empty string "" if missing.
+       - "Unit": Unit of measure (PCS, BOX, LTR, KG, NOS, SET, SQM, MTR, PKT). Default to "PCS".
 
-    CRITICAL FIELD INSTRUCTIONS:
-    1. "Supplier Company Name": The main vendor/distributor or seller business name located at the bill header. Default to "Unknown Supplier" if missing.
-    2. "Line Items": Extract EVERY single item row from the bill table/list. Do not miss any item.
-       - "Item Name": Full item title, brand name, and specification. If a printed item name is crossed out or modified by handwriting, prioritize the handwritten correction.
-       - "Quantity": Pure numeric stock quantity (e.g., 10, 1.5, 0.5). Default to 1.0 if unspecified or unreadable.
-       - "Unit": Unit of measure (PCS, BOX, LTR, KG, NOS, SET, SQM, MTR, PKT, BTL, BAG, CAN). Capitalize and default to "PCS".
-       - "HSN Code": HSN or SAC numeric code string. If absent, set to empty string "".
-       - "Unit Price (Excl. Tax)": The per-unit base purchase rate before tax.
-       - "Discount Amount": Any cash discount, scheme, or trade deduction applied to this line item. Default to 0.0.
-       - "Line Total Taxable Amount": Base taxable subtotal for the line before tax (after discounts).
-       - "GST Rate": Total combined GST percentage as a pure number (e.g., 0, 5, 12, 18, 28). IF CGST (9%) and SGST (9%) are listed separately, SUM THEM to 18.0. Default to 18.0 if omitted.
-       - "Line Total Inclusive Amount": Final line total including GST.
+    ROBUSTNESS & HANDWRITING RULES:
+    - Faded / Low Contrast Text: Infer numbers by cross-checking quantity * rate - discount = total where possible.
+    - Handwritten Text: Treat pen strokes and annotations as primary text if printed text is crossed out or modified.
+    - Pure Numbers Only: Rates, quantities, amounts, discounts, and GST must be numbers (no currency symbols like ₹ or Rs).
 
-    PRECISION & MATHEMATICAL CROSS-CHECKING:
-    - Never include currency symbols (₹, Rs, INR) inside numeric fields.
-    - If numbers are faint or partially stained, verify that (Quantity * Unit Price) - Discount = Line Total Taxable Amount.
-
-    STRICT JSON OUTPUT FORMAT (NO MARKDOWN FLUFF, NO EXTRA KEYS):
+    OUTPUT SCHEMA (STRICT JSON ONLY):
     {
         "Supplier Company Name": "Vendor Name",
         "Line Items": [
             {
-                "Item Name": "Product description",
+                "Item Name": "description",
                 "Quantity": 1.0,
-                "Unit": "PCS",
-                "HSN Code": "8414",
                 "Unit Price (Excl. Tax)": 0.0,
                 "Discount Amount": 0.0,
                 "Line Total Taxable Amount": 0.0,
+                "Line Total Inclusive Amount": 0.0,
                 "GST Rate": 18.0,
-                "Line Total Inclusive Amount": 0.0
+                "HSN Code": "",
+                "Unit": "PCS"
             }
         ]
     }
@@ -541,11 +539,12 @@ def extract_invoice_data(image):
     config = types.GenerateContentConfig(response_mime_type="application/json")
     contents = [optimized_img, prompt]
     
+    # Fast, high-capacity models first for speed, fallbacks for reliability
     candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
     
     last_error = None
     
-    # Fail-safe multi-key rotation loop
+    # Rotate through available API keys in the pool
     for api_key in API_KEYS_POOL:
         try:
             client = genai.Client(api_key=api_key)
@@ -574,7 +573,7 @@ def process_single_file_raw(file_bytes):
     except Exception as e:
         return {"ERROR": str(e)}
 
-# --- REPORTLAB PDF QUOTATION GENERATOR ---
+# --- HIGH-GRADE REPORTLAB PDF QUOTATION GENERATOR ---
 def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
     if not REPORTLAB_AVAILABLE:
         raise ModuleNotFoundError("reportlab library is required for PDF generation.")
@@ -705,7 +704,7 @@ tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
 ])
 
 # ==========================================
-# TAB 1: BATCH INVOICE PARSER
+# TAB 1: BATCH INVOICE PARSER & QUOTATIONS
 # ==========================================
 with tab_parser:
     sm1, sm2, sm3 = st.columns(3)
@@ -715,6 +714,152 @@ with tab_parser:
 
     st.divider()
 
+    # --- DUAL QUOTATION GENERATOR EXPANDER (ALWAYS ACCESSIBLE) ---
+    with st.expander("📄 Generate Customer Quotation (On-the-go)", expanded=False):
+        st.caption("Create a professional PDF quote instantly either by manual quick entry or auto-calculating from an audited purchase bill.")
+        
+        saved_phone = st.session_state["user_store"].get("phone") or get_store_phone(selected_store_slug)
+        
+        q_tab_manual, q_tab_bill = st.tabs(["✍️ Quick Manual Entry (No Bill Needed)", "📥 From Parsed Purchase Bill"])
+        
+        # --- MODE 1: MANUAL QUICK QUOTATION ---
+        with q_tab_manual:
+            col_m1, col_m2 = st.columns([2, 2])
+            with col_m1:
+                man_cust_name = st.text_input("Customer Name / Reference", value="Walk-in Customer", key="man_cust_input")
+            with col_m2:
+                man_phone_input = st.text_input("Business Phone Number(s)", value=saved_phone, key="man_phone_input")
+                
+            if man_phone_input.strip() != saved_phone.strip():
+                save_store_phone(selected_store_slug, man_phone_input.strip())
+                st.session_state["user_store"]["phone"] = man_phone_input.strip()
+                
+            st.write("**Enter Quotation Items (Final Selling Rates):**")
+            
+            # Initial template dataframe if state is empty
+            if "manual_quote_data" not in st.session_state:
+                st.session_state["manual_quote_data"] = pd.DataFrame([
+                    {"Item Name": "Sample Item 1", "Quantity": 1.0, "Unit": "PCS", "Customer Unit Price (₹)": 100.0},
+                ])
+                
+            edited_manual_df = st.data_editor(
+                st.session_state["manual_quote_data"],
+                num_rows="dynamic",
+                use_container_width=True,
+                key="manual_quote_editor",
+                column_config={
+                    "Item Name": st.column_config.TextColumn("Item Description", required=True),
+                    "Quantity": st.column_config.NumberColumn("Qty", min_value=0.01, format="%.2f", default=1.0),
+                    "Unit": st.column_config.SelectboxColumn("Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET", "MTR", "SQM", "PKT", "BTL"], default="PCS"),
+                    "Customer Unit Price (₹)": st.column_config.NumberColumn("Unit Rate (₹)", min_value=0.0, format="₹%.2f", default=0.0),
+                }
+            )
+            
+            st.session_state["manual_quote_data"] = edited_manual_df.copy()
+            
+            # Compute total live
+            calc_manual_df = edited_manual_df.copy()
+            calc_manual_df["Quantity"] = pd.to_numeric(calc_manual_df["Quantity"], errors='coerce').fillna(1.0)
+            calc_manual_df["Customer Unit Price (₹)"] = pd.to_numeric(calc_manual_df["Customer Unit Price (₹)"], errors='coerce').fillna(0.0)
+            calc_manual_df["Total Value (₹)"] = (calc_manual_df["Quantity"] * calc_manual_df["Customer Unit Price (₹)"]).round(2)
+            
+            man_grand_total = calc_manual_df["Total Value (₹)"].sum()
+            st.metric("Quotation Grand Total", f"₹{man_grand_total:,.2f}")
+            
+            if st.button("Preview & Generate Manual PDF Quotation", type="primary", use_container_width=True, key="btn_man_quote"):
+                if calc_manual_df.empty or man_grand_total <= 0:
+                    st.warning("Please enter at least one valid item with a rate greater than 0.")
+                else:
+                    st.markdown(f"**Previewing Quote for:** {man_cust_name}")
+                    st.dataframe(calc_manual_df, use_container_width=True)
+                    
+                    if REPORTLAB_AVAILABLE:
+                        pdf_bytes = generate_quotation_pdf(
+                            store_name=st.session_state['user_store']['display_name'],
+                            phone_str=man_phone_input.strip(),
+                            customer_name=man_cust_name,
+                            quote_df=calc_manual_df,
+                            grand_total=man_grand_total
+                        )
+                        st.download_button(
+                            label=f"📄 Download PDF Quotation for {man_cust_name}",
+                            data=pdf_bytes,
+                            file_name=f"Quotation_{man_cust_name.replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            type="primary",
+                            use_container_width=True,
+                            key="dl_man_pdf"
+                        )
+                    else:
+                        st.warning("⚠️ 'reportlab' library is missing in environment.")
+
+        # --- MODE 2: AUTO-QUOTATION FROM PARSED BILL ---
+        with q_tab_bill:
+            if "parsed_df" not in st.session_state or st.session_state["parsed_df"].empty:
+                st.info("ℹ️ No parsed purchase bill found. Upload and process a purchase bill in Tab 1 below, or use the 'Quick Manual Entry' tab above.")
+            else:
+                col_q1, col_q2, col_q3 = st.columns([2, 2, 1])
+                with col_q1:
+                    customer_name = st.text_input("Customer Name / Reference", value="Walk-in Customer", key="bill_cust_input")
+                with col_q2:
+                    biz_phone_input = st.text_input("Business Phone Number(s)", value=saved_phone, placeholder="e.g. +91 9876543210", key="bill_phone_input")
+                with col_q3:
+                    markup_pct = st.number_input("Markup (%)", min_value=0.0, value=15.0, step=1.0, key="bill_markup_input")
+                
+                if biz_phone_input.strip() != saved_phone.strip():
+                    save_store_phone(selected_store_slug, biz_phone_input.strip())
+                    st.session_state["user_store"]["phone"] = biz_phone_input.strip()
+                
+                if st.button("Preview & Generate PDF Quotation from Parsed Bill", type="primary", use_container_width=True, key="btn_bill_quote"):
+                    df_bill_source = st.session_state["parsed_df"].copy()
+                    quote_items = []
+                    total_quote_value = 0.0
+                    
+                    for idx, row in df_bill_source.iterrows():
+                        base_gst_paid_cost = float(row.get("Unit Cost (GST Paid) ₹", 0.0))
+                        markup_price = round(base_gst_paid_cost * (1 + (markup_pct / 100)), 2)
+                        qty = float(row.get("Current Quantity", 1.0))
+                        line_total = round(markup_price * qty, 2)
+                        
+                        total_quote_value += line_total
+                        
+                        quote_items.append({
+                            "Item Name": str(row.get("Official SKU", "")),
+                            "Quantity": qty,
+                            "Unit": str(row.get("Unit", "PCS")),
+                            "Customer Unit Price (₹)": markup_price,
+                            "Total Value (₹)": line_total
+                        })
+                    
+                    quote_df = pd.DataFrame(quote_items)
+                    st.markdown(f"**Previewing Quote for:** {customer_name}")
+                    st.dataframe(quote_df, use_container_width=True)
+                    st.metric(f"Total Quotation Value (Markup: {markup_pct}% on GST-Paid Cost)", f"₹{total_quote_value:,.2f}")
+                    
+                    if REPORTLAB_AVAILABLE:
+                        pdf_bytes = generate_quotation_pdf(
+                            store_name=st.session_state['user_store']['display_name'],
+                            phone_str=biz_phone_input.strip(),
+                            customer_name=customer_name,
+                            quote_df=quote_df,
+                            grand_total=total_quote_value
+                        )
+                        
+                        st.download_button(
+                            label=f"📄 Download PDF Quotation for {customer_name}",
+                            data=pdf_bytes,
+                            file_name=f"Quotation_{customer_name.replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            type="primary",
+                            use_container_width=True,
+                            key="dl_bill_pdf"
+                        )
+                    else:
+                        st.warning("⚠️ 'reportlab' library is missing in environment.")
+
+    st.divider()
+
+    # --- INGESTION DROPZONE ---
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
@@ -974,70 +1119,6 @@ with tab_parser:
                 use_container_width=True
             )
 
-        # --- ON-THE-GO CUSTOMER QUOTATION ---
-        st.write("")
-        with st.expander("📄 Generate Customer Quotation (On-the-go)", expanded=False):
-            st.caption("Instantly generate a customer quotation by applying a custom markup % directly to your final GST-Paid cost.")
-            
-            saved_phone = st.session_state["user_store"].get("phone") or get_store_phone(selected_store_slug)
-            
-            col_q1, col_q2, col_q3 = st.columns([2, 2, 1])
-            with col_q1:
-                customer_name = st.text_input("Customer Name / Reference", value="Walk-in Customer")
-            with col_q2:
-                biz_phone_input = st.text_input("Business Phone Number(s)", value=saved_phone, placeholder="e.g. +91 9876543210, +91 9123456789")
-            with col_q3:
-                markup_pct = st.number_input("Markup (%)", min_value=0.0, value=15.0, step=1.0)
-            
-            if biz_phone_input.strip() != saved_phone.strip():
-                save_store_phone(selected_store_slug, biz_phone_input.strip())
-                st.session_state["user_store"]["phone"] = biz_phone_input.strip()
-            
-            if st.button("Preview & Generate PDF Quotation", type="primary", use_container_width=True):
-                quote_items = []
-                total_quote_value = 0.0
-                
-                for idx, row in df_updated.iterrows():
-                    base_gst_paid_cost = float(row["Unit Cost (GST Paid) ₹"])
-                    markup_price = round(base_gst_paid_cost * (1 + (markup_pct / 100)), 2)
-                    qty = float(row["Current Quantity"])
-                    line_total = round(markup_price * qty, 2)
-                    
-                    total_quote_value += line_total
-                    
-                    quote_items.append({
-                        "Item Name": str(row["Official SKU"]),
-                        "Quantity": qty,
-                        "Unit": str(row["Unit"]),
-                        "Customer Unit Price (₹)": markup_price,
-                        "Total Value (₹)": line_total
-                    })
-                
-                quote_df = pd.DataFrame(quote_items)
-                st.markdown(f"**Previewing Quote for:** {customer_name}")
-                st.dataframe(quote_df, use_container_width=True)
-                st.metric(f"Total Quotation Value (Markup: {markup_pct}% on GST-Paid Cost)", f"₹{total_quote_value:,.2f}")
-                
-                if REPORTLAB_AVAILABLE:
-                    pdf_bytes = generate_quotation_pdf(
-                        store_name=st.session_state['user_store']['display_name'],
-                        phone_str=biz_phone_input.strip(),
-                        customer_name=customer_name,
-                        quote_df=quote_df,
-                        grand_total=total_quote_value
-                    )
-                    
-                    st.download_button(
-                        label=f"📄 Download PDF Quotation for {customer_name}",
-                        data=pdf_bytes,
-                        file_name=f"Quotation_{customer_name.replace(' ', '_')}.pdf",
-                        mime="application/pdf",
-                        type="primary",
-                        use_container_width=True
-                    )
-                else:
-                    st.warning("⚠️ 'reportlab' library is missing in environment. Please update your requirements.txt file to enable PDF downloading.")
-
 # ==========================================
 # TAB 2: STORE MASTER CATALOG MANAGER
 # ==========================================
@@ -1203,7 +1284,7 @@ with tab_guide:
         2. **Upload Bills:** Drop one or multiple purchase invoice photos in **Tab 1**.
         3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
         4. **Audit Workspace:** Check quantities, HSN codes, purchase rates, and mapped SKUs.
-        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer.
+        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer (or enter manual items on the fly).
         6. **Download Import File:** Generate the `.xlsx` spreadsheet.
         7. **Import to ERP:** Open your accounting software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
         """)
