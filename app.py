@@ -214,7 +214,6 @@ if "authenticated" not in st.session_state:
 if "user_store" not in st.session_state:
     st.session_state["user_store"] = None
 
-# Auto-Login Resolution from URL (Instant, No Loops)
 if not st.session_state["authenticated"]:
     url_session = st.query_params.get("session", None)
     if url_session:
@@ -248,8 +247,6 @@ if not st.session_state["authenticated"]:
                         if store_data:
                             st.session_state["authenticated"] = True
                             st.session_state["user_store"] = store_data
-                            
-                            # Update URL session parameter without endless rerun
                             st.query_params["session"] = store_data["slug"]
                             st.success(f"Welcome back, {store_data['display_name']}!")
                             st.rerun()
@@ -300,7 +297,7 @@ if not st.session_state["authenticated"]:
 selected_store_slug = st.session_state["user_store"]["slug"]
 ACTIVE_STORE_DISPLAY = st.session_state["user_store"]["display_name"].upper()
 
-# --- SIDEBAR (LOGGED IN USER) ---
+# --- SIDEBAR ---
 st.sidebar.title(f"🏬 {st.session_state['user_store']['display_name']}")
 st.sidebar.caption(f"Active Store ID: `{selected_store_slug}`")
 st.sidebar.divider()
@@ -308,10 +305,7 @@ st.sidebar.divider()
 if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.session_state["authenticated"] = False
     st.session_state["user_store"] = None
-    
-    # Clean URL parameters on logout
     st.query_params.clear()
-        
     if "parsed_df" in st.session_state:
         del st.session_state["parsed_df"]
     st.rerun()
@@ -320,7 +314,6 @@ st.sidebar.divider()
 
 # --- MULTI-KEY & MULTI-MODEL FAIL-SAFE API POOL SETUP ---
 def get_api_key_pool():
-    """Gathers all available Gemini API keys from secrets or environment variables."""
     keys = []
     for i in range(1, 6):
         key = st.secrets.get(f"GEMINI_API_KEY_{i}") or os.environ.get(f"GEMINI_API_KEY_{i}")
@@ -353,10 +346,9 @@ with header_right:
 
 st.divider()
 
-# --- FAST BULK-OPTIMIZED CACHED DATABASE STORE LOADERS ---
+# --- FAST CACHED DATABASE STORE LOADERS ---
 @st.cache_data
 def load_json_memory(store_slug: str) -> dict:
-    """Loads learned vendor item mappings from Supabase (Cached to eliminate UI lag)."""
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     query = "SELECT raw_name, mapped_sku FROM vendor_mappings WHERE store_id = :store_id"
@@ -370,7 +362,6 @@ def load_json_memory(store_slug: str) -> dict:
         return {}
 
 def save_json_memory(store_slug: str, memory_dict: dict):
-    """Saves learned vendor item mappings to Supabase using fast bulk upserts."""
     if not memory_dict:
         return
     engine = get_db_engine()
@@ -391,7 +382,6 @@ def save_json_memory(store_slug: str, memory_dict: dict):
 
 @st.cache_data
 def load_master(store_slug: str) -> pd.DataFrame:
-    """Loads master SKU catalog from Supabase for a given store."""
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     query = """
@@ -413,7 +403,6 @@ def load_master(store_slug: str) -> pd.DataFrame:
         return pd.DataFrame(columns=["Official_SKU_Name", "Category", "Default_Unit", "GST_Rate", "Selling_Price"])
 
 def save_master(df: pd.DataFrame, store_slug: str):
-    """Saves updated master SKU catalog to Supabase in a single fast bulk transaction."""
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
@@ -466,7 +455,7 @@ def get_known_selling_price(sku_name):
                 return float(price)
     return 0.0
 
-# --- ROBUST FAIL-SAFE AI ENGINE WITH MULTI-KEY ROTATION ---
+# --- FAIL-SAFE AI ENGINE WITH MULTI-KEY ROTATION ---
 def is_server_error(exception):
     err_str = str(exception).lower()
     return "503" in err_str or "unavailable" in err_str or "overloaded" in err_str or "429" in err_str or "resourceexhausted" in err_str
@@ -504,21 +493,16 @@ def extract_invoice_data(image):
     1. "Supplier Company Name": Extract the vendor/distributor company name at the header. If unclear or handwritten, infer best title or use "Unknown Supplier".
     2. "Line Items": Extract every purchased item row from the table or receipt list.
        - "Item Name": Full product title or description. Read faint or handwritten pen marks carefully.
-       - "Quantity": Pure numeric value (e.g. 1.0, 10, 0.5). If missing or unreadable, default to 1.0.
+       - "Quantity": Pure numeric value (e.g. 1.0, 10, 0.5). Default to 1.0 if unspecified.
        - "Unit Price (Excl. Tax)": Per-item rate before GST if explicitly printed.
-       - "Discount Amount": Any cash/trade discount deducted for this item line. If none, 0.0.
-       - "Line Total Taxable Amount": The line base total before GST (Printed Amount column).
+       - "Discount Amount": Any cash/trade discount deducted for this item line. Default to 0.0.
+       - "Line Total Taxable Amount": The line base total before GST.
        - "Line Total Inclusive Amount": The total line amount including GST.
-       - "GST Rate": GST tax percentage as a pure number (0, 5, 12, 18, 28). Default to 18.0 if unstated.
-       - "HSN Code": HSN or SAC code as string. Empty string "" if missing.
+       - "GST Rate": GST tax percentage as a pure number (0, 5, 12, 18, 28). If CGST/SGST listed separately, sum them. Default to 18.0 if unstated.
+       - "HSN Code": HSN/SAC string. Empty string "" if missing.
        - "Unit": Unit of measure (PCS, BOX, LTR, KG, NOS, SET, SQM, MTR, PKT). Default to "PCS".
 
-    ROBUSTNESS & HANDWRITING RULES:
-    - Faded / Low Contrast Text: Infer numbers by cross-checking quantity * rate - discount = total where possible.
-    - Handwritten Text: Treat pen strokes and annotations as primary text if printed text is crossed out or modified.
-    - Pure Numbers Only: Rates, quantities, amounts, discounts, and GST must be numbers (no currency symbols like ₹ or Rs).
-
-    OUTPUT SCHEMA (STRICT JSON ONLY):
+    STRICT JSON OUTPUT FORMAT ONLY:
     {
         "Supplier Company Name": "Vendor Name",
         "Line Items": [
@@ -539,7 +523,6 @@ def extract_invoice_data(image):
     
     config = types.GenerateContentConfig(response_mime_type="application/json")
     contents = [optimized_img, prompt]
-    
     candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
     last_error = None
     
@@ -565,7 +548,7 @@ def extract_invoice_data(image):
     raise Exception(f"AI Service error across all keys and models: {last_error}")
 
 def parse_item_names_from_image(image):
-    """Fast Vision Parser that extracts ONLY item product titles from handwritten/printed lists."""
+    """Fast Vision Parser extracting Item Names, Qtys, and MRPs if present on handwritten slips."""
     img_copy = image.copy()
     if img_copy.mode in ("RGBA", "P"):
         img_copy = img_copy.convert("RGB")
@@ -577,9 +560,9 @@ def parse_item_names_from_image(image):
     opt_img = Image.open(buffer)
 
     prompt = """
-    Extract ONLY the product/item names from this image or handwritten note list.
-    Ignore quantities, rates, prices, or header titles if present.
-    Return JSON format: {"Item Names": ["Item 1", "Item 2", "Item 3"]}
+    Extract item details from this order slip or handwritten list into JSON.
+    Format: {"Items": [{"Item Name": "Description", "Quantity": 1.0, "MRP": 0.0}]}
+    If Quantity or MRP are unreadable, default Quantity to 1.0 and MRP to 0.0.
     """
     config = types.GenerateContentConfig(response_mime_type="application/json")
     candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash']
@@ -593,7 +576,7 @@ def parse_item_names_from_image(image):
                     txt = res.text.strip()
                     if txt.startswith("```json"): txt = txt[7:-3].strip()
                     elif txt.startswith("```"): txt = txt[3:-3].strip()
-                    return json.loads(txt).get("Item Names", [])
+                    return json.loads(txt).get("Items", [])
                 except Exception:
                     continue
         except Exception:
@@ -607,7 +590,7 @@ def process_single_file_raw(file_bytes):
     except Exception as e:
         return {"ERROR": str(e)}
 
-# --- HIGH-GRADE REPORTLAB PDF QUOTATION GENERATOR ---
+# --- REPORTLAB PDF GENERATOR ---
 def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
     if not REPORTLAB_AVAILABLE:
         raise ModuleNotFoundError("reportlab library is required for PDF generation.")
@@ -759,10 +742,9 @@ with tab_parser:
         st.caption("Create a professional PDF quote instantly either by manual quick entry or auto-calculating from an audited purchase bill.")
         
         saved_phone = st.session_state["user_store"].get("phone") or get_store_phone(selected_store_slug)
-        
         q_tab_manual, q_tab_bill = st.tabs(["✍️ Quick Manual Entry (No Bill Needed)", "📥 From Parsed Purchase Bill"])
         
-        # --- MODE 1: MANUAL QUICK QUOTATION (WITH QUICK ITEM NAME UPLOADER) ---
+        # --- MODE 1: MANUAL QUICK QUOTATION ---
         with q_tab_manual:
             col_m1, col_m2 = st.columns([2, 2])
             with col_m1:
@@ -774,21 +756,29 @@ with tab_parser:
                 save_store_phone(selected_store_slug, man_phone_input.strip())
                 st.session_state["user_store"]["phone"] = man_phone_input.strip()
 
-            # QUICK ITEM NAME IMPORTER EXPANDER
-            with st.expander("⚡ Quick-Load Item Names from Image or Photo Slip", expanded=False):
-                st.caption("Snap or upload a customer's handwritten list or order slip to auto-fill Item Descriptions below!")
-                quick_item_file = st.file_uploader("Upload List Photo / Image", type=["jpg", "jpeg", "png"], key="quick_item_uploader")
+            # QUICK ITEM NAME IMPORTER
+            with st.expander("⚡ Quick-Load Items from Handwritten Order Slip or Photo", expanded=False):
+                st.caption("Snap or upload a photo of an order slip to auto-fill product descriptions and quantities!")
+                quick_item_file = st.file_uploader("Upload Slip Photo", type=["jpg", "jpeg", "png"], key="quick_item_uploader")
                 if quick_item_file is not None:
-                    if st.button("✨ Extract & Populate Item Names", key="btn_extract_items"):
-                        with st.spinner("Extracting product names from order list..."):
-                            extracted_names = parse_item_names_from_image(Image.open(quick_item_file))
-                            if extracted_names:
-                                new_rows = [{"Item Name": name, "Quantity": 1.0, "Unit": "PCS", "MRP (₹)": 0.0, "Discount (%)": 0.0} for name in extracted_names]
+                    if st.button("✨ Extract & Populate Items", key="btn_extract_items"):
+                        with st.spinner("Parsing items from slip..."):
+                            extracted_items = parse_item_names_from_image(Image.open(quick_item_file))
+                            if extracted_items:
+                                new_rows = []
+                                for item in extracted_items:
+                                    new_rows.append({
+                                        "Item Name": str(item.get("Item Name", "Item")),
+                                        "Quantity": float(item.get("Quantity") or 1.0),
+                                        "Unit": "PCS",
+                                        "MRP (₹)": float(item.get("MRP") or 0.0),
+                                        "Discount (%)": 0.0
+                                    })
                                 st.session_state["manual_quote_data"] = pd.DataFrame(new_rows)
-                                st.success(f"Populated {len(extracted_names)} item names!")
+                                st.success(f"Populated {len(extracted_items)} items into quotation table!")
                                 st.rerun()
                             else:
-                                st.error("No item names detected in image.")
+                                st.error("No items detected in photo.")
                 
             st.write("**Enter Quotation Items (MRP & Optional Discount):**")
             
@@ -811,6 +801,9 @@ with tab_parser:
                 }
             )
             
+            # --- CRITICAL FIX 1: PERSIST EDITOR STATE BACK TO SESSION STATE ---
+            st.session_state["manual_quote_data"] = edited_manual_df.copy()
+            
             calc_manual_df = edited_manual_df.copy()
             calc_manual_df["Quantity"] = pd.to_numeric(calc_manual_df["Quantity"], errors='coerce').fillna(1.0)
             calc_manual_df["MRP (₹)"] = pd.to_numeric(calc_manual_df.get("MRP (₹)", 0.0), errors='coerce').fillna(0.0)
@@ -824,7 +817,7 @@ with tab_parser:
             
             if st.button("Preview & Generate Manual PDF Quotation", type="primary", use_container_width=True, key="btn_man_quote"):
                 if calc_manual_df.empty or man_grand_total <= 0:
-                    st.warning("Please enter at least one valid item with a rate greater than 0.")
+                    st.warning("Please enter at least one valid item with an MRP/Rate greater than 0.")
                 else:
                     st.markdown(f"**Previewing Quote for:** {man_cust_name}")
                     preview_cols = ["Item Name", "Quantity", "Unit", "MRP (₹)", "Discount (%)", "Customer Unit Price (₹)", "Total Value (₹)"]
@@ -921,7 +914,7 @@ with tab_parser:
 
     st.divider()
 
-    # --- INGESTION DROPZONE (WITH GST PAID / NON-GST TOGGLE SWITCH) ---
+    # --- INGESTION DROPZONE ---
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
@@ -1008,15 +1001,16 @@ with tab_parser:
                         line_inclusive = float(row.get("Line Total Inclusive Amount") or 0.0)
                         hsn_sac = str(row.get("HSN Code") or "").strip()
                         
-                        if line_taxable > 0:
+                        # --- CRITICAL FIX 2: ROBUST MULTI-FALLBACK TAXABLE MATH ---
+                        if unit_price > 0:
+                            total_taxable_item = (unit_price * qty) - discount
+                            final_base = total_taxable_item / qty if qty > 0 else 0.0
+                        elif line_taxable > 0:
                             total_taxable_item = line_taxable
                             final_base = line_taxable / qty
                         elif line_inclusive > 0:
                             total_taxable_item = line_inclusive / (1 + (gst_rate / 100))
                             final_base = total_taxable_item / qty
-                        elif unit_price > 0:
-                            total_taxable_item = (unit_price * qty) - discount
-                            final_base = total_taxable_item / qty if qty > 0 else 0.0
                         else:
                             final_base = 0.0
                             total_taxable_item = 0.0
@@ -1040,11 +1034,11 @@ with tab_parser:
                             "Selling Price": round(known_selling, 2)
                         })
                     
-                gc.collect()
                 status_container.update(label="✅ Ingestion & Batch Extraction Complete!", state="complete", expanded=False)
                 
             if all_parsed_items:
                 st.session_state["parsed_df"] = pd.DataFrame(all_parsed_items)
+                gc.collect()
                 st.rerun()
 
     # --- REVIEW & EDIT WORKSPACE ---
@@ -1182,10 +1176,12 @@ with tab_parser:
             for col_num, header_title in enumerate(exact_headers, 1):
                 ws.cell(row=5, column=col_num, value=header_title)
             
+            # --- CRITICAL FIX 3: SAFE EXCEL EXPORT (PREVENTS NaN WRITING ERRORS) ---
             for i, row in df_updated.iterrows():
                 row_idx = 6 + i
-                selling_val = float(row["Selling Price"]) if float(row["Selling Price"]) > 0 else ""
-                purchase_val = float(row["Purchase Price"])
+                raw_selling = row.get("Selling Price", 0.0)
+                selling_val = float(raw_selling) if pd.notnull(raw_selling) and float(raw_selling) > 0 else ""
+                purchase_val = float(row.get("Purchase Price", 0.0)) if pd.notnull(row.get("Purchase Price")) else 0.0
                 
                 ws.cell(row=row_idx, column=1, value=i + 1)
                 ws.cell(row=row_idx, column=2, value=str(row["Official SKU"]))
@@ -1219,7 +1215,6 @@ with tab_parser:
 with tab_master:
     st.subheader(f"⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
     
-    # --- BULK CATALOG IMPORT EXPANDER ---
     with st.expander("📥 Bulk Import Catalog via Excel / CSV", expanded=False):
         st.caption("Upload a spreadsheet containing your full product catalog to register multiple SKUs at once.")
         
