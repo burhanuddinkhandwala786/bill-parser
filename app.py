@@ -35,28 +35,420 @@ st.set_page_config(
 
 # --- CLEAN THEME-SAFE CSS ---
 st.markdown("""
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-    div[data-testid="InputInstructions"] {
-        display: none !important;
+    :root {
+        /* -- Ink & Neutrals -- */
+        --uos-ink: #0A0B0D;
+        --uos-ink-secondary: #4B4F58;
+        --uos-ink-muted: #8A8F98;
+        --uos-canvas: #F4F5F7;
+        --uos-surface: #FFFFFF;
+        --uos-surface-hover: #F7F8FA;
+        --uos-surface-sunken: #EEF0F3;
+        --uos-border: #E2E4E9;
+        --uos-border-subtle: #EDEEF1;
+        --uos-border-strong: #CDD1D9;
+ 
+        /* -- Command Sidebar (Graphite) -- */
+        --uos-graphite: #0E0F13;
+        --uos-graphite-elevated: #1A1C22;
+        --uos-graphite-border: #2A2D35;
+        --uos-graphite-text: #E7E8EC;
+        --uos-graphite-text-muted: #8D9099;
+ 
+        /* -- Functional Accent (Cobalt) -- */
+        --uos-accent: #2851E3;
+        --uos-accent-hover: #1E3FC0;
+        --uos-accent-subtle: #EAF0FE;
+        --uos-accent-text: #1B3ACC;
+ 
+        /* -- Signature Accent (Brass) -- */
+        --uos-brass: #B08D3E;
+        --uos-brass-soft: #E8DCC0;
+ 
+        /* -- Status -- */
+        --uos-success: #0E9F6E;
+        --uos-success-subtle: #E7F8F1;
+        --uos-danger: #D0362E;
+ 
+        /* -- Geometry -- */
+        --uos-radius-sm: 6px;
+        --uos-radius: 8px;
+        --uos-radius-lg: 12px;
+        --uos-shadow-subtle: 0 1px 2px rgba(10, 11, 13, 0.04);
+        --uos-shadow-card: 0 1px 2px rgba(10, 11, 13, 0.04), 0 8px 24px -12px rgba(10, 11, 13, 0.10);
+        --uos-shadow-lifted: 0 2px 4px rgba(10, 11, 13, 0.06), 0 16px 40px -16px rgba(10, 11, 13, 0.16);
+    }
+ 
+    /* ============ GLOBAL CANVAS & TYPE ============ */
+    html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"] {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background-color: var(--uos-canvas) !important;
+        color: var(--uos-ink) !important;
+    }
+    [data-testid="stHeader"] { background: transparent !important; height: 0.6rem !important; }
+    [data-testid="stAppViewContainer"] > .main {
+        position: relative;
+    }
+    /* Signature brushed bezel line beneath the app chrome */
+    [data-testid="stAppViewContainer"] > .main::before {
+        content: "";
+        display: block;
+        height: 3px;
+        width: 100%;
+        background: linear-gradient(90deg,
+            rgba(226,228,233,0) 0%,
+            var(--uos-brass) 18%,
+            var(--uos-ink) 50%,
+            var(--uos-brass) 82%,
+            rgba(226,228,233,0) 100%);
+        opacity: 0.9;
     }
     .block-container {
-        padding-top: 1.2rem !important;
-        padding-bottom: 2.5rem !important;
+        padding-top: 2.4rem !important;
+        padding-bottom: 4rem !important;
+        max-width: 1320px !important;
     }
-    div[data-testid="stMetricValue"] div {
-        color: #2563EB !important;
+    div[data-testid="InputInstructions"] { display: none !important; }
+    ::selection { background: var(--uos-accent-subtle); color: var(--uos-accent-text); }
+ 
+    /* Focus ring, everywhere, always visible */
+    *:focus-visible {
+        outline: 2px solid var(--uos-accent) !important;
+        outline-offset: 2px !important;
+    }
+ 
+    /* ============ DISPLAY TYPOGRAPHY ============ */
+    h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+        font-family: 'Manrope', 'Inter', sans-serif !important;
+        color: var(--uos-ink) !important;
+        letter-spacing: -0.02em !important;
+        font-weight: 800 !important;
+    }
+    h4, h5, h6, .stMarkdown h4, .stMarkdown h5 {
+        font-family: 'Manrope', 'Inter', sans-serif !important;
+        color: var(--uos-ink) !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.01em !important;
+    }
+    /* App title: tighten and add engineered tracking to the eyebrow caption beneath it */
+    [data-testid="stAppViewContainer"] h1 {
+        font-size: 1.9rem !important;
+    }
+    p, span, label, [data-testid="stWidgetLabel"] label {
+        color: var(--uos-ink-secondary) !important;
+        font-size: 0.9rem !important;
+    }
+    [data-testid="stCaptionContainer"], small {
+        color: var(--uos-ink-muted) !important;
+        letter-spacing: 0.01em;
+    }
+    hr, [data-testid="stDivider"] {
+        border-color: var(--uos-border) !important;
+        margin: 1.5rem 0 !important;
+    }
+ 
+    /* Monospace treatment for codes, IDs, and figures — reads as engineered data */
+    code, .stCodeBlock, [data-testid="stMetricValue"] div {
+        font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace !important;
+        font-variant-numeric: tabular-nums;
+    }
+ 
+    /* ============ COMMAND SIDEBAR (GRAPHITE) ============ */
+    [data-testid="stSidebar"] {
+        background-color: var(--uos-graphite) !important;
+        border-right: 1px solid var(--uos-graphite-border) !important;
+    }
+    [data-testid="stSidebar"] * {
+        color: var(--uos-graphite-text) !important;
+    }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] .stMarkdown h1 {
+        font-family: 'Manrope', sans-serif !important;
+        font-size: 1.15rem !important;
+        font-weight: 800 !important;
+        letter-spacing: -0.01em !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"], [data-testid="stSidebar"] small {
+        color: var(--uos-graphite-text-muted) !important;
+        font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+        font-size: 0.72rem !important;
+        letter-spacing: 0.02em;
+    }
+    [data-testid="stSidebar"] code {
+        background: var(--uos-graphite-elevated) !important;
+        color: var(--uos-brass-soft) !important;
+        border: 1px solid var(--uos-graphite-border) !important;
+        border-radius: 4px;
+        padding: 1px 6px !important;
+    }
+    [data-testid="stSidebar"] hr {
+        border-color: var(--uos-graphite-border) !important;
+    }
+    [data-testid="stSidebar"] .stButton > button {
+        background: var(--uos-graphite-elevated) !important;
+        border: 1px solid var(--uos-graphite-border) !important;
+        color: var(--uos-graphite-text) !important;
+        box-shadow: none !important;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background: #23262E !important;
+        border-color: var(--uos-brass) !important;
+    }
+    [data-testid="stSidebar"] .stButton > button p { color: var(--uos-graphite-text) !important; }
+    [data-testid="stSidebar"] .stNumberInput input, [data-testid="stSidebar"] .stTextInput input {
+        background: var(--uos-graphite-elevated) !important;
+        border: 1px solid var(--uos-graphite-border) !important;
+        color: var(--uos-graphite-text) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] label {
+        color: var(--uos-graphite-text-muted) !important;
+        font-size: 0.78rem !important;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 600 !important;
+    }
+ 
+    /* ============ CARDS & CONTAINERS ============ */
+    [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stForm"], [data-testid="stExpander"] {
+        background-color: var(--uos-surface) !important;
+        border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius-lg) !important;
+        padding: 22px !important;
+        box-shadow: var(--uos-shadow-subtle) !important;
+    }
+    [data-testid="stExpander"] summary {
+        font-family: 'Manrope', sans-serif !important;
+        font-weight: 700 !important;
+        color: var(--uos-ink) !important;
+    }
+ 
+    /* ============ METRIC CARDS ============ */
+    [data-testid="stMetric"] {
+        background: linear-gradient(180deg, var(--uos-surface) 0%, var(--uos-surface-hover) 100%) !important;
+        border: 1px solid var(--uos-border) !important;
+        border-top: 2px solid var(--uos-ink) !important;
+        border-radius: var(--uos-radius) !important;
+        padding: 18px 20px !important;
+        box-shadow: var(--uos-shadow-subtle) !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.7rem !important;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--uos-ink-muted) !important;
         font-weight: 700 !important;
     }
-    div[data-testid="stColumn"] {
-        display: flex;
-        flex-direction: column;
+    [data-testid="stMetricValue"] div {
+        color: var(--uos-ink) !important;
+        font-weight: 600 !important;
+        font-size: 1.55rem !important;
+        letter-spacing: -0.01em !important;
     }
-    div[data-testid="stColumn"] > div {
-        flex: 1;
+    [data-testid="stMetricDelta"] {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.75rem !important;
     }
-    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] {
-        height: 100% !important;
+ 
+    /* ============ BUTTONS ============ */
+    .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 600 !important;
+        font-size: 0.87rem !important;
+        border-radius: var(--uos-radius-sm) !important;
+        padding: 10px 18px !important;
+        border: 1px solid var(--uos-border-strong) !important;
+        background: var(--uos-surface) !important;
+        color: var(--uos-ink) !important;
+        box-shadow: var(--uos-shadow-subtle) !important;
+        transition: all 0.12s ease !important;
+        letter-spacing: -0.005em;
     }
+    .stButton > button:hover, .stDownloadButton > button:hover {
+        background: var(--uos-surface-hover) !important;
+        border-color: var(--uos-ink) !important;
+        transform: translateY(-0.5px);
+    }
+    .stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"], .stDownloadButton > button[kind="primary"] {
+        background: var(--uos-ink) !important;
+        color: #FFFFFF !important;
+        border-color: var(--uos-ink) !important;
+        box-shadow: 0 1px 2px rgba(10,11,13,0.06), 0 8px 20px -10px rgba(10,11,13,0.45) !important;
+    }
+    .stButton > button[kind="primary"] p, .stFormSubmitButton > button[kind="primary"] p, .stDownloadButton > button[kind="primary"] p {
+        color: #FFFFFF !important;
+    }
+    .stButton > button[kind="primary"]:hover, .stFormSubmitButton > button[kind="primary"]:hover {
+        background: var(--uos-accent-hover) !important;
+        border-color: var(--uos-accent-hover) !important;
+    }
+ 
+    /* ============ INPUT FIELDS & FORMS ============ */
+    .stTextInput input, .stNumberInput input, .stTextArea textarea,
+    div[data-baseweb="input"] input, div[data-baseweb="select"] > div {
+        background-color: var(--uos-surface) !important;
+        color: var(--uos-ink) !important;
+        border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius-sm) !important;
+        padding: 10px 14px !important;
+        box-shadow: none !important;
+        font-size: 0.88rem !important;
+    }
+    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {
+        border-color: var(--uos-accent) !important;
+        box-shadow: 0 0 0 3px var(--uos-accent-subtle) !important;
+    }
+    [data-testid="stWidgetLabel"] label {
+        font-weight: 600 !important;
+        font-size: 0.78rem !important;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--uos-ink-muted) !important;
+    }
+    .stRadio [role="radiogroup"] label {
+        font-weight: 500 !important;
+        text-transform: none !important;
+        letter-spacing: normal !important;
+    }
+ 
+    /* ============ DATA TABLES & EDITORS ============ */
+    [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
+        border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius) !important;
+        background-color: var(--uos-surface) !important;
+        overflow: hidden;
+        box-shadow: var(--uos-shadow-subtle) !important;
+    }
+    .stDataFrame [role="columnheader"], [data-testid="stDataEditor"] [role="columnheader"] {
+        background-color: var(--uos-surface-sunken) !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.72rem !important;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-weight: 700 !important;
+        color: var(--uos-ink-secondary) !important;
+    }
+    [data-testid="stDataFrame"] [role="gridcell"], [data-testid="stDataEditor"] [role="gridcell"] {
+        font-family: 'Inter', sans-serif !important;
+        font-variant-numeric: tabular-nums;
+    }
+ 
+    /* ============ TABS ============ */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px;
+        border-bottom: 1px solid var(--uos-border);
+        background: transparent !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        padding: 10px 18px !important;
+        background: transparent !important;
+        font-family: 'Manrope', sans-serif !important;
+        font-weight: 600 !important;
+        font-size: 0.88rem !important;
+        color: var(--uos-ink-muted) !important;
+        border-bottom: 2px solid transparent !important;
+        border-radius: var(--uos-radius-sm) var(--uos-radius-sm) 0 0 !important;
+        transition: color 0.12s ease, background 0.12s ease !important;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: var(--uos-ink) !important;
+        background: var(--uos-surface-hover) !important;
+    }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        color: var(--uos-ink) !important;
+        font-weight: 800 !important;
+        border-bottom-color: var(--uos-brass) !important;
+    }
+ 
+    /* ============ FILE UPLOADER DROPZONE ============ */
+    [data-testid="stFileUploaderDropzone"] {
+        background-color: var(--uos-surface-sunken) !important;
+        border: 1.5px dashed var(--uos-border-strong) !important;
+        border-radius: var(--uos-radius-lg) !important;
+    }
+    [data-testid="stFileUploaderDropzone"]:hover {
+        border-color: var(--uos-accent) !important;
+        background-color: var(--uos-accent-subtle) !important;
+    }
+ 
+    /* ============ ALERTS / STATUS ============ */
+    [data-testid="stAlertContainer"] {
+        border-radius: var(--uos-radius) !important;
+        border: 1px solid var(--uos-border) !important;
+    }
+ 
+    /* ============ CAMERA INPUT ============ */
+    [data-testid="stCameraInput"] {
+        border-radius: var(--uos-radius-lg) !important;
+        overflow: hidden;
+        border: 1px solid var(--uos-border) !important;
+    }
+ 
+    /* ============ HARDENING PATCHES ============
+       These components pull color from Streamlit's theme engine before
+       page CSS runs (expander header bar, tab active indicator, number
+       input steppers, alert boxes). We pin them explicitly so they never
+       fall back to a mismatched theme default. */
+ 
+    [data-testid="stExpander"] summary,
+    [data-testid="stExpander"] details > summary {
+        background-color: var(--uos-surface) !important;
+        border-radius: var(--uos-radius-lg) var(--uos-radius-lg) 0 0 !important;
+    }
+    [data-testid="stExpander"] summary:hover {
+        background-color: var(--uos-surface-hover) !important;
+    }
+ 
+    /* Tab active indicator can render as its own sliding highlight element
+       in addition to (or instead of) the tab's own border-bottom. */
+    [data-baseweb="tab-highlight"] {
+        background-color: var(--uos-brass) !important;
+        height: 2px !important;
+    }
+    [data-baseweb="tab-border"] {
+        background-color: var(--uos-border) !important;
+    }
+ 
+    /* Number input +/- steppers */
+    button[data-testid="stNumberInputStepUp"],
+    button[data-testid="stNumberInputStepDown"] {
+        background-color: var(--uos-surface) !important;
+        border: 1px solid var(--uos-border) !important;
+        color: var(--uos-ink) !important;
+    }
+    button[data-testid="stNumberInputStepUp"]:hover,
+    button[data-testid="stNumberInputStepDown"]:hover {
+        background-color: var(--uos-surface-hover) !important;
+        border-color: var(--uos-accent) !important;
+    }
+ 
+    /* Radio / checkbox accent dot should match cobalt, not a stray theme default */
+    [data-baseweb="radio"] div:first-child, [data-baseweb="checkbox"] div:first-child {
+        border-color: var(--uos-border-strong) !important;
+    }
+ 
+    /* Alerts (st.info / st.success / st.warning / st.error) — neutral, on-brand tints */
+    [data-testid="stAlertContainer"] {
+        border-radius: var(--uos-radius) !important;
+        border: 1px solid var(--uos-border) !important;
+        background-color: var(--uos-surface-sunken) !important;
+    }
+    [data-testid="stAlertContainer"] p {
+        color: var(--uos-ink-secondary) !important;
+    }
+    [data-testid="stAlertContainer"]:has(svg[color="rgb(9, 171, 59)"]),
+    div[data-baseweb="notification"][kind="positive"] {
+        background-color: var(--uos-success-subtle) !important;
+        border-color: var(--uos-success) !important;
+    }
+ 
+    /* stDataFrame / stDataEditor read their palette from theme.toml directly
+       (they render on canvas) — see .streamlit/config.toml for those colors. */
 </style>
 """, unsafe_allow_html=True)
 
