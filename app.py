@@ -4,7 +4,6 @@ import json
 import time
 import bcrypt
 import openpyxl
-import urllib.parse
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -718,7 +717,6 @@ with tab_parser:
                 save_store_phone(selected_store_slug, man_phone_input.strip())
                 st.session_state["user_store"]["phone"] = man_phone_input.strip()
 
-            # MARKUP & DISCOUNT CONTROLS
             col_mk1, col_mk2 = st.columns([1, 1])
             with col_mk1:
                 manual_markup_pct = st.number_input("Profit Markup (% On Base MRP/Cost)", min_value=0.0, value=0.0, step=1.0, key="man_markup_input")
@@ -750,7 +748,6 @@ with tab_parser:
             calc_manual_df = edited_manual_df.copy()
             calc_manual_df["Quantity"] = pd.to_numeric(calc_manual_df["Quantity"], errors='coerce').fillna(1.0)
             calc_manual_df["MRP (₹)"] = pd.to_numeric(calc_manual_df.get("MRP / Base Rate (₹)", 0.0), errors='coerce').fillna(0.0)
-            
             calc_manual_df["Discount (%)"] = manual_disc_pct
             
             marked_up_mrp = (calc_manual_df["MRP (₹)"] * (1 + (manual_markup_pct / 100))).round(2)
@@ -762,11 +759,7 @@ with tab_parser:
             man_grand_total = calc_manual_df["Total Value (₹)"].sum()
             st.metric("Quotation Total", f"₹{man_grand_total:,.2f}")
             
-            c_qbtn1, c_qbtn2 = st.columns([2, 1])
-            with c_qbtn1:
-                gen_man_btn = st.button("📄 Generate & Download PDF Quotation", type="primary", use_container_width=True, key="btn_man_quote")
-            
-            if gen_man_btn:
+            if st.button("📄 Generate & Download PDF Quotation", type="primary", use_container_width=True, key="btn_man_quote"):
                 if calc_manual_df.empty or man_grand_total <= 0:
                     st.warning("Please enter at least one valid item with a price.")
                 else:
@@ -787,13 +780,6 @@ with tab_parser:
                             use_container_width=True,
                             key="dl_man_pdf"
                         )
-                        
-                        # --- ROBUST SINGLE-NUMBER WHATSAPP CLEANER (PREVENTS 404 ERRORS) ---
-                        raw_phone = man_phone_input.strip().split(",")[0].split("/")[0]
-                        clean_num = ''.join(filter(str.isdigit, raw_phone))
-                        wa_msg = urllib.parse.quote(f"Hello {man_cust_name},\nHere is your official quotation from {ACTIVE_STORE_DISPLAY}.\nTotal Amount: ₹{man_grand_total:,.2f}\nThank you!")
-                        wa_url = f"https://wa.me/{clean_num}?text={wa_msg}" if clean_num else f"https://wa.me/?text={wa_msg}"
-                        st.markdown(f'<a href="{wa_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; background-color:#25D366; color:white; border:none; padding:10px; border-radius:5px; font-weight:bold; cursor:pointer;">💬 Share via WhatsApp</button></a>', unsafe_allow_html=True)
                     else:
                         st.warning("⚠️ 'reportlab' library is missing in environment.")
 
