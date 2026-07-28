@@ -431,27 +431,47 @@ def save_master(df: pd.DataFrame, store_slug: str):
             )
     load_master.clear()
 
-# --- HYPER-FAST DIRECT SINGLE INSERT & BULK DELETE SQL ENGINES ---
+# --- BULK & SINGLE SAFE SQL EXECUTORS (FIXES PROGRAMMING ERROR) ---
 def add_single_sku_direct(store_slug: str, sku_name: str, category: str, unit: str, gst_rate: float, selling_price: float):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
+    
     with engine.begin() as conn:
-        conn.execute(
-            text("""
-                INSERT INTO master_skus (store_id, official_sku_name, category, default_unit, gst_rate, selling_price)
-                VALUES (:store_id, :official_sku_name, :category, :default_unit, :gst_rate, :selling_price)
-                ON CONFLICT (store_id, official_sku_name)
-                DO UPDATE SET category = EXCLUDED.category, default_unit = EXCLUDED.default_unit, gst_rate = EXCLUDED.gst_rate, selling_price = EXCLUDED.selling_price
-            """),
-            {
-                "store_id": store_id,
-                "official_sku_name": sku_name,
-                "category": category,
-                "default_unit": unit,
-                "gst_rate": gst_rate,
-                "selling_price": selling_price
-            }
-        )
+        existing = conn.execute(
+            text("SELECT id FROM master_skus WHERE store_id = :store_id AND official_sku_name = :sku_name"),
+            {"store_id": store_id, "sku_name": sku_name}
+        ).fetchone()
+        
+        if existing:
+            conn.execute(
+                text("""
+                    UPDATE master_skus 
+                    SET category = :category, default_unit = :unit, gst_rate = :gst_rate, selling_price = :selling_price
+                    WHERE id = :id
+                """),
+                {
+                    "category": category,
+                    "unit": unit,
+                    "gst_rate": gst_rate,
+                    "selling_price": selling_price,
+                    "id": existing[0]
+                }
+            )
+        else:
+            conn.execute(
+                text("""
+                    INSERT INTO master_skus (store_id, official_sku_name, category, default_unit, gst_rate, selling_price)
+                    VALUES (:store_id, :sku_name, :category, :unit, :gst_rate, :selling_price)
+                """),
+                {
+                    "store_id": store_id,
+                    "sku_name": sku_name,
+                    "category": category,
+                    "unit": unit,
+                    "gst_rate": gst_rate,
+                    "selling_price": selling_price
+                }
+            )
     load_master.clear()
 
 def delete_multiple_skus(store_slug: str, sku_list: list):
@@ -459,11 +479,13 @@ def delete_multiple_skus(store_slug: str, sku_list: list):
         return
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
+    
     with engine.begin() as conn:
-        conn.execute(
-            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name IN :sku_names"),
-            {"store_id": store_id, "sku_names": tuple(sku_list)}
-        )
+        for sku_name in sku_list:
+            conn.execute(
+                text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name = :sku_name"),
+                {"store_id": store_id, "sku_name": sku_name}
+            )
     load_master.clear()
 
 master_df = load_master(selected_store_slug)
@@ -1288,11 +1310,10 @@ with tab_master:
                 df_catalog_view = master_df.copy()
                 df_catalog_view.insert(0, "Del", False)
                 
-                # STRICT COMPACT COLUMN SIZING (FIXES WIDE DELETE COLUMN)
                 edited_catalog_df = st.data_editor(
                     df_catalog_view,
                     num_rows="fixed",
-                    hide_index=True,  # Hides row numbers for zero visual bloat
+                    hide_index=True,
                     use_container_width=True,
                     key="master_catalog_editor",
                     column_config={
