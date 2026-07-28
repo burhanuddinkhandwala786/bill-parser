@@ -485,37 +485,31 @@ def extract_invoice_data(image):
     buffer.seek(0)
     optimized_img = Image.open(buffer)
 
+    # ENTERPRISE OCR PROMPT WITH PRINTED LINE TOTAL ANCHORING
     prompt = """
-    You are an expert OCR and financial vision system built for retail & wholesale purchase bill ingestion.
-    Your task is to extract line items from purchase invoices—including printed, handwritten, low-light, faded thermal receipts, crumpled paper, or skewed photos.
+    You are an enterprise financial OCR system for wholesale, retail, plywood, hardware, and building material invoices.
 
-    CRITICAL EXTRACTION INSTRUCTIONS:
-    1. "Supplier Company Name": Extract the vendor/distributor company name at the header. If unclear or handwritten, infer best title or use "Unknown Supplier".
-    2. "Line Items": Extract every purchased item row from the table or receipt list.
-       - "Item Name": Full product title or description. Read faint or handwritten pen marks carefully.
-       - "Quantity": Pure numeric value (e.g. 1.0, 10, 0.5). Default to 1.0 if unspecified.
-       - "Unit Price (Excl. Tax)": Per-item rate before GST if explicitly printed.
-       - "Discount Amount": Any cash/trade discount deducted for this item line. Default to 0.0.
-       - "Line Total Taxable Amount": The line base total before GST.
-       - "Line Total Inclusive Amount": The total line amount including GST.
-       - "GST Rate": GST tax percentage as a pure number (0, 5, 12, 18, 28). If CGST/SGST listed separately, sum them. Default to 18.0 if unstated.
-       - "HSN Code": HSN/SAC string. Empty string "" if missing.
-       - "Unit": Unit of measure (PCS, BOX, LTR, KG, NOS, SET, SQM, MTR, PKT). Default to "PCS".
+    CRITICAL EXTRACTION & GROUND-TRUTH RULES:
+    1. "Supplier Company Name": Main vendor/seller title from bill top header.
+    2. "Line Items": Extract every product row accurately.
+       - "Item Name": Full product title or description. Read handwritten notes and pen edits carefully.
+       - "Primary Quantity": Pure numeric count of physical pieces/sheets/boxes received (e.g., 6.0, 1.0, 270.12).
+       - "Unit": Unit string (PCS, SQM, SQFT, BOX, KG, LTR, NOS, SET). Default to "PCS".
+       - "Printed Taxable Amount": ABSOLUTE GROUND TRUTH. Extract the printed line subtotal/amount value before tax directly from the bill's "Amount" column (e.g. 7305.60, 63543.00, 2000.00). DO NOT multiply physical pieces * secondary unit rate!
+       - "GST Rate": Total GST percentage as a pure number (0, 5, 12, 18, 28). If CGST (9%) & SGST (9%) are listed separately, SUM THEM to 18.0. Default to 18.0 if unstated.
+       - "HSN Code": HSN/SAC code as string. If missing, "".
 
-    STRICT JSON OUTPUT FORMAT ONLY:
+    OUTPUT SCHEMA (STRICT JSON ONLY):
     {
-        "Supplier Company Name": "Vendor Name",
+        "Supplier Company Name": "Vendor Title",
         "Line Items": [
             {
-                "Item Name": "description",
-                "Quantity": 1.0,
-                "Unit Price (Excl. Tax)": 0.0,
-                "Discount Amount": 0.0,
-                "Line Total Taxable Amount": 0.0,
-                "Line Total Inclusive Amount": 0.0,
+                "Item Name": "Description",
+                "Primary Quantity": 1.0,
+                "Unit": "PCS",
+                "Printed Taxable Amount": 0.0,
                 "GST Rate": 18.0,
-                "HSN Code": "",
-                "Unit": "PCS"
+                "HSN Code": ""
             }
         ]
     }
@@ -548,7 +542,6 @@ def extract_invoice_data(image):
     raise Exception(f"AI Service error across all keys and models: {last_error}")
 
 def parse_item_names_from_image(image):
-    """Fast Vision Parser extracting Item Names, Qtys, and MRPs if present on handwritten slips."""
     img_copy = image.copy()
     if img_copy.mode in ("RGBA", "P"):
         img_copy = img_copy.convert("RGB")
@@ -756,7 +749,6 @@ with tab_parser:
                 save_store_phone(selected_store_slug, man_phone_input.strip())
                 st.session_state["user_store"]["phone"] = man_phone_input.strip()
 
-            # QUICK ITEM NAME IMPORTER
             with st.expander("⚡ Quick-Load Items from Handwritten Order Slip or Photo", expanded=False):
                 st.caption("Snap or upload a photo of an order slip to auto-fill product descriptions and quantities!")
                 quick_item_file = st.file_uploader("Upload Slip Photo", type=["jpg", "jpeg", "png"], key="quick_item_uploader")
@@ -801,7 +793,6 @@ with tab_parser:
                 }
             )
             
-            # --- CRITICAL FIX 1: PERSIST EDITOR STATE BACK TO SESSION STATE ---
             st.session_state["manual_quote_data"] = edited_manual_df.copy()
             
             calc_manual_df = edited_manual_df.copy()
@@ -987,7 +978,7 @@ with tab_parser:
                     supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
                     
                     for row in parsed_json.get("Line Items", []):
-                        qty = float(row.get("Quantity") or 1.0)
+                        qty = float(row.get("Primary Quantity") or 1.0)
                         if qty <= 0: qty = 1.0
                         
                         if gst_bill_type == "Non-GST / Net Rate Bill (0% Tax)":
@@ -995,26 +986,13 @@ with tab_parser:
                         else:
                             gst_rate = float(row.get("GST Rate") or 18.0)
                             
-                        unit_price = float(row.get("Unit Price (Excl. Tax)") or 0.0)
-                        discount = float(row.get("Discount Amount") or 0.0)
-                        line_taxable = float(row.get("Line Total Taxable Amount") or 0.0)
-                        line_inclusive = float(row.get("Line Total Inclusive Amount") or 0.0)
+                        # ANCHORED MATH: Printed Taxable Amount is Ground Truth!
+                        printed_taxable = float(row.get("Printed Taxable Amount") or 0.0)
                         hsn_sac = str(row.get("HSN Code") or "").strip()
                         
-                        # --- CRITICAL FIX 2: ROBUST MULTI-FALLBACK TAXABLE MATH ---
-                        if unit_price > 0:
-                            total_taxable_item = (unit_price * qty) - discount
-                            final_base = total_taxable_item / qty if qty > 0 else 0.0
-                        elif line_taxable > 0:
-                            total_taxable_item = line_taxable
-                            final_base = line_taxable / qty
-                        elif line_inclusive > 0:
-                            total_taxable_item = line_inclusive / (1 + (gst_rate / 100))
-                            final_base = total_taxable_item / qty
-                        else:
-                            final_base = 0.0
-                            total_taxable_item = 0.0
-                            
+                        # Effective base purchase rate per primary physical piece
+                        base_rate_per_pc = printed_taxable / qty if qty > 0 else 0.0
+                        
                         raw_item_name = str(row.get("Item Name", "")).strip()
                         matched_sku, match_type = match_sku(raw_item_name)
                         known_selling = get_known_selling_price(matched_sku)
@@ -1029,9 +1007,10 @@ with tab_parser:
                             "HSN/SAC": hsn_sac,
                             "Category": "General",
                             "GST Rate": gst_rate,
-                            "Purchase Price": round(final_base, 2),
-                            "Line Total Taxable": round(total_taxable_item, 2),
-                            "Selling Price": round(known_selling, 2)
+                            "Purchase Price": round(base_rate_per_pc, 2),
+                            "Line Total Taxable": round(printed_taxable, 2),
+                            "Selling Price": round(known_selling, 2),
+                            "Target Profit Margin (%)": 15.0
                         })
                     
                 status_container.update(label="✅ Ingestion & Batch Extraction Complete!", state="complete", expanded=False)
@@ -1045,19 +1024,28 @@ with tab_parser:
     if "parsed_df" in st.session_state:
         st.divider()
         st.subheader("2. Live Inventory Audit Workspace")
-        st.caption("Verify AI extraction, mapped SKUs, and rate details before exporting to accounting software.")
+        st.caption("Verify AI extraction, mapped SKUs, and landed costs before exporting to accounting software or assigning Selling Prices (SP).")
         
         df = st.session_state["parsed_df"]
         
         df["Current Quantity"] = pd.to_numeric(df["Current Quantity"], errors='coerce').fillna(1.0)
         df["Purchase Price"] = pd.to_numeric(df["Purchase Price"], errors='coerce').fillna(0.0)
         df["GST Rate"] = pd.to_numeric(df["GST Rate"], errors='coerce').fillna(18.0)
-        df["Selling Price"] = pd.to_numeric(df.get("Selling Price", 0.0), errors='coerce').fillna(0.0)
+        df["Target Profit Margin (%)"] = pd.to_numeric(df.get("Target Profit Margin (%)", 15.0), errors='coerce').fillna(15.0)
         
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
         df["Line Total (Incl. GST)"] = (df["Line Total (Excl. GST)"] + df["GST Tax Amount"]).round(2)
+        
+        # TRUE LANDED COST PER PIECE (GST PAID)
         df["Unit Cost (GST Paid) ₹"] = (df["Line Total (Incl. GST)"] / df["Current Quantity"]).round(2)
+        
+        # AUTO-CALCULATED SUGGESTED SELLING PRICE (SP) IF NOT SET
+        for idx, row in df.iterrows():
+            if float(row.get("Selling Price", 0.0)) <= 0:
+                landed = float(row["Unit Cost (GST Paid) ₹"])
+                margin = float(row["Target Profit Margin (%)"])
+                df.at[idx, "Selling Price"] = round(landed * (1 + (margin / 100)), 2)
         
         total_taxable = df["Line Total (Excl. GST)"].sum()
         total_gst = df["GST Tax Amount"].sum()
@@ -1086,6 +1074,7 @@ with tab_parser:
             "GST Rate",
             "Unit Cost (GST Paid) ₹",
             "Line Total (Incl. GST)",
+            "Target Profit Margin (%)",
             "Selling Price"
         ]
         
@@ -1100,15 +1089,16 @@ with tab_parser:
                 "Match Status": st.column_config.TextColumn("Match Status", disabled=True),
                 "Raw Vendor Item": st.column_config.TextColumn("Raw Vendor Item", disabled=True),
                 "Official SKU": st.column_config.SelectboxColumn("Official SKU Name", options=master_sku_list, required=True) if master_sku_list else "Official SKU",
-                "Current Quantity": st.column_config.NumberColumn("Qty", min_value=0.1, format="%.2f"),
+                "Current Quantity": st.column_config.NumberColumn("Qty (Pcs/Sheets)", min_value=0.01, format="%.2f"),
                 "Unit": st.column_config.TextColumn("Unit"),
                 "HSN/SAC": st.column_config.TextColumn("HSN/SAC"),
                 "Purchase Price": st.column_config.NumberColumn("Unit Rate (Excl. GST) ₹", format="₹%.2f"),
                 "Line Total (Excl. GST)": st.column_config.NumberColumn("Total (Excl. GST) ₹", format="₹%.2f", disabled=True),
                 "GST Rate": st.column_config.NumberColumn("GST %", min_value=0, max_value=28, format="%d%%"),
-                "Unit Cost (GST Paid) ₹": st.column_config.NumberColumn("Unit Cost (GST Paid) ₹", format="₹%.2f", disabled=True),
+                "Unit Cost (GST Paid) ₹": st.column_config.NumberColumn("Landed Cost (GST Paid) ₹/Pc", format="₹%.2f", disabled=True),
                 "Line Total (Incl. GST)": st.column_config.NumberColumn("Total (Incl. GST) ₹", format="₹%.2f", disabled=True),
-                "Selling Price": st.column_config.NumberColumn("Selling Price ₹", format="₹%.2f"),
+                "Target Profit Margin (%)": st.column_config.NumberColumn("Profit Margin %", min_value=0.0, format="%.1f%%"),
+                "Selling Price": st.column_config.NumberColumn("Final Selling Price (SP) ₹", format="₹%.2f"),
             }
         )
         
@@ -1116,7 +1106,7 @@ with tab_parser:
         df_updated["Current Quantity"] = pd.to_numeric(df_updated["Current Quantity"], errors='coerce').fillna(1.0)
         df_updated["Purchase Price"] = pd.to_numeric(df_updated["Purchase Price"], errors='coerce').fillna(0.0)
         df_updated["GST Rate"] = pd.to_numeric(df_updated["GST Rate"], errors='coerce').fillna(18.0)
-        df_updated["Selling Price"] = pd.to_numeric(df_updated.get("Selling Price", 0.0), errors='coerce').fillna(0.0)
+        df_updated["Target Profit Margin (%)"] = pd.to_numeric(df_updated.get("Target Profit Margin (%)", 15.0), errors='coerce').fillna(15.0)
 
         df_updated["Line Total (Excl. GST)"] = (df_updated["Purchase Price"] * df_updated["Current Quantity"]).round(2)
         df_updated["GST Tax Amount"] = (df_updated["Line Total (Excl. GST)"] * (df_updated["GST Rate"] / 100)).round(2)
@@ -1176,7 +1166,6 @@ with tab_parser:
             for col_num, header_title in enumerate(exact_headers, 1):
                 ws.cell(row=5, column=col_num, value=header_title)
             
-            # --- CRITICAL FIX 3: SAFE EXCEL EXPORT (PREVENTS NaN WRITING ERRORS) ---
             for i, row in df_updated.iterrows():
                 row_idx = 6 + i
                 raw_selling = row.get("Selling Price", 0.0)
@@ -1235,7 +1224,6 @@ with tab_master:
                 st.dataframe(imported_df.head(5), use_container_width=True)
                 
                 col_sku = st.selectbox("Select SKU Name Column:", options=imported_df.columns)
-                
                 col_cat, col_unit, col_gst, col_price = st.columns(4)
                 with col_cat:
                     opt_cat = st.selectbox("Category Column (Optional):", options=["-- None --"] + list(imported_df.columns))
@@ -1373,8 +1361,8 @@ with tab_guide:
         1. **Select Store:** Choose your active store location in the left sidebar directory.
         2. **Upload Bills:** Drop image files or click a photo directly with your camera in **Tab 1**. Select whether the bill is Taxable GST or Non-GST.
         3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
-        4. **Audit Workspace:** Check quantities, HSN codes, purchase rates, and mapped SKUs.
-        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer (Manual entry with Quick Item list uploader or from Bill with MRP/Discount).
+        4. **Audit Workspace:** Check quantities, HSN codes, landed purchase rates, and mapped SKUs.
+        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer.
         6. **Download Import File:** Generate the `.xlsx` spreadsheet.
         7. **Import to ERP:** Open your accounting software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
         """)
