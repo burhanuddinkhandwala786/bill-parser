@@ -718,7 +718,7 @@ with tab_parser:
                 save_store_phone(selected_store_slug, man_phone_input.strip())
                 st.session_state["user_store"]["phone"] = man_phone_input.strip()
 
-            # MARKUP & DISCOUNT SLIDERS FOR MANUAL QUOTE
+            # MARKUP & DISCOUNT CONTROLS
             col_mk1, col_mk2 = st.columns([1, 1])
             with col_mk1:
                 manual_markup_pct = st.number_input("Profit Markup (% On Base MRP/Cost)", min_value=0.0, value=0.0, step=1.0, key="man_markup_input")
@@ -752,12 +752,10 @@ with tab_parser:
             calc_manual_df["Quantity"] = pd.to_numeric(calc_manual_df["Quantity"], errors='coerce').fillna(1.0)
             calc_manual_df["MRP (₹)"] = pd.to_numeric(calc_manual_df.get("MRP / Base Rate (₹)", 0.0), errors='coerce').fillna(0.0)
             
-            # Combine item-level discount + global profit markup
             item_disc = pd.to_numeric(calc_manual_df.get("Disc %", 0.0), errors='coerce').fillna(0.0)
             combined_disc = (item_disc + manual_disc_pct).clip(upper=100.0)
             calc_manual_df["Discount (%)"] = combined_disc
             
-            # Apply Profit Markup
             marked_up_mrp = (calc_manual_df["MRP (₹)"] * (1 + (manual_markup_pct / 100))).round(2)
             calc_manual_df["MRP (₹)"] = marked_up_mrp
             
@@ -811,7 +809,7 @@ with tab_parser:
                 with col_q2:
                     biz_phone_input = st.text_input("Phone", value=saved_phone, key="bill_phone_input")
                 with col_q3:
-                    markup_pct = st.number_input("Profit Markup (% On Landed Cost)", min_value=0.0, value=15.0, step=1.0, key="bill_markup_input")
+                    markup_pct = st.number_input("Profit Markup %", min_value=0.0, value=15.0, step=1.0, key="bill_markup_input")
                 with col_q4:
                     disc_pct_bill = st.number_input("Discount %", min_value=0.0, max_value=100.0, value=0.0, step=1.0, key="bill_disc_input")
                 
@@ -978,7 +976,7 @@ with tab_parser:
                             "GST Rate": gst_rate,
                             "Purchase Price": round(base_rate_per_pc, 2),
                             "Line Total Taxable": round(printed_taxable, 2),
-                            "Selling Price": round(known_selling, 2)  # FIXED: Pure int decimal places
+                            "Selling Price": round(known_selling, 2)
                         })
                     
                 status_container.update(label="✅ Ingestion & Batch Extraction Complete!", state="complete", expanded=False)
