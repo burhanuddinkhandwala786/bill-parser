@@ -2,9 +2,9 @@ import os
 import gc
 import json
 import time
-import shutil
 import bcrypt
 import openpyxl
+import urllib.parse
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -470,24 +470,34 @@ def _call_gemini_with_retry(client, model_name, contents, config):
         config=config
     )
 
-def extract_invoice_data(image):
-    img_copy = image.copy()
-    if img_copy.mode in ("RGBA", "P"):
-        img_copy = img_copy.convert("RGB")
+def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
+    """Handles both Image files (JPG/PNG) and Native PDF documents seamlessly."""
+    
+    if "pdf" in mime_type.lower():
+        # Native PDF content payload
+        file_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
+        contents = [file_part]
+    else:
+        # High-precision Image canvas optimization (1500px at 90% JPEG quality)
+        img = Image.open(BytesIO(file_bytes))
+        img_copy = img.copy()
+        if img_copy.mode in ("RGBA", "P"):
+            img_copy = img_copy.convert("RGB")
+        img_copy.thumbnail((1500, 1500), Image.Resampling.LANCZOS)
         
-    img_copy.thumbnail((1500, 1500), Image.Resampling.LANCZOS)
-
-    buffer = BytesIO()
-    img_copy.save(buffer, format="JPEG", quality=90, optimize=True)
-    buffer.seek(0)
-    optimized_img = Image.open(buffer)
+        buffer = BytesIO()
+        img_copy.save(buffer, format="JPEG", quality=90, optimize=True)
+        buffer.seek(0)
+        contents = [Image.open(buffer)]
 
     prompt = """
     You are an enterprise financial OCR system for wholesale, retail, plywood, hardware, and building material invoices.
 
     CRITICAL EXTRACTION & GROUND-TRUTH RULES:
     1. "Supplier Company Name": Main vendor/seller title from bill top header.
-    2. "Line Items": Extract every product row accurately.
+    2. "Invoice Number": Invoice/Bill number string if present, else "".
+    3. "Invoice Date": Date string if present, else "".
+    4. "Line Items": Extract every product row accurately.
        - "Item Name": Full product title or description. Read handwritten notes and pen edits carefully.
        - "Primary Quantity": Pure numeric count of physical pieces/sheets/boxes received (e.g., 6.0, 1.0, 270.12).
        - "Unit": Unit string (PCS, SQM, SQFT, BOX, KG, LTR, NOS, SET). Default to "PCS".
@@ -498,6 +508,8 @@ def extract_invoice_data(image):
     OUTPUT SCHEMA (STRICT JSON ONLY):
     {
         "Supplier Company Name": "Vendor Title",
+        "Invoice Number": "",
+        "Invoice Date": "",
         "Line Items": [
             {
                 "Item Name": "Description",
@@ -511,8 +523,8 @@ def extract_invoice_data(image):
     }
     """
     
+    contents.append(prompt)
     config = types.GenerateContentConfig(response_mime_type="application/json")
-    contents = [optimized_img, prompt]
     candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
     last_error = None
     
@@ -522,12 +534,12 @@ def extract_invoice_data(image):
             for model_name in candidate_models:
                 try:
                     response = _call_gemini_with_retry(client, model_name, contents, config)
-                    text = response.text.strip()
-                    if text.startswith("```json"):
-                        text = text[7:-3].strip()
-                    elif text.startswith("```"):
-                        text = text[3:-3].strip()
-                    return json.loads(text)
+                    text_res = response.text.strip()
+                    if text_res.startswith("```json"):
+                        text_res = text_res[7:-3].strip()
+                    elif text_res.startswith("```"):
+                        text_res = text_res[3:-3].strip()
+                    return json.loads(text_res)
                 except Exception as model_err:
                     last_error = model_err
                     continue
@@ -537,10 +549,10 @@ def extract_invoice_data(image):
             
     raise Exception(f"AI Service error across all keys and models: {last_error}")
 
-def process_single_file_raw(file_bytes):
+def process_single_item_tuple(item_tuple):
+    file_bytes, mime_type = item_tuple
     try:
-        img = Image.open(BytesIO(file_bytes))
-        return extract_invoice_data(img)
+        return extract_invoice_data_multiformat(file_bytes, mime_type)
     except Exception as e:
         return {"ERROR": str(e)}
 
@@ -744,7 +756,11 @@ with tab_parser:
             man_grand_total = calc_manual_df["Total Value (₹)"].sum()
             st.metric("Quotation Total", f"₹{man_grand_total:,.2f}")
             
-            if st.button("📄 Generate & Download PDF Quotation", type="primary", use_container_width=True, key="btn_man_quote"):
+            c_qbtn1, c_qbtn2 = st.columns([2, 1])
+            with c_qbtn1:
+                gen_man_btn = st.button("📄 Generate & Download PDF Quotation", type="primary", use_container_width=True, key="btn_man_quote")
+            
+            if gen_man_btn:
                 if calc_manual_df.empty or man_grand_total <= 0:
                     st.warning("Please enter at least one valid item with a price.")
                 else:
@@ -765,6 +781,12 @@ with tab_parser:
                             use_container_width=True,
                             key="dl_man_pdf"
                         )
+                        
+                        # 1-CLICK WHATSAPP SHARE DEEP LINK
+                        clean_num = ''.join(filter(str.isdigit, man_phone_input))
+                        wa_msg = urllib.parse.quote(f"Hello {man_cust_name},\nHere is your official quotation from {ACTIVE_STORE_DISPLAY}.\nTotal Amount: ₹{man_grand_total:,.2f}\nThank you!")
+                        wa_url = f"https://wa.me/{clean_num}?text={wa_msg}" if clean_num else f"https://wa.me/?text={wa_msg}"
+                        st.markdown(f'<a href="{wa_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; background-color:#25D366; color:white; border:none; padding:10px; border-radius:5px; font-weight:bold; cursor:pointer;">💬 Share via WhatsApp</button></a>', unsafe_allow_html=True)
                     else:
                         st.warning("⚠️ 'reportlab' library is missing in environment.")
 
@@ -830,13 +852,13 @@ with tab_parser:
 
     st.divider()
 
-    # --- INGESTION DROPZONE ---
+    # --- INGESTION DROPZONE (WITH NATIVE PDF + IMAGE SUPPORT) ---
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
         with st.container(border=True):
             st.subheader("1. Ingestion Dropzone")
-            st.caption("Upload files or click a photo directly using your phone or webcam.")
+            st.caption("Upload PNG, JPG, or PDF files or click a photo directly using your phone/webcam.")
             
             c_mode, c_tax = st.columns([1, 1])
             with c_mode:
@@ -855,35 +877,37 @@ with tab_parser:
                     help="Non-GST overrides tax rate to 0% across all extracted items."
                 )
             
-            staged_file_bytes = []
+            staged_file_tuples = []
             
             if upload_mode == "📸 Direct Camera Snap":
                 cam_photo = st.camera_input("Take a photo of the purchase bill", key="direct_cam_input")
                 if cam_photo is not None:
-                    staged_file_bytes.append(cam_photo.getvalue())
+                    staged_file_tuples.append((cam_photo.getvalue(), "image/jpeg"))
             else:
                 uploaded_files = st.file_uploader(
-                    "Upload Bills",
-                    type=["jpg", "jpeg", "png"],
+                    "Upload Bills (PDF or Images)",
+                    type=["jpg", "jpeg", "png", "pdf"],
                     accept_multiple_files=True,
                     label_visibility="collapsed",
                     key="batch_file_uploader"
                 )
                 if uploaded_files:
-                    staged_file_bytes = [f.read() for f in uploaded_files]
+                    for f in uploaded_files:
+                        mtype = "application/pdf" if f.name.lower().endswith(".pdf") else "image/jpeg"
+                        staged_file_tuples.append((f.read(), mtype))
 
     with col_info:
         with st.container(border=True):
             st.subheader("⚡ Ingestion Queue")
-            if staged_file_bytes:
-                st.success(f"📁 **{len(staged_file_bytes)} File(s)** Staged & Ready")
+            if staged_file_tuples:
+                st.success(f"📁 **{len(staged_file_tuples)} File(s)** Staged & Ready")
                 tax_status_str = "0% Tax Override" if gst_bill_type == "Non-GST / Net Rate Bill (0% Tax)" else "Standard Tax Extraction"
                 st.caption(f"Mode: **{tax_status_str}**")
             else:
                 st.info("No files staged.")
                 st.caption("Snap a photo or drop purchase bills to begin structured extraction.")
 
-    if staged_file_bytes:
+    if staged_file_tuples:
         st.write("")
         c_btn1, c_btn2 = st.columns([3, 1])
         with c_btn1:
@@ -901,8 +925,8 @@ with tab_parser:
             all_parsed_items = []
             
             with st.status("Parsing purchase bills concurrently with Multimodal AI...", expanded=True) as status_container:
-                with ThreadPoolExecutor(max_workers=min(len(staged_file_bytes), 10)) as executor:
-                    raw_results = list(executor.map(process_single_file_raw, staged_file_bytes))
+                with ThreadPoolExecutor(max_workers=min(len(staged_file_tuples), 10)) as executor:
+                    raw_results = list(executor.map(process_single_item_tuple, staged_file_tuples))
                     
                 for parsed_json in raw_results:
                     if "ERROR" in parsed_json:
@@ -910,6 +934,8 @@ with tab_parser:
                         continue
                         
                     supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
+                    inv_num = parsed_json.get("Invoice Number", "")
+                    inv_date = parsed_json.get("Invoice Date", "")
                     
                     for row in parsed_json.get("Line Items", []):
                         qty = float(row.get("Primary Quantity") or 1.0)
@@ -931,6 +957,8 @@ with tab_parser:
                         
                         all_parsed_items.append({
                             "Supplier Name": supplier,
+                            "Invoice No": inv_num,
+                            "Invoice Date": inv_date,
                             "Raw Vendor Item": raw_item_name,
                             "Official SKU": matched_sku,
                             "Current Quantity": qty,
@@ -975,7 +1003,6 @@ with tab_parser:
         uom_groups = df.groupby("Unit")["Current Quantity"].sum()
         uom_summary_str = " | ".join([f"{val:,.2f} {unit}" for unit, val in uom_groups.items()])
 
-        # ROUND OFF ADJUSTMENT (PRACTICAL REAL-WORLD FEATURE)
         c_m1, c_m2, c_m3, c_m4 = st.columns([1, 1, 1, 1])
         c_m1.metric("Total Line Items", f"{len(df)} Items")
         c_m2.metric("Stock Quantities by UOM", uom_summary_str)
@@ -1280,10 +1307,10 @@ with tab_guide:
         st.markdown("""
         ### How to Process & Sync Invoices:
         1. **Select Store:** Choose your active store location in the left sidebar directory.
-        2. **Upload Bills:** Drop image files or click a photo directly with your camera in **Tab 1**. Select whether the bill is Taxable GST or Non-GST.
+        2. **Upload Bills:** Drop images, PDFs, or click a photo directly with your camera in **Tab 1**. Select whether the bill is Taxable GST or Non-GST.
         3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
         4. **Audit Workspace:** Check quantities, HSN codes, landed purchase rates, and mapped SKUs.
-        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer.
+        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer and send via WhatsApp.
         6. **Download Import File:** Generate the `.xlsx` spreadsheet.
         7. **Import to ERP:** Open your accounting software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
         """)
