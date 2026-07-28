@@ -488,11 +488,11 @@ def delete_multiple_skus(store_slug: str, sku_list: list):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
-    # FIXED: SAFE PARAMETER BINDING (ELIMINATES POSTGRES ARRAY SYNTAX ERRORS)
+    # SAFE TUPLE PARAMETER BINDING (FIXES POSTGRES ARRAY SYNTAX BUG)
     with engine.begin() as conn:
         conn.execute(
-            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name IN :sku_names"),
-            {"store_id": store_id, "sku_names": tuple(sku_list)}
+            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name = ANY(:sku_names)"),
+            {"store_id": store_id, "sku_names": list(sku_list)}
         )
     load_master.clear()
 
