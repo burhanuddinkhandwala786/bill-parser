@@ -114,7 +114,7 @@ def save_store_phone(store_slug: str, phone: str):
                 text("UPDATE stores SET phone = :phone WHERE slug = :slug"),
                 {"phone": phone.strip(), "slug": store_slug}
             )
-        st.cache_data.clear()
+        get_store_phone.clear()
     except Exception:
         pass
 
@@ -377,7 +377,7 @@ def save_json_memory(store_slug: str, memory_dict: dict):
             """),
             records
         )
-    st.cache_data.clear()
+    load_json_memory.clear()
 
 @st.cache_data(ttl=3600)
 def load_master(store_slug: str) -> pd.DataFrame:
@@ -429,9 +429,31 @@ def save_master(df: pd.DataFrame, store_slug: str):
                 """),
                 records
             )
-    st.cache_data.clear()
+    load_master.clear()
 
-# --- BULK CHECKBOX DELETE FUNCTION ---
+# --- HYPER-FAST DIRECT SINGLE INSERT & BULK DELETE SQL ENGINES ---
+def add_single_sku_direct(store_slug: str, sku_name: str, category: str, unit: str, gst_rate: float, selling_price: float):
+    engine = get_db_engine()
+    store_id = get_or_create_store_id(store_slug)
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO master_skus (store_id, official_sku_name, category, default_unit, gst_rate, selling_price)
+                VALUES (:store_id, :official_sku_name, :category, :default_unit, :gst_rate, :selling_price)
+                ON CONFLICT (store_id, official_sku_name)
+                DO UPDATE SET category = EXCLUDED.category, default_unit = EXCLUDED.default_unit, gst_rate = EXCLUDED.gst_rate, selling_price = EXCLUDED.selling_price
+            """),
+            {
+                "store_id": store_id,
+                "official_sku_name": sku_name,
+                "category": category,
+                "default_unit": unit,
+                "gst_rate": gst_rate,
+                "selling_price": selling_price
+            }
+        )
+    load_master.clear()
+
 def delete_multiple_skus(store_slug: str, sku_list: list):
     if not sku_list:
         return
@@ -442,7 +464,7 @@ def delete_multiple_skus(store_slug: str, sku_list: list):
             text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name IN :sku_names"),
             {"store_id": store_id, "sku_names": tuple(sku_list)}
         )
-    st.cache_data.clear()
+    load_master.clear()
 
 master_df = load_master(selected_store_slug)
 master_sku_list = master_df["Official_SKU_Name"].dropna().tolist() if not master_df.empty else []
@@ -1237,6 +1259,7 @@ with tab_master:
 
     col_add, col_list = st.columns([1, 2])
     
+    # --- INSTANT SINGLE SKU SAVER ---
     with col_add:
         with st.container(border=True):
             st.markdown("#### ➕ Add Single Master SKU")
@@ -1246,54 +1269,49 @@ with tab_master:
             add_gst = st.selectbox("GST Rate (%)", options=[0, 5, 12, 18, 28], index=3)
             add_price = st.number_input("Selling Price ₹ (Optional)", min_value=0.0, step=10.0)
             
-            if st.button("Save SKU to Catalog", use_container_width=True, type="primary"):
+            if st.button("⚡ Save SKU to Catalog", use_container_width=True, type="primary"):
                 if add_sku.strip():
                     clean_sku = add_sku.strip()
                     if clean_sku not in master_sku_list:
-                        new_row = pd.DataFrame([{
-                            "Official_SKU_Name": clean_sku,
-                            "Category": add_cat,
-                            "Default_Unit": add_unit,
-                            "GST_Rate": add_gst,
-                            "Selling_Price": add_price
-                        }])
-                        updated = pd.concat([master_df, new_row], ignore_index=True)
-                        save_master(updated, selected_store_slug)
-                        st.success(f"Added '{clean_sku}'!")
+                        # FAST DIRECT SINGLE SQL INSERT
+                        add_single_sku_direct(selected_store_slug, clean_sku, add_cat, add_unit, float(add_gst), float(add_price))
+                        st.toast(f"⚡ Added '{clean_sku}' instantly!")
                         st.rerun()
                     else:
                         st.warning("SKU already exists.")
                     
+    # --- COMPACT CHECKBOX MULTI-DELETE TABLE ---
     with col_list:
         with st.container(border=True):
-            st.markdown("#### 📋 Catalog Register (Multi-Select Delete)")
+            st.markdown("#### 📋 Catalog Register")
             if not master_df.empty:
-                # DYNAMIC CHECKBOX TABLE FOR INSTANT MULTI-ROW DELETION
                 df_catalog_view = master_df.copy()
-                df_catalog_view.insert(0, "Delete?", False)
+                df_catalog_view.insert(0, "Del", False)
                 
+                # STRICT COMPACT COLUMN SIZING (FIXES WIDE DELETE COLUMN)
                 edited_catalog_df = st.data_editor(
                     df_catalog_view,
                     num_rows="fixed",
+                    hide_index=True,  # Hides row numbers for zero visual bloat
                     use_container_width=True,
                     key="master_catalog_editor",
                     column_config={
-                        "Delete?": st.column_config.CheckboxColumn("Delete?", default=False),
+                        "Del": st.column_config.CheckboxColumn("Del", default=False, width="small"),
                         "Official_SKU_Name": st.column_config.TextColumn("Official SKU Name", disabled=True),
                         "Category": st.column_config.TextColumn("Category", disabled=True),
-                        "Default_Unit": st.column_config.TextColumn("Unit", disabled=True),
-                        "GST_Rate": st.column_config.NumberColumn("GST %", format="%d%%", disabled=True),
+                        "Default_Unit": st.column_config.TextColumn("Unit", disabled=True, width="small"),
+                        "GST_Rate": st.column_config.NumberColumn("GST %", format="%d%%", disabled=True, width="small"),
                         "Selling_Price": st.column_config.NumberColumn("Selling Price ₹", format="₹%.2f", disabled=True)
                     }
                 )
                 
-                selected_for_delete = edited_catalog_df[edited_catalog_df["Delete?"] == True]["Official_SKU_Name"].tolist()
+                selected_for_delete = edited_catalog_df[edited_catalog_df["Del"] == True]["Official_SKU_Name"].tolist()
                 
                 if selected_for_delete:
                     st.write("")
                     if st.button(f"🗑️ Delete Selected ({len(selected_for_delete)} SKUs)", type="primary", use_container_width=True):
                         delete_multiple_skus(selected_store_slug, selected_for_delete)
-                        st.success(f"Deleted {len(selected_for_delete)} SKU(s) instantly!")
+                        st.toast(f"Deleted {len(selected_for_delete)} SKU(s)!")
                         st.rerun()
             else:
                 st.info("Master catalog for this store is currently empty.")
@@ -1318,7 +1336,7 @@ with tab_memory:
                     text("DELETE FROM vendor_mappings WHERE store_id = :store_id"),
                     {"store_id": store_id}
                 )
-            st.cache_data.clear()
+            load_json_memory.clear()
             st.success("Memory cache reset!")
             st.rerun()
     else:
