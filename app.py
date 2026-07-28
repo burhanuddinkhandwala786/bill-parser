@@ -4,7 +4,6 @@ import json
 import time
 import bcrypt
 import openpyxl
-import urllib.parse
 import pandas as pd
 import streamlit as st
 from io import BytesIO
@@ -432,14 +431,16 @@ def save_master(df: pd.DataFrame, store_slug: str):
             )
     st.cache_data.clear()
 
-# --- OPTIMIZED FAST SINGLE SKU DELETION (INSTANT UI RESPONSE) ---
-def delete_single_sku(store_slug: str, sku_name: str):
+# --- BULK CHECKBOX DELETE FUNCTION ---
+def delete_multiple_skus(store_slug: str, sku_list: list):
+    if not sku_list:
+        return
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     with engine.begin() as conn:
         conn.execute(
-            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name = :sku_name"),
-            {"store_id": store_id, "sku_name": sku_name}
+            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name IN :sku_names"),
+            {"store_id": store_id, "sku_names": tuple(sku_list)}
         )
     st.cache_data.clear()
 
@@ -489,7 +490,6 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         file_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
         contents = [file_part]
     else:
-        # HIGH-SPEED OPTIMIZED OCR CANVAS (1024px, 85% Quality -> 60% Faster Upload Speed)
         img = Image.open(BytesIO(file_bytes))
         img_copy = img.copy()
         if img_copy.mode in ("RGBA", "P"):
@@ -1266,18 +1266,35 @@ with tab_master:
                     
     with col_list:
         with st.container(border=True):
-            st.markdown("#### 📋 Catalog Register")
+            st.markdown("#### 📋 Catalog Register (Multi-Select Delete)")
             if not master_df.empty:
-                st.dataframe(master_df, use_container_width=True)
-                st.write("")
-                with st.expander("🗑️ Fast Delete Catalog SKU"):
-                    sku_to_delete = st.selectbox("Select SKU to Remove:", options=["-- None --"] + master_sku_list)
-                    if st.button("Delete Selected SKU", use_container_width=True):
-                        if sku_to_delete != "-- None --":
-                            # HYPER-FAST TARGETED SINGLE ROW DELETION
-                            delete_single_sku(selected_store_slug, sku_to_delete)
-                            st.success(f"Removed '{sku_to_delete}' instantly!")
-                            st.rerun()
+                # DYNAMIC CHECKBOX TABLE FOR INSTANT MULTI-ROW DELETION
+                df_catalog_view = master_df.copy()
+                df_catalog_view.insert(0, "Delete?", False)
+                
+                edited_catalog_df = st.data_editor(
+                    df_catalog_view,
+                    num_rows="fixed",
+                    use_container_width=True,
+                    key="master_catalog_editor",
+                    column_config={
+                        "Delete?": st.column_config.CheckboxColumn("Delete?", default=False),
+                        "Official_SKU_Name": st.column_config.TextColumn("Official SKU Name", disabled=True),
+                        "Category": st.column_config.TextColumn("Category", disabled=True),
+                        "Default_Unit": st.column_config.TextColumn("Unit", disabled=True),
+                        "GST_Rate": st.column_config.NumberColumn("GST %", format="%d%%", disabled=True),
+                        "Selling_Price": st.column_config.NumberColumn("Selling Price ₹", format="₹%.2f", disabled=True)
+                    }
+                )
+                
+                selected_for_delete = edited_catalog_df[edited_catalog_df["Delete?"] == True]["Official_SKU_Name"].tolist()
+                
+                if selected_for_delete:
+                    st.write("")
+                    if st.button(f"🗑️ Delete Selected ({len(selected_for_delete)} SKUs)", type="primary", use_container_width=True):
+                        delete_multiple_skus(selected_store_slug, selected_for_delete)
+                        st.success(f"Deleted {len(selected_for_delete)} SKU(s) instantly!")
+                        st.rerun()
             else:
                 st.info("Master catalog for this store is currently empty.")
 
