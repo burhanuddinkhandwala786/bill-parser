@@ -474,17 +474,44 @@ def add_single_sku_direct(store_slug: str, sku_name: str, category: str, unit: s
             )
     load_master.clear()
 
+# --- FAST BATCH UPSERT FOR AUDIT CONFIRMATION (PREVENTS N+1 DB LOCKS) ---
+def bulk_upsert_audited_skus(store_slug: str, records: list):
+    if not records:
+        return
+    engine = get_db_engine()
+    store_id = get_or_create_store_id(store_slug)
+    
+    with engine.begin() as conn:
+        for rec in records:
+            conn.execute(
+                text("""
+                    INSERT INTO master_skus (store_id, official_sku_name, category, default_unit, gst_rate, selling_price)
+                    VALUES (:store_id, :official_sku_name, :category, :default_unit, :gst_rate, :selling_price)
+                    ON CONFLICT (store_id, official_sku_name)
+                    DO UPDATE SET category = EXCLUDED.category, default_unit = EXCLUDED.default_unit, gst_rate = EXCLUDED.gst_rate, selling_price = EXCLUDED.selling_price
+                """),
+                {
+                    "store_id": store_id,
+                    "official_sku_name": rec["official"],
+                    "category": rec["category"],
+                    "default_unit": rec["unit"],
+                    "gst_rate": rec["gst"],
+                    "selling_price": rec["sp"]
+                }
+            )
+    load_master.clear()
+
 def delete_multiple_skus(store_slug: str, sku_list: list):
     if not sku_list:
         return
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
-    # ATOMIC BULK SQL DELETION (FIXES LOOP OVERHEAD & TIMEOUTS)
+    # SAFE TUPLE PARAMETER BINDING (FIXES POSTGRES ARRAY SYNTAX BUG)
     with engine.begin() as conn:
         conn.execute(
-            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name = ANY(:sku_names)"),
-            {"store_id": store_id, "sku_names": list(sku_list)}
+            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name IN :sku_names"),
+            {"store_id": store_id, "sku_names": tuple(sku_list)}
         )
     load_master.clear()
 
@@ -1039,7 +1066,7 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
-        # SCHEMA GUARANTEE (PREVENTS DATA EDITOR KEYERRORS)
+        # SELF-HEALING SCHEMA GUARANTEE
         required_cols = [
             "Raw Vendor Item", "Official SKU", "Current Quantity", "Unit", "HSN/SAC",
             "Purchase Price", "GST Rate", "Selling Price", "Category"
@@ -1126,7 +1153,7 @@ with tab_parser:
         st.divider()
         if st.button("✅ Confirm Audit & Generate Excel Import File", type="primary", use_container_width=True):
             memory_updated = False
-            current_master_skus = set(master_sku_list)
+            upsert_records = []
             
             for idx, row in df_updated.iterrows():
                 raw = str(row.get("Raw Vendor Item", "")).strip().upper()
@@ -1140,9 +1167,18 @@ with tab_parser:
                     mapping_memory[raw] = official
                     memory_updated = True
                 
-                # SELF-HEALING: ALWAYS SYNC AUDITED SELLING PRICE BACK TO MASTER CATALOG
                 if official:
-                    add_single_sku_direct(selected_store_slug, official, cat_val, unit_val, gst_val, sp_val)
+                    upsert_records.append({
+                        "official": official,
+                        "category": cat_val,
+                        "unit": unit_val,
+                        "gst": gst_val,
+                        "sp": sp_val
+                    })
+
+            # BATCH DB SYNC (INSTANT TRANSACTION)
+            if upsert_records:
+                bulk_upsert_audited_skus(selected_store_slug, upsert_records)
 
             if memory_updated:
                 save_json_memory(selected_store_slug, mapping_memory)
@@ -1298,12 +1334,22 @@ with tab_master:
                     st.toast(f"⚡ Saved '{clean_sku}' instantly!")
                     st.rerun()
                     
-    # --- COMPACT CHECKBOX MULTI-DELETE TABLE ---
+    # --- COMPACT CHECKBOX MULTI-DELETE TABLE WITH LIVE SEARCH ---
     with col_list:
         with st.container(border=True):
             st.markdown("#### 📋 Catalog Register")
             if not master_df.empty:
+                search_query = st.text_input("🔍 Search Catalog SKUs...", placeholder="Type name or category...", key="catalog_search_bar")
+                
                 df_catalog_view = master_df.copy()
+                if search_query.strip():
+                    q = search_query.strip().lower()
+                    mask = (
+                        df_catalog_view["Official_SKU_Name"].astype(str).str.lower().str.contains(q) |
+                        df_catalog_view["Category"].astype(str).str.lower().str.contains(q)
+                    )
+                    df_catalog_view = df_catalog_view[mask]
+
                 df_catalog_view.insert(0, "Del", False)
                 
                 edited_catalog_df = st.data_editor(
