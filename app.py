@@ -318,22 +318,27 @@ if st.sidebar.button("🚪 Logout", use_container_width=True):
 
 st.sidebar.divider()
 
-# --- API KEY AUTHENTICATION ---
-api_key = None
-try:
-    if "GEMINI_API_KEY" in st.secrets:
-        api_key = st.secrets["GEMINI_API_KEY"]
-except Exception:
-    pass
+# --- MULTI-KEY & MULTI-MODEL FAIL-SAFE API POOL SETUP ---
+def get_api_key_pool():
+    """Gathers all available Gemini API keys from secrets or environment variables."""
+    keys = []
+    for i in range(1, 6):
+        key = st.secrets.get(f"GEMINI_API_KEY_{i}") or os.environ.get(f"GEMINI_API_KEY_{i}")
+        if key:
+            keys.append(key)
+            
+    if not keys:
+        single_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        if single_key:
+            keys.append(single_key)
+            
+    return keys
 
-if not api_key:
-    api_key = os.environ.get("GEMINI_API_KEY")
+API_KEYS_POOL = get_api_key_pool()
 
-if not api_key:
-    st.error("⚠️ Gemini API Key missing. Please configure GEMINI_API_KEY in secrets or environment variables.")
+if not API_KEYS_POOL:
+    st.error("⚠️ Gemini API Key missing. Please configure GEMINI_API_KEY in secrets.")
     st.stop()
-
-client = genai.Client(api_key=api_key)
 
 # --- HEADER SECTION ---
 header_left, header_right = st.columns([3, 1.5])
@@ -459,14 +464,14 @@ def get_known_selling_price(sku_name):
                 return float(price)
     return 0.0
 
-# --- FAIL-SAFE AI ENGINE ---
+# --- ROBUST FAIL-SAFE AI ENGINE WITH MULTI-KEY ROTATION ---
 def is_server_error(exception):
     err_str = str(exception).lower()
     return "503" in err_str or "unavailable" in err_str or "overloaded" in err_str or "429" in err_str or "resourceexhausted" in err_str
 
 @retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1.5, min=1, max=5),
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=1, min=1, max=3),
     retry=retry_if_exception(is_server_error),
     reraise=True
 )
@@ -541,23 +546,33 @@ def extract_invoice_data(image):
     config = types.GenerateContentConfig(response_mime_type="application/json")
     contents = [optimized_img, prompt]
     
-    candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash']
+    # Prioritize high-capacity free tier models first
+    candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
     
     last_error = None
-    for model_name in candidate_models:
+    
+    # Loop through each API key in the pool
+    for api_key in API_KEYS_POOL:
         try:
-            response = _call_gemini_with_retry(client, model_name, contents, config)
-            text = response.text.strip()
-            if text.startswith("```json"):
-                text = text[7:-3].strip()
-            elif text.startswith("```"):
-                text = text[3:-3].strip()
-            return json.loads(text)
-        except Exception as e:
-            last_error = e
+            client = genai.Client(api_key=api_key)
+            # Loop through models for this key
+            for model_name in candidate_models:
+                try:
+                    response = _call_gemini_with_retry(client, model_name, contents, config)
+                    text = response.text.strip()
+                    if text.startswith("```json"):
+                        text = text[7:-3].strip()
+                    elif text.startswith("```"):
+                        text = text[3:-3].strip()
+                    return json.loads(text)
+                except Exception as model_err:
+                    last_error = model_err
+                    continue
+        except Exception as key_err:
+            last_error = key_err
             continue
             
-    raise Exception(f"AI Service error across models: {last_error}")
+    raise Exception(f"AI Service error across all keys and models: {last_error}")
 
 def process_single_file_raw(file_bytes):
     try:
