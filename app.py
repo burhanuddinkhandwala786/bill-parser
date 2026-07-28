@@ -33,48 +33,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CLEAN THEME-SAFE CSS ---
-st.markdown("""
-<style>
-    /* Hide Streamlit Header, Footer, and Menu */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    /* Hide Streamlit input instruction prompts */
-    div[data-testid="InputInstructions"] {
-        display: none !important;
-    }
-    
-    /* Professional Layout Padding */
-    .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 3rem !important;
-        max-width: 95% !important;
-    }
-    
-    /* Force readable text color for all body and markdown text */
-    body, p, span, label, div[data-testid="stMarkdownContainer"] {
-        color: #1E293B !important;
-    }
-    
-    /* Professional Metrics Styling */
-    div[data-testid="stMetricValue"] div {
-        color: #2563EB !important;
-        font-weight: 700 !important;
-    }
-    
-    /* Safe Column Layout Fixes */
-    div[data-testid="stColumn"] {
-        display: flex;
-        flex-direction: column;
-    }
-    div[data-testid="stColumn"] > div {
-        flex: 1;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 # --- DATABASE ENGINE SETUP ---
 @st.cache_resource
 def get_db_engine():
@@ -476,7 +434,6 @@ def bulk_upsert_audited_skus(store_slug: str, records: list):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
-    # SINGLE ATOMIC BULK TRANSACTION
     with engine.begin() as conn:
         for rec in records:
             conn.execute(
@@ -503,11 +460,10 @@ def delete_multiple_skus(store_slug: str, sku_list: list):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
-    # SAFE TUPLE PARAMETER BINDING (FIXES POSTGRES ARRAY SYNTAX BUG)
     with engine.begin() as conn:
         conn.execute(
-            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name = ANY(:sku_names)"),
-            {"store_id": store_id, "sku_names": list(sku_list)}
+            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name IN :sku_names"),
+            {"store_id": store_id, "sku_names": tuple(sku_list)}
         )
     load_master.clear()
 
@@ -1062,7 +1018,6 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
-        # SELF-HEALING SCHEMA GUARANTEE
         required_cols = [
             "Raw Vendor Item", "Official SKU", "Current Quantity", "Unit", "HSN/SAC",
             "Purchase Price", "GST Rate", "Selling Price", "Category"
@@ -1172,7 +1127,6 @@ with tab_parser:
                         "sp": sp_val
                     })
 
-            # FAST BATCH TRANSACTION (ELIMINATES DB LOOP FREEZES)
             if upsert_records:
                 bulk_upsert_audited_skus(selected_store_slug, upsert_records)
 
