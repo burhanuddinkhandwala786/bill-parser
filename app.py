@@ -431,7 +431,7 @@ def save_master(df: pd.DataFrame, store_slug: str):
             )
     load_master.clear()
 
-# --- BULK & SINGLE SAFE SQL EXECUTORS (FIXES PROGRAMMING ERROR) ---
+# --- ATOMIC OPTIMIZED SQL EXECUTORS ---
 def add_single_sku_direct(store_slug: str, sku_name: str, category: str, unit: str, gst_rate: float, selling_price: float):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
@@ -480,12 +480,12 @@ def delete_multiple_skus(store_slug: str, sku_list: list):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
+    # ATOMIC BULK SQL DELETION (FIXES LOOP OVERHEAD & TIMEOUTS)
     with engine.begin() as conn:
-        for sku_name in sku_list:
-            conn.execute(
-                text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name = :sku_name"),
-                {"store_id": store_id, "sku_name": sku_name}
-            )
+        conn.execute(
+            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name = ANY(:sku_names)"),
+            {"store_id": store_id, "sku_names": list(sku_list)}
+        )
     load_master.clear()
 
 master_df = load_master(selected_store_slug)
@@ -1039,10 +1039,19 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
+        # SCHEMA GUARANTEE (PREVENTS DATA EDITOR KEYERRORS)
+        required_cols = [
+            "Raw Vendor Item", "Official SKU", "Current Quantity", "Unit", "HSN/SAC",
+            "Purchase Price", "GST Rate", "Selling Price", "Category"
+        ]
+        for c in required_cols:
+            if c not in df.columns:
+                df[c] = "" if c in ["Raw Vendor Item", "Official SKU", "Unit", "HSN/SAC", "Category"] else 0.0
+
         df["Current Quantity"] = pd.to_numeric(df["Current Quantity"], errors='coerce').fillna(1.0)
         df["Purchase Price"] = pd.to_numeric(df["Purchase Price"], errors='coerce').fillna(0.0)
         df["GST Rate"] = pd.to_numeric(df["GST Rate"], errors='coerce').fillna(18.0)
-        df["Selling Price"] = pd.to_numeric(df.get("Selling Price", 0.0), errors='coerce').fillna(0.0)
+        df["Selling Price"] = pd.to_numeric(df["Selling Price"], errors='coerce').fillna(0.0)
         
         df["Line Total (Excl. GST)"] = (df["Purchase Price"] * df["Current Quantity"]).round(2)
         df["GST Tax Amount"] = (df["Line Total (Excl. GST)"] * (df["GST Rate"] / 100)).round(2)
@@ -1081,10 +1090,8 @@ with tab_parser:
             "Selling Price"
         ]
         
-        available_cols = [c for c in display_columns if c in df.columns]
-        
         edited_display_df = st.data_editor(
-            df[available_cols],
+            df[display_columns],
             num_rows="dynamic",
             use_container_width=True,
             key="audit_editor",
@@ -1119,36 +1126,29 @@ with tab_parser:
         st.divider()
         if st.button("✅ Confirm Audit & Generate Excel Import File", type="primary", use_container_width=True):
             memory_updated = False
-            master_updated = False
             current_master_skus = set(master_sku_list)
             
             for idx, row in df_updated.iterrows():
                 raw = str(row.get("Raw Vendor Item", "")).strip().upper()
                 official = str(row.get("Official SKU", "")).strip()
+                cat_val = str(row.get("Category", "General"))
+                unit_val = str(row.get("Unit", "PCS"))
+                gst_val = float(row.get("GST Rate", 18.0))
+                sp_val = float(row.get("Selling Price", 0.0))
                 
                 if raw and official and raw != official:
                     mapping_memory[raw] = official
                     memory_updated = True
-                    
-                if official and official not in current_master_skus:
-                    new_master_row = pd.DataFrame([{
-                        "Official_SKU_Name": official,
-                        "Category": str(row.get("Category", "General")),
-                        "Default_Unit": str(row.get("Unit", "PCS")),
-                        "GST_Rate": float(row.get("GST Rate", 18.0)),
-                        "Selling_Price": float(row.get("Selling Price", 0.0))
-                    }])
-                    master_df = pd.concat([master_df, new_master_row], ignore_index=True)
-                    current_master_skus.add(official)
-                    master_updated = True
+                
+                # SELF-HEALING: ALWAYS SYNC AUDITED SELLING PRICE BACK TO MASTER CATALOG
+                if official:
+                    add_single_sku_direct(selected_store_slug, official, cat_val, unit_val, gst_val, sp_val)
 
             if memory_updated:
                 save_json_memory(selected_store_slug, mapping_memory)
                 st.toast("🧠 Learned Vendor Mapping updated!")
                 
-            if master_updated:
-                save_master(master_df, selected_store_slug)
-                st.toast("⚙️ Master SKU catalog expanded!")
+            st.toast("⚙️ Master SKU catalog updated & synchronized!")
                 
             wb = openpyxl.Workbook()
             ws = wb.active
@@ -1294,13 +1294,9 @@ with tab_master:
             if st.button("⚡ Save SKU to Catalog", use_container_width=True, type="primary"):
                 if add_sku.strip():
                     clean_sku = add_sku.strip()
-                    if clean_sku not in master_sku_list:
-                        # FAST DIRECT SINGLE SQL INSERT
-                        add_single_sku_direct(selected_store_slug, clean_sku, add_cat, add_unit, float(add_gst), float(add_price))
-                        st.toast(f"⚡ Added '{clean_sku}' instantly!")
-                        st.rerun()
-                    else:
-                        st.warning("SKU already exists.")
+                    add_single_sku_direct(selected_store_slug, clean_sku, add_cat, add_unit, float(add_gst), float(add_price))
+                    st.toast(f"⚡ Saved '{clean_sku}' instantly!")
+                    st.rerun()
                     
     # --- COMPACT CHECKBOX MULTI-DELETE TABLE ---
     with col_list:
