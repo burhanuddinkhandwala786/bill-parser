@@ -725,11 +725,11 @@ with tab_parser:
             with col_mk2:
                 manual_disc_pct = st.number_input("Overall Discount (%)", min_value=0.0, max_value=100.0, value=0.0, step=1.0, key="man_disc_input")
 
-            st.write("**Enter Quotation Items (MRP & Optional Discount):**")
+            st.write("**Enter Quotation Items:**")
             
             if "manual_quote_data" not in st.session_state:
                 st.session_state["manual_quote_data"] = pd.DataFrame([
-                    {"Item Name": "Plywood 18mm Commercial", "Quantity": 2.0, "Unit": "PCS", "MRP / Base Rate (₹)": 1800.0, "Disc %": 5.0},
+                    {"Item Name": "Plywood 18mm Commercial", "Quantity": 2.0, "Unit": "PCS", "MRP / Base Rate (₹)": 1800.0},
                 ])
                 
             edited_manual_df = st.data_editor(
@@ -742,7 +742,6 @@ with tab_parser:
                     "Quantity": st.column_config.NumberColumn("Qty", min_value=0.01, format="%.2f", default=1.0),
                     "Unit": st.column_config.SelectboxColumn("Unit", options=["PCS", "BOX", "LTR", "KG", "NOS", "SET", "MTR", "SQM", "PKT", "BTL"], default="PCS"),
                     "MRP / Base Rate (₹)": st.column_config.NumberColumn("MRP / Base Rate (₹)", min_value=0.0, format="₹%.2f", default=0.0),
-                    "Disc %": st.column_config.NumberColumn("Item Disc %", min_value=0.0, max_value=100.0, format="%.1f%%", default=0.0),
                 }
             )
             
@@ -752,9 +751,7 @@ with tab_parser:
             calc_manual_df["Quantity"] = pd.to_numeric(calc_manual_df["Quantity"], errors='coerce').fillna(1.0)
             calc_manual_df["MRP (₹)"] = pd.to_numeric(calc_manual_df.get("MRP / Base Rate (₹)", 0.0), errors='coerce').fillna(0.0)
             
-            item_disc = pd.to_numeric(calc_manual_df.get("Disc %", 0.0), errors='coerce').fillna(0.0)
-            combined_disc = (item_disc + manual_disc_pct).clip(upper=100.0)
-            calc_manual_df["Discount (%)"] = combined_disc
+            calc_manual_df["Discount (%)"] = manual_disc_pct
             
             marked_up_mrp = (calc_manual_df["MRP (₹)"] * (1 + (manual_markup_pct / 100))).round(2)
             calc_manual_df["MRP (₹)"] = marked_up_mrp
@@ -791,7 +788,9 @@ with tab_parser:
                             key="dl_man_pdf"
                         )
                         
-                        clean_num = ''.join(filter(str.isdigit, man_phone_input))
+                        # --- ROBUST SINGLE-NUMBER WHATSAPP CLEANER (PREVENTS 404 ERRORS) ---
+                        raw_phone = man_phone_input.strip().split(",")[0].split("/")[0]
+                        clean_num = ''.join(filter(str.isdigit, raw_phone))
                         wa_msg = urllib.parse.quote(f"Hello {man_cust_name},\nHere is your official quotation from {ACTIVE_STORE_DISPLAY}.\nTotal Amount: ₹{man_grand_total:,.2f}\nThank you!")
                         wa_url = f"https://wa.me/{clean_num}?text={wa_msg}" if clean_num else f"https://wa.me/?text={wa_msg}"
                         st.markdown(f'<a href="{wa_url}" target="_blank" style="text-decoration:none;"><button style="width:100%; background-color:#25D366; color:white; border:none; padding:10px; border-radius:5px; font-weight:bold; cursor:pointer;">💬 Share via WhatsApp</button></a>', unsafe_allow_html=True)
