@@ -36,26 +36,42 @@ st.set_page_config(
 # --- CLEAN THEME-SAFE CSS ---
 st.markdown("""
 <style>
+    /* Hide Streamlit Header, Footer, and Menu */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Global App Background & Font Styling */
+    .stApp {
+        background-color: #F8FAFC;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+    
+    /* Hide Streamlit input instruction prompts */
     div[data-testid="InputInstructions"] {
         display: none !important;
     }
+    
+    /* Professional Layout Padding */
     .block-container {
-        padding-top: 1.2rem !important;
-        padding-bottom: 2.5rem !important;
+        padding-top: 1.5rem !important;
+        padding-bottom: 3rem !important;
+        max-width: 95% !important;
     }
+    
+    /* Modern Card Containers */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 10px !important;
+        padding: 1rem !important;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Professional Metrics Styling */
     div[data-testid="stMetricValue"] div {
         color: #2563EB !important;
         font-weight: 700 !important;
-    }
-    div[data-testid="stColumn"] {
-        display: flex;
-        flex-direction: column;
-    }
-    div[data-testid="stColumn"] > div {
-        flex: 1;
-    }
-    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] {
-        height: 100% !important;
     }
 </style>
 """, unsafe_allow_html=True)
