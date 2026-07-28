@@ -40,84 +40,71 @@ st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
     :root {
-        --uos-primary: #0F172A;
-        --uos-primary-hover: #1E293B;
+        --uos-primary: #4F46E5;
+        --uos-primary-hover: #4338CA;
         --uos-accent: #2563EB;
-        --uos-accent-subtle: #EFF6FF;
-        --uos-success: #10B981;
-        --uos-canvas: #FAFAFA;
+        --uos-canvas: #F8FAFC;
         --uos-surface: #FFFFFF;
-        --uos-surface-hover: #F8FAFC;
-        --uos-border: #E4E4E7;
-        --uos-border-subtle: #F4F4F5;
-        --uos-text: #09090B;
-        --uos-text-secondary: #52525B;
-        --uos-text-muted: #71717A;
-        --uos-radius: 10px;
-        --uos-radius-lg: 14px;
-        --uos-shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.02), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
-        --uos-shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
+        --uos-surface-2: #F1F5F9;
+        --uos-border: #E2E8F0;
+        --uos-border-strong: #CBD5E1;
+        --uos-text: #0F172A;
+        --uos-text-secondary: #475569;
+        --uos-text-muted: #64748B;
     }
 
-    /* Global Typography & Canvas */
-    html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"] {
+    /* Force Light Canvas Across All Containers (Prevents Dark/Patchy Box Glitches) */
+    html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-        -webkit-font-smoothing: antialiased;
         background-color: var(--uos-canvas) !important;
         color: var(--uos-text) !important;
     }
-    [data-testid="stHeader"] { background: transparent !important; }
     .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 4rem !important;
-        max-width: 1320px !important;
+        padding-top: 1.8rem !important;
+        padding-bottom: 3.5rem !important;
+        max-width: 1360px !important;
     }
     div[data-testid="InputInstructions"] { display: none !important; }
 
-    /* Premium Headings */
+    /* Typography & Heading Visibility */
     h1, h2, h3, h4, h5, h6, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
-        font-family: 'Inter', sans-serif !important;
         color: var(--uos-text) !important;
-        letter-spacing: -0.03em !important;
+        letter-spacing: -0.025em !important;
         font-weight: 700 !important;
     }
-    p, span, label, [data-testid="stWidgetLabel"] label {
+    p, span, label, div[data-testid="stMarkdownContainer"] p, [data-testid="stWidgetLabel"] label {
         color: var(--uos-text-secondary) !important;
-        font-size: 0.9rem !important;
     }
     [data-testid="stCaptionContainer"], small {
         color: var(--uos-text-muted) !important;
     }
     hr, [data-testid="stDivider"] {
         border-color: var(--uos-border) !important;
-        margin: 1.5rem 0 !important;
+        margin: 1.25rem 0 !important;
     }
 
-    /* Sidebar Styling */
+    /* Sidebar Interface */
     [data-testid="stSidebar"] {
         background-color: var(--uos-surface) !important;
         border-right: 1px solid var(--uos-border) !important;
     }
-    [data-testid="stSidebar"] hr {
-        border-color: var(--uos-border-subtle) !important;
-    }
 
-    /* Clean Card Containers (No Patchy Overlaps) */
+    /* Clean Card Containers (Solid White Surfaces, Crisp Borders) */
     [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stForm"], [data-testid="stExpander"] {
         background-color: var(--uos-surface) !important;
         border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius-lg) !important;
+        border-radius: 12px !important;
         padding: 20px !important;
-        box-shadow: var(--uos-shadow-subtle) !important;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
     }
 
-    /* High-End Metric Cards */
+    /* Metric Summary Cards */
     [data-testid="stMetric"] {
         background-color: var(--uos-surface) !important;
         border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius-lg) !important;
-        padding: 20px !important;
-        box-shadow: var(--uos-shadow-subtle) !important;
+        border-radius: 12px !important;
+        padding: 18px 20px !important;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
     }
     [data-testid="stMetricLabel"] {
         font-size: 0.75rem !important;
@@ -129,56 +116,54 @@ st.markdown("""
     [data-testid="stMetricValue"] div {
         color: var(--uos-text) !important;
         font-weight: 800 !important;
-        letter-spacing: -0.03em !important;
     }
 
-    /* Clean Buttons */
+    /* Action Buttons */
     .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
         font-family: 'Inter', sans-serif !important;
         font-weight: 600 !important;
         font-size: 0.88rem !important;
-        border-radius: var(--uos-radius) !important;
+        border-radius: 8px !important;
         padding: 10px 18px !important;
         border: 1px solid var(--uos-border) !important;
         background: var(--uos-surface) !important;
         color: var(--uos-text) !important;
-        box-shadow: var(--uos-shadow-subtle) !important;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
         transition: all 0.15s ease !important;
     }
     .stButton > button:hover, .stDownloadButton > button:hover {
-        background: var(--uos-surface-hover) !important;
-        border-color: var(--uos-text-muted) !important;
+        background: var(--uos-surface-2) !important;
+        border-color: var(--uos-border-strong) !important;
     }
     .stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"] {
         background: var(--uos-primary) !important;
         color: #FFFFFF !important;
         border-color: var(--uos-primary) !important;
-        box-shadow: 0 2px 4px rgba(15, 23, 42, 0.1) !important;
     }
     .stButton > button[kind="primary"] p { color: #FFFFFF !important; }
     .stButton > button[kind="primary"]:hover {
         background: var(--uos-primary-hover) !important;
     }
 
-    /* Input Fields & Forms */
+    /* Form Fields & Spin Buttons */
     .stTextInput input, .stNumberInput input, .stTextArea textarea, 
     div[data-baseweb="input"] input, div[data-baseweb="select"] > div {
         background-color: var(--uos-surface) !important;
         color: var(--uos-text) !important;
         border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius) !important;
+        border-radius: 8px !important;
         padding: 10px 14px !important;
         box-shadow: none !important;
     }
     .stTextInput input:focus, .stNumberInput input:focus {
         border-color: var(--uos-accent) !important;
-        box-shadow: 0 0 0 3px var(--uos-accent-subtle) !important;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
     }
 
-    /* Data Tables & Editors */
+    /* Table & Data Editors */
     [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
         border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius) !important;
+        border-radius: 8px !important;
         background-color: var(--uos-surface) !important;
         overflow: hidden;
     }
@@ -187,7 +172,7 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
-    /* Tabs */
+    /* Workspace Tabs */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         border-bottom: 1px solid var(--uos-border);
@@ -202,16 +187,16 @@ st.markdown("""
         border-bottom: 2px solid transparent !important;
     }
     .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        color: var(--uos-text) !important;
+        color: var(--uos-primary) !important;
         font-weight: 700 !important;
-        border-bottom-color: var(--uos-text) !important;
+        border-bottom-color: var(--uos-primary) !important;
     }
 
-    /* File Uploader Dropzone */
+    /* File Dropzone */
     [data-testid="stFileUploaderDropzone"] {
         background-color: var(--uos-surface-2) !important;
-        border: 1px dashed var(--uos-border) !important;
-        border-radius: var(--uos-radius-lg) !important;
+        border: 1.5px dashed var(--uos-border-strong) !important;
+        border-radius: 12px !important;
     }
 </style>
 """, unsafe_allow_html=True)
