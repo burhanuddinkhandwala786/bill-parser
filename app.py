@@ -736,7 +736,6 @@ with tab_parser:
                 
             st.write("**Enter Quotation Items (Final Selling Rates):**")
             
-            # Initial template dataframe if state is empty
             if "manual_quote_data" not in st.session_state:
                 st.session_state["manual_quote_data"] = pd.DataFrame([
                     {"Item Name": "Sample Item 1", "Quantity": 1.0, "Unit": "PCS", "Customer Unit Price (₹)": 100.0},
@@ -757,7 +756,6 @@ with tab_parser:
             
             st.session_state["manual_quote_data"] = edited_manual_df.copy()
             
-            # Compute total live
             calc_manual_df = edited_manual_df.copy()
             calc_manual_df["Quantity"] = pd.to_numeric(calc_manual_df["Quantity"], errors='coerce').fillna(1.0)
             calc_manual_df["Customer Unit Price (₹)"] = pd.to_numeric(calc_manual_df["Customer Unit Price (₹)"], errors='coerce').fillna(0.0)
@@ -859,42 +857,59 @@ with tab_parser:
 
     st.divider()
 
-    # --- INGESTION DROPZONE ---
+    # --- INGESTION DROPZONE (WITH DIRECT CAMERA SNAP & FILE UPLOAD) ---
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
         with st.container(border=True):
             st.subheader("1. Ingestion Dropzone")
-            st.caption("Upload purchase bills (PNG, JPG, JPEG) to extract line items.")
-            uploaded_files = st.file_uploader(
-                "Upload Bills",
-                type=["jpg", "jpeg", "png"],
-                accept_multiple_files=True,
-                label_visibility="collapsed"
+            st.caption("Upload files or click a photo directly using your phone or webcam.")
+            
+            upload_mode = st.radio(
+                "Input Mode:", 
+                ["📸 Direct Camera Snap", "📁 File Upload"], 
+                horizontal=True,
+                key="dropzone_mode_switch"
             )
+            
+            staged_file_bytes = []
+            
+            if upload_mode == "📸 Direct Camera Snap":
+                cam_photo = st.camera_input("Take a photo of the purchase bill", key="direct_cam_input")
+                if cam_photo is not None:
+                    staged_file_bytes.append(cam_photo.getvalue())
+            else:
+                uploaded_files = st.file_uploader(
+                    "Upload Bills",
+                    type=["jpg", "jpeg", "png"],
+                    accept_multiple_files=True,
+                    label_visibility="collapsed",
+                    key="batch_file_uploader"
+                )
+                if uploaded_files:
+                    staged_file_bytes = [f.read() for f in uploaded_files]
 
     with col_info:
         with st.container(border=True):
             st.subheader("⚡ Ingestion Queue")
-            if uploaded_files:
-                st.success(f"📁 **{len(uploaded_files)} File(s)** Staged")
-                st.caption("Parallel AI engine ready to parse files concurrently.")
+            if staged_file_bytes:
+                st.success(f"📁 **{len(staged_file_bytes)} File(s)** Staged & Ready")
+                st.caption("Parallel AI engine ready to parse staged images concurrently.")
             else:
-                st.info("No files queued.")
-                st.caption("Drop purchase invoices to begin structured extraction.")
+                st.info("No files staged.")
+                st.caption("Snap a photo or drop purchase bills to begin structured extraction.")
 
-    if uploaded_files:
+    if staged_file_bytes:
         st.write("")
         if st.button("🚀 Process Invoices with Fast AI Engine", type="primary", use_container_width=True):
             if "parsed_df" in st.session_state:
                 del st.session_state["parsed_df"]
                 
             all_parsed_items = []
-            file_bytes_list = [f.read() for f in uploaded_files]
             
             with st.status("Parsing purchase bills concurrently with Multimodal AI...", expanded=True) as status_container:
-                with ThreadPoolExecutor(max_workers=min(len(file_bytes_list), 10)) as executor:
-                    raw_results = list(executor.map(process_single_file_raw, file_bytes_list))
+                with ThreadPoolExecutor(max_workers=min(len(staged_file_bytes), 10)) as executor:
+                    raw_results = list(executor.map(process_single_file_raw, staged_file_bytes))
                     
                 for parsed_json in raw_results:
                     if "ERROR" in parsed_json:
@@ -1281,10 +1296,10 @@ with tab_guide:
         st.markdown("""
         ### How to Process & Sync Invoices:
         1. **Select Store:** Choose your active store location in the left sidebar directory.
-        2. **Upload Bills:** Drop one or multiple purchase invoice photos in **Tab 1**.
+        2. **Upload Bills:** Drop image files or click a photo directly with your camera in **Tab 1**.
         3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
         4. **Audit Workspace:** Check quantities, HSN codes, purchase rates, and mapped SKUs.
-        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer (or enter manual items on the fly).
+        5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer.
         6. **Download Import File:** Generate the `.xlsx` spreadsheet.
         7. **Import to ERP:** Open your accounting software → **Items / Inventory** → **Bulk Import**, upload the `.xlsx` file.
         """)
