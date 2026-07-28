@@ -353,9 +353,10 @@ with header_right:
 
 st.divider()
 
-# --- FAST BULK-OPTIMIZED DATABASE STORE LOADERS ---
+# --- FAST BULK-OPTIMIZED CACHED DATABASE STORE LOADERS ---
+@st.cache_data
 def load_json_memory(store_slug: str) -> dict:
-    """Loads learned vendor item mappings from Supabase."""
+    """Loads learned vendor item mappings from Supabase (Cached to eliminate UI lag)."""
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     query = "SELECT raw_name, mapped_sku FROM vendor_mappings WHERE store_id = :store_id"
@@ -386,6 +387,7 @@ def save_json_memory(store_slug: str, memory_dict: dict):
             """),
             records
         )
+    st.cache_data.clear()
 
 @st.cache_data
 def load_master(store_slug: str) -> pd.DataFrame:
@@ -573,7 +575,7 @@ def process_single_file_raw(file_bytes):
     except Exception as e:
         return {"ERROR": str(e)}
 
-# --- HIGH-GRADE REPORTLAB PDF QUOTATION GENERATOR (WITH MRP & DISCOUNT SUPPORT) ---
+# --- HIGH-GRADE REPORTLAB PDF QUOTATION GENERATOR ---
 def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
     if not REPORTLAB_AVAILABLE:
         raise ModuleNotFoundError("reportlab library is required for PDF generation.")
@@ -644,7 +646,7 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     cell_center = ParagraphStyle('CellC', fontSize=8, leading=11, textColor=colors.HexColor('#111827'), alignment=1)
     cell_right = ParagraphStyle('CellR', fontSize=8, leading=11, textColor=colors.HexColor('#111827'), alignment=2)
 
-    # Professional 7-Column Table (S.No | Description | Qty | Unit | MRP | Disc % | Net Rate | Total)
+    # Professional 8-Column Layout
     table_data = [[
         Paragraph("S.No", hdr_center), 
         Paragraph("Item Description", hdr_left), 
@@ -721,7 +723,7 @@ with tab_parser:
 
     st.divider()
 
-    # --- DUAL QUOTATION GENERATOR EXPANDER (ALWAYS ACCESSIBLE) ---
+    # --- DUAL QUOTATION GENERATOR EXPANDER ---
     with st.expander("📄 Generate Customer Quotation (On-the-go)", expanded=False):
         st.caption("Create a professional PDF quote instantly either by manual quick entry or auto-calculating from an audited purchase bill.")
         
@@ -729,7 +731,7 @@ with tab_parser:
         
         q_tab_manual, q_tab_bill = st.tabs(["✍️ Quick Manual Entry (No Bill Needed)", "📥 From Parsed Purchase Bill"])
         
-        # --- MODE 1: MANUAL QUICK QUOTATION (WITH MRP & DISCOUNT) ---
+        # --- MODE 1: MANUAL QUICK QUOTATION ---
         with q_tab_manual:
             col_m1, col_m2 = st.columns([2, 2])
             with col_m1:
@@ -762,15 +764,12 @@ with tab_parser:
                 }
             )
             
-            st.session_state["manual_quote_data"] = edited_manual_df.copy()
-            
-            # Real-time MRP & Discount Calculations
+            # Non-blocking state update
             calc_manual_df = edited_manual_df.copy()
             calc_manual_df["Quantity"] = pd.to_numeric(calc_manual_df["Quantity"], errors='coerce').fillna(1.0)
             calc_manual_df["MRP (₹)"] = pd.to_numeric(calc_manual_df.get("MRP (₹)", 0.0), errors='coerce').fillna(0.0)
             calc_manual_df["Discount (%)"] = pd.to_numeric(calc_manual_df.get("Discount (%)", 0.0), errors='coerce').fillna(0.0)
             
-            # Final rate after discount
             calc_manual_df["Customer Unit Price (₹)"] = (calc_manual_df["MRP (₹)"] * (1 - (calc_manual_df["Discount (%)"] / 100))).round(2)
             calc_manual_df["Total Value (₹)"] = (calc_manual_df["Quantity"] * calc_manual_df["Customer Unit Price (₹)"]).round(2)
             
@@ -876,7 +875,7 @@ with tab_parser:
 
     st.divider()
 
-    # --- INGESTION DROPZONE (WITH DIRECT CAMERA SNAP & FILE UPLOAD) ---
+    # --- INGESTION DROPZONE ---
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
@@ -1301,6 +1300,7 @@ with tab_memory:
                     text("DELETE FROM vendor_mappings WHERE store_id = :store_id"),
                     {"store_id": store_id}
                 )
+            st.cache_data.clear()
             st.success("Memory cache reset!")
             st.rerun()
     else:
