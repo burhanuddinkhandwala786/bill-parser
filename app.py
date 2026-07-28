@@ -474,6 +474,7 @@ def add_single_sku_direct(store_slug: str, sku_name: str, category: str, unit: s
             )
     load_master.clear()
 
+# --- ATOMIC BULK UPSERT (FIXES N+1 DATABASE LOCK FREEZES) ---
 def bulk_upsert_audited_skus(store_slug: str, records: list):
     if not records:
         return
@@ -482,43 +483,25 @@ def bulk_upsert_audited_skus(store_slug: str, records: list):
     
     with engine.begin() as conn:
         for rec in records:
-            existing = conn.execute(
-                text("SELECT id FROM master_skus WHERE store_id = :store_id AND official_sku_name = :sku_name"),
-                {"store_id": store_id, "sku_name": rec["official"]}
-            ).fetchone()
-            
-            if existing:
-                conn.execute(
-                    text("""
-                        UPDATE master_skus 
-                        SET category = :category, default_unit = :unit, gst_rate = :gst_rate, selling_price = :selling_price
-                        WHERE id = :id
-                    """),
-                    {
-                        "category": rec["category"],
-                        "unit": rec["unit"],
-                        "gst_rate": rec["gst"],
-                        "selling_price": rec["sp"],
-                        "id": existing[0]
-                    }
-                )
-            else:
-                conn.execute(
-                    text("""
-                        INSERT INTO master_skus (store_id, official_sku_name, category, default_unit, gst_rate, selling_price)
-                        VALUES (:store_id, :official_sku_name, :category, :default_unit, :gst_rate, :selling_price)
-                    """),
-                    {
-                        "store_id": store_id,
-                        "official_sku_name": rec["official"],
-                        "category": rec["category"],
-                        "default_unit": rec["unit"],
-                        "gst_rate": rec["gst"],
-                        "selling_price": rec["sp"]
-                    }
-                )
+            conn.execute(
+                text("""
+                    INSERT INTO master_skus (store_id, official_sku_name, category, default_unit, gst_rate, selling_price)
+                    VALUES (:store_id, :official_sku_name, :category, :default_unit, :gst_rate, :selling_price)
+                    ON CONFLICT (store_id, official_sku_name)
+                    DO UPDATE SET category = EXCLUDED.category, default_unit = EXCLUDED.default_unit, gst_rate = EXCLUDED.gst_rate, selling_price = EXCLUDED.selling_price
+                """),
+                {
+                    "store_id": store_id,
+                    "official_sku_name": rec["official"],
+                    "category": rec["category"],
+                    "default_unit": rec["unit"],
+                    "gst_rate": rec["gst"],
+                    "selling_price": rec["sp"]
+                }
+            )
     load_master.clear()
 
+# --- SAFE ARRAY DELETION (FIXES POSTGRES TUPLE SYNTAX BUG) ---
 def delete_multiple_skus(store_slug: str, sku_list: list):
     if not sku_list:
         return
@@ -527,8 +510,8 @@ def delete_multiple_skus(store_slug: str, sku_list: list):
     
     with engine.begin() as conn:
         conn.execute(
-            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name IN :sku_names"),
-            {"store_id": store_id, "sku_names": tuple(sku_list)}
+            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name = ANY(:sku_names)"),
+            {"store_id": store_id, "sku_names": list(sku_list)}
         )
     load_master.clear()
 
