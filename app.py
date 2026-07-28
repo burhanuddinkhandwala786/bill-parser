@@ -487,7 +487,7 @@ def extract_invoice_data(image):
     if img_copy.mode in ("RGBA", "P"):
         img_copy = img_copy.convert("RGB")
         
-    # HIGH-PRECISION OCR CANVAS (1500px at 90% Quality): Guarantees zero loss for handwritten/faint details
+    # High-precision canvas: 1500px at 90% JPEG quality keeps fine handwriting crisp & fast
     img_copy.thumbnail((1500, 1500), Image.Resampling.LANCZOS)
 
     buffer = BytesIO()
@@ -495,42 +495,44 @@ def extract_invoice_data(image):
     buffer.seek(0)
     optimized_img = Image.open(buffer)
 
+    # --- HIGH-PRECISION OCR & FINANCIAL EXTRACTION PROMPT ---
     prompt = """
-    You are an expert OCR and financial vision system built for retail & wholesale purchase bill ingestion.
-    Your task is to extract line items from purchase invoices—including printed, handwritten, low-light, faded thermal receipts, crumpled paper, or skewed photos.
+    You are an elite financial OCR and computer vision engine specializing in Indian GST purchase invoices, distributor bills, and handwritten receipts.
 
-    CRITICAL EXTRACTION INSTRUCTIONS:
-    1. "Supplier Company Name": Extract the vendor/distributor company name at the header. If unclear or handwritten, infer best title or use "Unknown Supplier".
-    2. "Line Items": Extract every purchased item row from the table or receipt list.
-       - "Item Name": Full product title or description. Read faint or handwritten pen marks carefully.
-       - "Quantity": Pure numeric value (e.g. 1.0, 10, 0.5). If missing or unreadable, default to 1.0.
-       - "Unit Price (Excl. Tax)": Per-item rate before GST if explicitly printed.
-       - "Discount Amount": Any cash/trade discount deducted for this item line. If none, 0.0.
-       - "Line Total Taxable Amount": The line base total before GST (Printed Amount column).
-       - "Line Total Inclusive Amount": The total line amount including GST.
-       - "GST Rate": GST tax percentage as a pure number (0, 5, 12, 18, 28). Default to 18.0 if unstated.
-       - "HSN Code": HSN or SAC code as string. Empty string "" if missing.
-       - "Unit": Unit of measure (PCS, BOX, LTR, KG, NOS, SET, SQM, MTR, PKT). Default to "PCS".
+    YOUR MISSION:
+    Extract all purchased line items into a structured JSON schema. Read printed text, handwritten pen marks, overwrites, faded thermal ink, and low-light receipt details with maximum financial accuracy.
 
-    ROBUSTNESS & HANDWRITING RULES:
-    - Faded / Low Contrast Text: Infer numbers by cross-checking quantity * rate - discount = total where possible.
-    - Handwritten Text: Treat pen strokes and annotations as primary text if printed text is crossed out or modified.
-    - Pure Numbers Only: Rates, quantities, amounts, discounts, and GST must be numbers (no currency symbols like ₹ or Rs).
+    CRITICAL FIELD INSTRUCTIONS:
+    1. "Supplier Company Name": The main vendor/distributor or seller business name located at the bill header. Default to "Unknown Supplier" if missing.
+    2. "Line Items": Extract EVERY single item row from the bill table/list. Do not miss any item.
+       - "Item Name": Full item title, brand name, and specification. If a printed item name is crossed out or modified by handwriting, prioritize the handwritten correction.
+       - "Quantity": Pure numeric stock quantity (e.g., 10, 1.5, 0.5). Default to 1.0 if unspecified or unreadable.
+       - "Unit": Unit of measure (PCS, BOX, LTR, KG, NOS, SET, SQM, MTR, PKT, BTL, BAG, CAN). Capitalize and default to "PCS".
+       - "HSN Code": HSN or SAC numeric code string. If absent, set to empty string "".
+       - "Unit Price (Excl. Tax)": The per-unit base purchase rate before tax.
+       - "Discount Amount": Any cash discount, scheme, or trade deduction applied to this line item. Default to 0.0.
+       - "Line Total Taxable Amount": Base taxable subtotal for the line before tax (after discounts).
+       - "GST Rate": Total combined GST percentage as a pure number (e.g., 0, 5, 12, 18, 28). IF CGST (9%) and SGST (9%) are listed separately, SUM THEM to 18.0. Default to 18.0 if omitted.
+       - "Line Total Inclusive Amount": Final line total including GST.
 
-    OUTPUT SCHEMA (STRICT JSON ONLY):
+    PRECISION & MATHEMATICAL CROSS-CHECKING:
+    - Never include currency symbols (₹, Rs, INR) inside numeric fields.
+    - If numbers are faint or partially stained, verify that (Quantity * Unit Price) - Discount = Line Total Taxable Amount.
+
+    STRICT JSON OUTPUT FORMAT (NO MARKDOWN FLUFF, NO EXTRA KEYS):
     {
         "Supplier Company Name": "Vendor Name",
         "Line Items": [
             {
-                "Item Name": "description",
+                "Item Name": "Product description",
                 "Quantity": 1.0,
+                "Unit": "PCS",
+                "HSN Code": "8414",
                 "Unit Price (Excl. Tax)": 0.0,
                 "Discount Amount": 0.0,
                 "Line Total Taxable Amount": 0.0,
-                "Line Total Inclusive Amount": 0.0,
                 "GST Rate": 18.0,
-                "HSN Code": "",
-                "Unit": "PCS"
+                "Line Total Inclusive Amount": 0.0
             }
         ]
     }
@@ -539,12 +541,11 @@ def extract_invoice_data(image):
     config = types.GenerateContentConfig(response_mime_type="application/json")
     contents = [optimized_img, prompt]
     
-    # Fast, high-capacity models first for speed, fallbacks for reliability
     candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
     
     last_error = None
     
-    # Rotate through available API keys in the pool
+    # Fail-safe multi-key rotation loop
     for api_key in API_KEYS_POOL:
         try:
             client = genai.Client(api_key=api_key)
