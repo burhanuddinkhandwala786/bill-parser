@@ -10,7 +10,7 @@ import openpyxl
 import pandas as pd
 import streamlit as st
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ImageEnhance
 from google import genai
 from google.genai import types
 from rapidfuzz import process, utils
@@ -1041,6 +1041,15 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
             img_copy = img.copy()
             if img_copy.mode in ("RGBA", "P"):
                 img_copy = img_copy.convert("RGB")
+            
+            # FAST PRE-PROCESSING FOR BLURRY/DARK IMAGES
+            # Enhance contrast and sharpness slightly to speed up OCR parsing accuracy
+            enhancer = ImageEnhance.Contrast(img_copy)
+            img_copy = enhancer.enhance(1.2)
+            sharpness = ImageEnhance.Sharpness(img_copy)
+            img_copy = sharpness.enhance(1.5)
+            
+            # Optimized Thumbnail Downsizing for lightning-fast inference
             img_copy.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
             
             buffer = BytesIO()
