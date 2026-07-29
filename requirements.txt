@@ -11,3 +11,4 @@ streamlit-authenticator
 bcrypt
 reportlab
 extra-streamlit-components
+groq
