@@ -1020,10 +1020,10 @@ def extract_invoice_data_with_groq(file_bytes, mime_type="image/jpeg"):
     return json.loads(text_res)
 
 def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
-    # Thread-safe Session File Hash Caching Check
+    # Defensive, Thread-Safe Session File Hash Cache Check
     file_hash = hashlib.md5(file_bytes).hexdigest()
     try:
-        cache = st.session_state.get("ocr_file_hash_cache", {})
+        cache = getattr(st.session_state, "ocr_file_hash_cache", {})
         if file_hash in cache:
             return cache[file_hash]
     except Exception:
