@@ -2,6 +2,7 @@ import os
 import gc
 import json
 import time
+import base64
 import bcrypt
 import openpyxl
 import pandas as pd
@@ -14,6 +15,13 @@ from rapidfuzz import process, utils
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import create_engine, text
+
+# Optional Groq SDK Import for Secondary Failover
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
 
 # --- SAFE REPORTLAB PDF IMPORTS ---
 try:
@@ -33,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- UNIVERSAL OS — MODERN SAAS DESIGN SYSTEM (CLEAN LIGHT-SURFACE EDITION) ---
+# --- UNIVERSAL OS — MODERN SAAS DESIGN SYSTEM (CLEAN LIGHT-SURFACE & MOBILE EDITION) ---
 st.markdown("""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -423,6 +431,24 @@ st.markdown("""
     .uos-auth-tagline { color: var(--uos-text-muted); font-size: 0.98rem; margin-top: 6px; }
 
     [data-testid="stProgress"] > div > div > div { background: var(--uos-primary) !important; }
+
+    /* MOBILE SPECIFIC RESPONSIVE OVERRIDES */
+    @media (max-width: 768px) {
+        .block-container {
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+        div[data-testid="stColumn"] {
+            width: 100% !important;
+            margin-bottom: 12px !important;
+        }
+        [data-testid="stMetric"] {
+            padding: 12px !important;
+        }
+        .uos-store-pill {
+            margin-top: 8px;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -884,7 +910,7 @@ def delete_multiple_skus(store_slug: str, sku_list: list):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
-    # CRITICAL FIX: Safe Parameterized Binding with Tuple Parentheses for Supabase PostgreSQL
+    # Safe Tuple Parameter Binding for PostgreSQL
     with engine.begin() as conn:
         conn.execute(
             text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name IN :sku_names"),
@@ -915,7 +941,7 @@ def get_known_selling_price(sku_name):
                 return float(price)
     return 0.0
 
-# --- FAIL-SAFE AI ENGINE WITH MULTI-KEY ROTATION ---
+# --- FAIL-SAFE AI ENGINE WITH MULTI-KEY ROTATION & GROQ VISION FALLBACK ---
 def is_server_error(exception):
     err_str = str(exception).lower()
     return "503" in err_str or "unavailable" in err_str or "overloaded" in err_str or "429" in err_str or "resourceexhausted" in err_str
@@ -933,45 +959,22 @@ def _call_gemini_with_retry(client, model_name, contents, config):
         config=config
     )
 
-def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
-    if "pdf" in mime_type.lower():
-        file_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
-        contents = [file_part]
-    else:
-        img = Image.open(BytesIO(file_bytes))
-        img_copy = img.copy()
-        if img_copy.mode in ("RGBA", "P"):
-            img_copy = img_copy.convert("RGB")
-        img_copy.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
-        
-        buffer = BytesIO()
-        img_copy.save(buffer, format="JPEG", quality=85, optimize=True)
-        buffer.seek(0)
-        contents = [Image.open(buffer)]
+def extract_invoice_data_with_groq(file_bytes, mime_type="image/jpeg"):
+    groq_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+    if not groq_key or not GROQ_AVAILABLE:
+        raise Exception("GROQ_API_KEY or groq package missing for fallback.")
 
+    base64_img = base64.b64encode(file_bytes).decode('utf-8')
     prompt = """
-    You are an enterprise financial OCR system for wholesale, retail, plywood, hardware, and building material invoices.
-
-    CRITICAL EXTRACTION & GROUND-TRUTH RULES:
-    1. "Supplier Company Name": Main vendor/seller title from bill top header.
-    2. "Invoice Number": Invoice/Bill number string if present, else "".
-    3. "Invoice Date": Date string if present, else "".
-    4. "Line Items": Extract every product row accurately.
-       - "Item Name": Full product title or description. Read handwritten notes and pen edits carefully.
-       - "Primary Quantity": Pure numeric count of physical pieces/sheets/boxes received (e.g., 6.0, 1.0, 270.12).
-       - "Unit": Unit string (PCS, SQM, SQFT, BOX, KG, LTR, NOS, SET). Default to "PCS".
-       - "Printed Taxable Amount": ABSOLUTE GROUND TRUTH. Extract the printed line subtotal/amount value before tax directly from the bill's "Amount" column (e.g. 7305.60, 63543.00, 2000.00). DO NOT multiply physical pieces * secondary unit rate!
-       - "GST Rate": Total GST percentage as a pure number (0, 5, 12, 18, 28). If CGST (9%) & SGST (9%) are listed separately, SUM THEM to 18.0. Default to 18.0 if unstated.
-       - "HSN Code": HSN/SAC code as string. If missing, "".
-
-    OUTPUT SCHEMA (STRICT JSON ONLY):
+    You are an enterprise financial OCR system for invoices.
+    OUTPUT STRICT JSON ONLY:
     {
-        "Supplier Company Name": "Vendor Title",
+        "Supplier Company Name": "",
         "Invoice Number": "",
         "Invoice Date": "",
         "Line Items": [
             {
-                "Item Name": "Description",
+                "Item Name": "",
                 "Primary Quantity": 1.0,
                 "Unit": "PCS",
                 "Printed Taxable Amount": 0.0,
@@ -981,32 +984,116 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         ]
     }
     """
-    
-    contents.append(prompt)
-    config = types.GenerateContentConfig(response_mime_type="application/json")
-    candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
-    last_error = None
-    
-    for api_key in API_KEYS_POOL:
-        try:
-            client = genai.Client(api_key=api_key)
-            for model_name in candidate_models:
-                try:
-                    response = _call_gemini_with_retry(client, model_name, contents, config)
-                    text_res = response.text.strip()
-                    if text_res.startswith("```json"):
-                        text_res = text_res[7:-3].strip()
-                    elif text_res.startswith("```"):
-                        text_res = text_res[3:-3].strip()
-                    return json.loads(text_res)
-                except Exception as model_err:
-                    last_error = model_err
-                    continue
-        except Exception as key_err:
-            last_error = key_err
-            continue
+
+    client = Groq(api_key=groq_key)
+    completion = client.chat.completions.create(
+        model="llama-3.2-11b-vision-preview",
+        response_format={"type": "json_object"},
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{base64_img}"
+                        }
+                    }
+                ]
+            }
+        ],
+        temperature=0.1
+    )
+
+    text_res = completion.choices[0].message.content.strip()
+    return json.loads(text_res)
+
+def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
+    # -------------------------------------------------------------
+    # TRY 1: PRIMARY GEMINI POOL (Rotates API Keys 1 to 5)
+    # -------------------------------------------------------------
+    try:
+        if "pdf" in mime_type.lower():
+            file_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
+            contents = [file_part]
+        else:
+            img = Image.open(BytesIO(file_bytes))
+            img_copy = img.copy()
+            if img_copy.mode in ("RGBA", "P"):
+                img_copy = img_copy.convert("RGB")
+            img_copy.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
             
-    raise Exception(f"AI Service error across all keys and models: {last_error}")
+            buffer = BytesIO()
+            img_copy.save(buffer, format="JPEG", quality=85, optimize=True)
+            buffer.seek(0)
+            contents = [Image.open(buffer)]
+
+        prompt = """
+        You are an enterprise financial OCR system for wholesale, retail, plywood, hardware, and building material invoices.
+
+        CRITICAL EXTRACTION & GROUND-TRUTH RULES:
+        1. "Supplier Company Name": Main vendor/seller title from bill top header.
+        2. "Invoice Number": Invoice/Bill number string if present, else "".
+        3. "Invoice Date": Date string if present, else "".
+        4. "Line Items": Extract every product row accurately.
+           - "Item Name": Full product title or description. Read handwritten notes and pen edits carefully.
+           - "Primary Quantity": Pure numeric count of physical pieces/sheets/boxes received (e.g., 6.0, 1.0, 270.12).
+           - "Unit": Unit string (PCS, SQM, SQFT, BOX, KG, LTR, NOS, SET). Default to "PCS".
+           - "Printed Taxable Amount": ABSOLUTE GROUND TRUTH. Extract the printed line subtotal/amount value before tax directly from the bill's "Amount" column.
+           - "GST Rate": Total GST percentage as a pure number (0, 5, 12, 18, 28). Default to 18.0.
+           - "HSN Code": HSN/SAC code as string. If missing, "".
+
+        OUTPUT SCHEMA (STRICT JSON ONLY):
+        {
+            "Supplier Company Name": "Vendor Title",
+            "Invoice Number": "",
+            "Invoice Date": "",
+            "Line Items": [
+                {
+                    "Item Name": "Description",
+                    "Primary Quantity": 1.0,
+                    "Unit": "PCS",
+                    "Printed Taxable Amount": 0.0,
+                    "GST Rate": 18.0,
+                    "HSN Code": ""
+                }
+            ]
+        }
+        """
+        
+        contents.append(prompt)
+        config = types.GenerateContentConfig(response_mime_type="application/json")
+        candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
+        
+        for api_key in API_KEYS_POOL:
+            try:
+                client = genai.Client(api_key=api_key)
+                for model_name in candidate_models:
+                    try:
+                        response = _call_gemini_with_retry(client, model_name, contents, config)
+                        text_res = response.text.strip()
+                        if text_res.startswith("```json"):
+                            text_res = text_res[7:-3].strip()
+                        elif text_res.startswith("```"):
+                            text_res = text_res[3:-3].strip()
+                        return json.loads(text_res)
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+        
+        raise Exception("All Gemini API keys failed or quota exhausted.")
+
+    # -------------------------------------------------------------
+    # TRY 2: FAIL-SAFE FALLBACK TO GROQ LLAMA 3.2 VISION
+    # -------------------------------------------------------------
+    except Exception as gemini_err:
+        try:
+            st.toast("⚡ Gemini quota limit reached. Auto-switching to Groq Llama Vision Engine...")
+            return extract_invoice_data_with_groq(file_bytes, mime_type)
+        except Exception as groq_err:
+            raise Exception(f"All Primary (Gemini) and Secondary (Groq) AI services failed: {groq_err}")
 
 def process_single_item_tuple(item_tuple):
     file_bytes, mime_type = item_tuple
