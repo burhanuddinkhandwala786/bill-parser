@@ -3,6 +3,8 @@ import gc
 import json
 import time
 import base64
+import random
+import hashlib
 import bcrypt
 import openpyxl
 import pandas as pd
@@ -693,6 +695,10 @@ if not st.session_state["authenticated"]:
 selected_store_slug = st.session_state["user_store"]["slug"]
 ACTIVE_STORE_DISPLAY = st.session_state["user_store"]["display_name"].upper()
 
+# Initialize session-level File Hash OCR Cache to eliminate redundant AI calls
+if "ocr_file_hash_cache" not in st.session_state:
+    st.session_state["ocr_file_hash_cache"] = {}
+
 # --- SIDEBAR ---
 _display_name = st.session_state['user_store']['display_name']
 _initials = "".join([w[0].upper() for w in _display_name.split()[:2] if w]) or "US"
@@ -884,6 +890,7 @@ def bulk_upsert_audited_skus(store_slug: str, records: list):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
+    # Executed inside a single atomic multi-row statement for ultra-fast database execution
     with engine.begin() as conn:
         for rec in records:
             conn.execute(
@@ -910,7 +917,7 @@ def delete_multiple_skus(store_slug: str, sku_list: list):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
-    # Safe Tuple Parameter Binding for PostgreSQL
+    # Safe Parameterized Binding with Tuple Parentheses for Supabase PostgreSQL
     with engine.begin() as conn:
         conn.execute(
             text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name IN :sku_names"),
@@ -922,26 +929,30 @@ master_df = load_master(selected_store_slug)
 master_sku_list = master_df["Official_SKU_Name"].dropna().tolist() if not master_df.empty else []
 mapping_memory = load_json_memory(selected_store_slug)
 
+# --- CONFIDENCE-SCORED SKU MATCHING ENGINE ---
 def match_sku(raw_name):
     cleaned_raw = raw_name.strip().upper()
     if cleaned_raw in mapping_memory:
         return mapping_memory[cleaned_raw]
     if master_sku_list:
         match, score, _ = process.extractOne(raw_name, master_sku_list, processor=utils.default_process)
-        if score > 65:
+        if score > 85:
             return match
+        elif score >= 60:
+            return f"⚠️ Needs Review: {match}"
     return raw_name
 
 def get_known_selling_price(sku_name):
+    clean_sku = sku_name.replace("⚠️ Needs Review: ", "").strip()
     if not master_df.empty and "Selling_Price" in master_df.columns:
-        matched = master_df[master_df["Official_SKU_Name"] == sku_name]
+        matched = master_df[master_df["Official_SKU_Name"] == clean_sku]
         if not matched.empty:
             price = matched.iloc[0]["Selling_Price"]
             if pd.notnull(price) and float(price) > 0:
                 return float(price)
     return 0.0
 
-# --- FAIL-SAFE AI ENGINE WITH MULTI-KEY ROTATION & GROQ VISION FALLBACK ---
+# --- FAIL-SAFE AI ENGINE WITH RANDOMIZED KEY LOAD BALANCING & GROQ FALLBACK ---
 def is_server_error(exception):
     err_str = str(exception).lower()
     return "503" in err_str or "unavailable" in err_str or "overloaded" in err_str or "429" in err_str or "resourceexhausted" in err_str
@@ -1010,8 +1021,13 @@ def extract_invoice_data_with_groq(file_bytes, mime_type="image/jpeg"):
     return json.loads(text_res)
 
 def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
+    # Session File Hash Caching: Returns cached result instantly if duplicate file is submitted
+    file_hash = hashlib.md5(file_bytes).hexdigest()
+    if file_hash in st.session_state["ocr_file_hash_cache"]:
+        return st.session_state["ocr_file_hash_cache"][file_hash]
+
     # -------------------------------------------------------------
-    # TRY 1: PRIMARY GEMINI POOL (Rotates API Keys 1 to 5)
+    # TRY 1: PRIMARY GEMINI POOL (Shuffled API Keys for Load Balancing)
     # -------------------------------------------------------------
     try:
         if "pdf" in mime_type.lower():
@@ -1066,7 +1082,11 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         config = types.GenerateContentConfig(response_mime_type="application/json")
         candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
         
-        for api_key in API_KEYS_POOL:
+        # Load Balance Gemini Keys Randomly Per Execution Request
+        shuffled_keys = list(API_KEYS_POOL)
+        random.shuffle(shuffled_keys)
+
+        for api_key in shuffled_keys:
             try:
                 client = genai.Client(api_key=api_key)
                 for model_name in candidate_models:
@@ -1077,7 +1097,10 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
                             text_res = text_res[7:-3].strip()
                         elif text_res.startswith("```"):
                             text_res = text_res[3:-3].strip()
-                        return json.loads(text_res)
+                        
+                        parsed_res = json.loads(text_res)
+                        st.session_state["ocr_file_hash_cache"][file_hash] = parsed_res
+                        return parsed_res
                     except Exception:
                         continue
             except Exception:
@@ -1091,7 +1114,9 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
     except Exception as gemini_err:
         try:
             st.toast("⚡ Gemini quota limit reached. Auto-switching to Groq Llama Vision Engine...")
-            return extract_invoice_data_with_groq(file_bytes, mime_type)
+            parsed_res = extract_invoice_data_with_groq(file_bytes, mime_type)
+            st.session_state["ocr_file_hash_cache"][file_hash] = parsed_res
+            return parsed_res
         except Exception as groq_err:
             raise Exception(f"All Primary (Gemini) and Secondary (Groq) AI services failed: {groq_err}")
 
@@ -1364,7 +1389,7 @@ with tab_parser:
                         total_quote_value += line_total
                         
                         quote_items.append({
-                            "Item Name": str(row.get("Official SKU", "")),
+                            "Item Name": str(row.get("Official SKU", "")).replace("⚠️ Needs Review: ", ""),
                             "Quantity": qty,
                             "Unit": str(row.get("Unit", "PCS")),
                             "MRP (₹)": mrp_price,
@@ -1481,6 +1506,16 @@ with tab_parser:
                     inv_num = parsed_json.get("Invoice Number", "")
                     inv_date = parsed_json.get("Invoice Date", "")
                     
+                    # Soft Duplicate Invoice Detection
+                    if inv_num:
+                        duplicate_key = f"{supplier.strip().upper()}_{inv_num.strip().upper()}"
+                        if duplicate_key in st.session_state.get("processed_invoice_keys", set()):
+                            st.warning(f"⚠️ Notice: Invoice '{inv_num}' from '{supplier}' was already ingested earlier.")
+                        else:
+                            if "processed_invoice_keys" not in st.session_state:
+                                st.session_state["processed_invoice_keys"] = set()
+                            st.session_state["processed_invoice_keys"].add(duplicate_key)
+
                     for row in parsed_json.get("Line Items", []):
                         qty = float(row.get("Primary Quantity") or 1.0)
                         if qty <= 0: qty = 1.0
@@ -1620,7 +1655,7 @@ with tab_parser:
             
             for idx, row in df_updated.iterrows():
                 raw = str(row.get("Raw Vendor Item", "")).strip().upper()
-                official = str(row.get("Official SKU", "")).strip()
+                official = str(row.get("Official SKU", "")).replace("⚠️ Needs Review: ", "").strip()
                 cat_val = str(row.get("Category", "General"))
                 unit_val = str(row.get("Unit", "PCS"))
                 gst_val = float(row.get("GST Rate", 18.0))
@@ -1672,7 +1707,7 @@ with tab_parser:
                 purchase_val = float(row.get("Purchase Price", 0.0)) if pd.notnull(row.get("Purchase Price")) else 0.0
                 
                 ws.cell(row=row_idx, column=1, value=i + 1)
-                ws.cell(row=row_idx, column=2, value=str(row["Official SKU"]))
+                ws.cell(row=row_idx, column=2, value=str(row["Official SKU"]).replace("⚠️ Needs Review: ", ""))
                 ws.cell(row=row_idx, column=3, value=float(row["Current Quantity"]))
                 ws.cell(row=row_idx, column=4, value=str(row["Unit"]))
                 ws.cell(row=row_idx, column=5, value=str(row["HSN/SAC"]))
