@@ -259,7 +259,7 @@ st.markdown("""
     }
     [data-testid="stMetricValue"] div { color: var(--uos-text) !important; }
 
-    /* Bordered Section Wrapper & Form Cards */
+    /* Bordered Section Wrapper & Form Cards (Fixes Black Box Patchiness) */
     [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stForm"], [data-testid="stExpander"] {
         border: 1px solid var(--uos-border) !important;
         border-radius: var(--uos-radius-lg) !important;
@@ -884,7 +884,6 @@ def delete_multiple_skus(store_slug: str, sku_list: list):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
-    # SAFE TUPLE PARAMETER BINDING (PREVENTS POSTGRES PARSING ERRORS)
     with engine.begin() as conn:
         conn.execute(
             text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name IN :sku_names"),
