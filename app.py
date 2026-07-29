@@ -43,7 +43,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- UNIVERSAL OS — MODERN SAAS DESIGN SYSTEM (CLEAN LIGHT-SURFACE & MOBILE EDITION) ---
+# --- GLOBAL SESSION STATE INITIALIZATION (DEFENSIVE TOP-LEVEL) ---
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+if "user_store" not in st.session_state:
+    st.session_state["user_store"] = None
+if "ocr_file_hash_cache" not in st.session_state:
+    st.session_state["ocr_file_hash_cache"] = {}
+if "processed_invoice_keys" not in st.session_state:
+    st.session_state["processed_invoice_keys"] = set()
+
+# --- UNIVERSAL OS — MODERN SAAS DESIGN SYSTEM ---
 st.markdown("""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -602,11 +612,6 @@ def reset_user_password(email: str, new_password: str):
     return True, "Password updated successfully! Please log in with your new password."
 
 # --- FAST SESSION & AUTO-LOGIN RESOLUTION ---
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
-if "user_store" not in st.session_state:
-    st.session_state["user_store"] = None
-
 if not st.session_state["authenticated"]:
     url_session = st.query_params.get("session", None)
     if url_session:
@@ -694,10 +699,6 @@ if not st.session_state["authenticated"]:
 # Active user details post-login
 selected_store_slug = st.session_state["user_store"]["slug"]
 ACTIVE_STORE_DISPLAY = st.session_state["user_store"]["display_name"].upper()
-
-# Initialize session-level File Hash OCR Cache to eliminate redundant AI calls
-if "ocr_file_hash_cache" not in st.session_state:
-    st.session_state["ocr_file_hash_cache"] = {}
 
 # --- SIDEBAR ---
 _display_name = st.session_state['user_store']['display_name']
@@ -890,7 +891,6 @@ def bulk_upsert_audited_skus(store_slug: str, records: list):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
-    # Executed inside a single atomic multi-row statement for ultra-fast database execution
     with engine.begin() as conn:
         for rec in records:
             conn.execute(
@@ -917,7 +917,6 @@ def delete_multiple_skus(store_slug: str, sku_list: list):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
-    # Safe Parameterized Binding with Tuple Parentheses for Supabase PostgreSQL
     with engine.begin() as conn:
         conn.execute(
             text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name IN :sku_names"),
@@ -1021,10 +1020,14 @@ def extract_invoice_data_with_groq(file_bytes, mime_type="image/jpeg"):
     return json.loads(text_res)
 
 def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
-    # Session File Hash Caching: Returns cached result instantly if duplicate file is submitted
+    # Thread-safe Session File Hash Caching Check
     file_hash = hashlib.md5(file_bytes).hexdigest()
-    if file_hash in st.session_state["ocr_file_hash_cache"]:
-        return st.session_state["ocr_file_hash_cache"][file_hash]
+    try:
+        cache = st.session_state.get("ocr_file_hash_cache", {})
+        if file_hash in cache:
+            return cache[file_hash]
+    except Exception:
+        pass
 
     # -------------------------------------------------------------
     # TRY 1: PRIMARY GEMINI POOL (Shuffled API Keys for Load Balancing)
@@ -1099,7 +1102,10 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
                             text_res = text_res[3:-3].strip()
                         
                         parsed_res = json.loads(text_res)
-                        st.session_state["ocr_file_hash_cache"][file_hash] = parsed_res
+                        try:
+                            st.session_state["ocr_file_hash_cache"][file_hash] = parsed_res
+                        except Exception:
+                            pass
                         return parsed_res
                     except Exception:
                         continue
@@ -1115,7 +1121,10 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         try:
             st.toast("⚡ Gemini quota limit reached. Auto-switching to Groq Llama Vision Engine...")
             parsed_res = extract_invoice_data_with_groq(file_bytes, mime_type)
-            st.session_state["ocr_file_hash_cache"][file_hash] = parsed_res
+            try:
+                st.session_state["ocr_file_hash_cache"][file_hash] = parsed_res
+            except Exception:
+                pass
             return parsed_res
         except Exception as groq_err:
             raise Exception(f"All Primary (Gemini) and Secondary (Groq) AI services failed: {groq_err}")
