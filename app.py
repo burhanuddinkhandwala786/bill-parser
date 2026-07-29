@@ -25,15 +25,15 @@ try:
 except ImportError:
     REPORTLAB_AVAILABLE = False
 
-# --- PAGE CONFIGURATION ---
+# --- PAGE CONFIGURATION WITH MOBILE VIEWPORT META ---
 st.set_page_config(
     page_title="Universal OS | Multi-Store AI SaaS",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"  # Mobile friendly default
 )
 
-# --- CLEAN THEME-SAFE CSS ---
+# --- BULLETPROOF MOBILE-RESPONSIVE LIGHT-SURFACE CSS ---
 st.markdown("""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -41,459 +41,150 @@ st.markdown("""
 <style>
     :root {
         --uos-primary: #4F46E5;
-        --uos-primary-600: #4338CA;
-        --uos-primary-700: #3730A3;
-        --uos-primary-50: #EEF2FF;
-        --uos-primary-100: #E0E7FF;
-
-        --uos-accent: #10B981;
-        --uos-accent-600: #059669;
-        --uos-accent-50: #ECFDF5;
-
-        --uos-danger: #EF4444;
-        --uos-danger-600: #DC2626;
-        --uos-danger-50: #FEF2F2;
-
-        --uos-warning: #F59E0B;
-        --uos-warning-50: #FFFBEB;
-
+        --uos-primary-hover: #4338CA;
+        --uos-accent: #2563EB;
         --uos-canvas: #F8FAFC;
         --uos-surface: #FFFFFF;
         --uos-surface-2: #F1F5F9;
         --uos-border: #E2E8F0;
         --uos-border-strong: #CBD5E1;
-
         --uos-text: #0F172A;
         --uos-text-secondary: #475569;
         --uos-text-muted: #64748B;
-        --uos-text-inverse: #F8FAFC;
-
-        --uos-radius-sm: 8px;
-        --uos-radius: 12px;
-        --uos-radius-lg: 16px;
-        --uos-radius-xl: 20px;
-
-        --uos-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
-        --uos-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
-        --uos-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
-        --uos-shadow-md: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.05);
-        --uos-shadow-lg: 0 20px 25px -5px rgba(15, 23, 42, 0.10), 0 8px 10px -6px rgba(15, 23, 42, 0.06);
-
-        --uos-focus-ring: 0 0 0 3px rgba(79, 70, 229, 0.20);
     }
 
-    html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"] {
+    /* Force Light Canvas Across All Containers (Prevents Dark/Patchy Box Glitches) */
+    html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        letter-spacing: -0.005em;
-    }
-    .stApp, [data-testid="stAppViewContainer"] {
-        background: var(--uos-canvas) !important;
+        background-color: var(--uos-canvas) !important;
         color: var(--uos-text) !important;
     }
-    [data-testid="stHeader"] { background: transparent !important; }
     .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 3rem !important;
-        max-width: 1400px;
+        padding-top: 1rem !important;
+        padding-bottom: 3.5rem !important;
+        max-width: 1360px !important;
     }
     div[data-testid="InputInstructions"] { display: none !important; }
 
-    h1, h2, h3, h4, h5, h6, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4 {
-        font-family: 'Inter', sans-serif !important;
+    /* Typography & Heading Visibility */
+    h1, h2, h3, h4, h5, h6, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
         color: var(--uos-text) !important;
-        letter-spacing: -0.02em !important;
+        letter-spacing: -0.025em !important;
         font-weight: 700 !important;
-        line-height: 1.25 !important;
     }
-    h1, .stMarkdown h1 { font-size: 2rem !important; font-weight: 700 !important; }
-    h2, .stMarkdown h2 { font-size: 1.5rem !important; font-weight: 700 !important; }
-    h3, .stMarkdown h3 { font-size: 1.15rem !important; font-weight: 600 !important; }
-    p, .stMarkdown p, label, span { color: var(--uos-text-secondary); }
-    [data-testid="stCaptionContainer"], .stCaption, small {
+    p, span, label, div[data-testid="stMarkdownContainer"] p, [data-testid="stWidgetLabel"] label {
+        color: var(--uos-text-secondary) !important;
+    }
+    [data-testid="stCaptionContainer"], small {
         color: var(--uos-text-muted) !important;
-        font-size: 0.82rem !important;
     }
     hr, [data-testid="stDivider"] {
         border-color: var(--uos-border) !important;
         margin: 1.25rem 0 !important;
-        opacity: 1 !important;
     }
 
+    /* Sidebar Interface */
     [data-testid="stSidebar"] {
-        background: var(--uos-surface) !important;
-        border-right: 1px solid var(--uos-border);
+        background-color: var(--uos-surface) !important;
+        border-right: 1px solid var(--uos-border) !important;
     }
-    [data-testid="stSidebar"] > div:first-child { padding-top: 1.5rem; }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        font-size: 1rem !important;
-        font-weight: 600 !important;
-        color: var(--uos-text) !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
-        font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace !important;
-        font-size: 0.72rem !important;
-    }
-    .uos-store-avatar {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 4px 2px 14px 2px;
-    }
-    .uos-store-avatar .uos-avatar-circle {
-        width: 42px;
-        height: 42px;
-        border-radius: 12px;
-        background: linear-gradient(135deg, var(--uos-primary) 0%, var(--uos-primary-700) 100%);
-        color: #FFFFFF;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 1rem;
-        letter-spacing: -0.02em;
-        box-shadow: var(--uos-shadow-sm);
-        flex-shrink: 0;
-    }
-    .uos-store-avatar .uos-avatar-meta {
-        display: flex; flex-direction: column; min-width: 0;
-    }
-    .uos-store-avatar .uos-avatar-name {
-        font-weight: 600; color: var(--uos-text); font-size: 0.92rem;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .uos-store-avatar .uos-avatar-slug {
-        font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
-        font-size: 0.68rem; color: var(--uos-text-muted); letter-spacing: 0;
-    }
-    [data-testid="stSidebar"] .stButton > button {
-        background: var(--uos-surface) !important;
-        color: var(--uos-text-secondary) !important;
+
+    /* Clean Card Containers (Solid White Surfaces, Crisp Borders) */
+    [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stForm"], [data-testid="stExpander"] {
+        background-color: var(--uos-surface) !important;
         border: 1px solid var(--uos-border) !important;
-        box-shadow: none !important;
-        font-weight: 500 !important;
-    }
-    [data-testid="stSidebar"] .stButton > button:hover {
-        border-color: var(--uos-danger) !important;
-        color: var(--uos-danger) !important;
-        background: var(--uos-danger-50) !important;
+        border-radius: 12px !important;
+        padding: 16px !important;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
     }
 
-    .uos-store-pill {
-        display: inline-flex; align-items: center; gap: 8px;
-        padding: 6px 14px 6px 10px;
-        background: var(--uos-primary-50);
-        color: var(--uos-primary);
-        border: 1px solid var(--uos-primary-100);
-        border-radius: 999px;
-        font-size: 0.82rem; font-weight: 600;
-        letter-spacing: 0.01em;
-    }
-    .uos-store-pill .uos-dot {
-        width: 8px; height: 8px; border-radius: 50%;
-        background: var(--uos-accent);
-        box-shadow: 0 0 0 3px var(--uos-accent-50);
-        animation: uos-pulse 2.4s ease-in-out infinite;
-    }
-    .uos-store-pill .uos-pill-label {
-        font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
-        font-size: 0.68rem; color: var(--uos-text-muted); margin-right: 2px;
-        text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500;
-    }
-    @keyframes uos-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 4px;
-        border-bottom: 1px solid var(--uos-border);
-        background: transparent !important;
-    }
-    .stTabs [data-baseweb="tab"] {
-        padding: 12px 18px !important;
-        background: transparent !important;
-        border-radius: 0 !important;
-        font-weight: 500 !important;
-        font-size: 0.92rem !important;
-        color: var(--uos-text-muted) !important;
-        border-bottom: 2px solid transparent !important;
-        transition: color 0.15s ease, border-color 0.15s ease;
-        margin-bottom: -1px !important;
-    }
-    .stTabs [data-baseweb="tab"]:hover { color: var(--uos-text) !important; background: transparent !important; }
-    .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        color: var(--uos-primary) !important;
-        font-weight: 600 !important;
-        border-bottom-color: var(--uos-primary) !important;
-    }
-    .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
-    .stTabs [data-baseweb="tab-panel"] { padding-top: 1.25rem; }
-
+    /* Metric Summary Cards */
     [data-testid="stMetric"] {
-        background: var(--uos-surface);
-        border: 1px solid var(--uos-border);
-        border-radius: var(--uos-radius-lg);
-        padding: 18px 20px;
-        box-shadow: var(--uos-shadow-xs);
-        transition: box-shadow 0.2s ease, border-color 0.2s ease;
-        min-height: 108px;
-    }
-    [data-testid="stMetric"]:hover {
-        box-shadow: var(--uos-shadow-sm);
-        border-color: var(--uos-border-strong);
+        background-color: var(--uos-surface) !important;
+        border: 1px solid var(--uos-border) !important;
+        border-radius: 12px !important;
+        padding: 16px !important;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
     }
     [data-testid="stMetricLabel"] {
-        font-size: 0.72rem !important;
+        font-size: 0.75rem !important;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.05em;
         color: var(--uos-text-muted) !important;
         font-weight: 600 !important;
     }
-    [data-testid="stMetricLabel"] p { color: var(--uos-text-muted) !important; }
-    [data-testid="stMetricValue"] {
-        font-size: 1.75rem !important;
-        font-weight: 700 !important;
+    [data-testid="stMetricValue"] div {
         color: var(--uos-text) !important;
-        font-variant-numeric: tabular-nums;
-        letter-spacing: -0.02em !important;
-        margin-top: 4px;
-    }
-    [data-testid="stMetricValue"] div { color: var(--uos-text) !important; }
-    [data-testid="stMetricDelta"] {
-        color: var(--uos-accent-600) !important;
-        font-weight: 500 !important;
-        font-size: 0.8rem !important;
+        font-weight: 800 !important;
     }
 
-    [data-testid="stVerticalBlockBorderWrapper"] {
-        border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius-lg) !important;
-        background: var(--uos-surface) !important;
-        box-shadow: var(--uos-shadow-xs);
-        padding: 18px 20px !important;
-    }
-    div[data-testid="stColumn"] { display: flex; flex-direction: column; }
-    div[data-testid="stColumn"] > div { flex: 1; }
-    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] { height: 100% !important; }
-
+    /* Action Buttons */
     .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
         font-family: 'Inter', sans-serif !important;
         font-weight: 600 !important;
-        font-size: 0.9rem !important;
-        letter-spacing: -0.005em !important;
-        border-radius: var(--uos-radius) !important;
+        font-size: 0.88rem !important;
+        border-radius: 8px !important;
         padding: 10px 18px !important;
-        transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease !important;
         border: 1px solid var(--uos-border) !important;
         background: var(--uos-surface) !important;
         color: var(--uos-text) !important;
-        box-shadow: var(--uos-shadow-xs) !important;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+        transition: all 0.15s ease !important;
     }
-    .stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover {
+    .stButton > button:hover, .stDownloadButton > button:hover {
+        background: var(--uos-surface-2) !important;
         border-color: var(--uos-border-strong) !important;
-        box-shadow: var(--uos-shadow-sm) !important;
-        transform: translateY(-1px);
     }
-    .stButton > button[kind="primary"],
-    .stDownloadButton > button[kind="primary"],
-    .stFormSubmitButton > button[kind="primary"] {
+    .stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"] {
         background: var(--uos-primary) !important;
         color: #FFFFFF !important;
-        border: 1px solid var(--uos-primary) !important;
-        box-shadow: 0 1px 2px rgba(79, 70, 229, 0.15), 0 4px 12px rgba(79, 70, 229, 0.18) !important;
+        border-color: var(--uos-primary) !important;
     }
-    .stButton > button[kind="primary"] p,
-    .stDownloadButton > button[kind="primary"] p,
-    .stFormSubmitButton > button[kind="primary"] p { color: #FFFFFF !important; }
-    .stButton > button[kind="primary"]:hover,
-    .stDownloadButton > button[kind="primary"]:hover,
-    .stFormSubmitButton > button[kind="primary"]:hover {
-        background: var(--uos-primary-600) !important;
-        border-color: var(--uos-primary-600) !important;
-        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2), 0 8px 20px rgba(79, 70, 229, 0.25) !important;
-        transform: translateY(-1px);
-    }
-    .stButton > button[kind="primary"]:active,
-    .stFormSubmitButton > button[kind="primary"]:active { transform: translateY(0); }
+    .stButton > button[kind="primary"] p { color: #FFFFFF !important; }
 
-    .stTextInput input, .stNumberInput input, .stTextArea textarea,
+    /* Form Fields & Spin Buttons */
+    .stTextInput input, .stNumberInput input, .stTextArea textarea, 
     div[data-baseweb="input"] input, div[data-baseweb="select"] > div {
-        background: var(--uos-surface) !important;
-        border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius) !important;
+        background-color: var(--uos-surface) !important;
         color: var(--uos-text) !important;
-        font-family: 'Inter', sans-serif !important;
-        font-size: 0.92rem !important;
+        border: 1px solid var(--uos-border) !important;
+        border-radius: 8px !important;
+        padding: 10px 14px !important;
         box-shadow: none !important;
-        transition: border-color 0.15s ease, box-shadow 0.15s ease;
-    }
-    .stTextInput input, .stNumberInput input, .stTextArea textarea { padding: 10px 12px !important; }
-    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus,
-    div[data-baseweb="input"]:focus-within, div[data-baseweb="select"] > div:focus-within {
-        border-color: var(--uos-primary) !important;
-        box-shadow: var(--uos-focus-ring) !important;
-        outline: none !important;
-    }
-    [data-testid="stWidgetLabel"] label, [data-testid="stWidgetLabel"] p {
-        font-size: 0.85rem !important;
-        font-weight: 500 !important;
-        color: var(--uos-text-secondary) !important;
-        margin-bottom: 6px !important;
     }
 
-    [data-testid="stForm"] {
-        border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius-lg) !important;
-        background: var(--uos-surface) !important;
-        padding: 20px !important;
-        box-shadow: var(--uos-shadow-xs);
-    }
-
-    [data-testid="stRadio"] > div[role="radiogroup"] {
-        display: inline-flex;
-        gap: 4px;
-        padding: 4px;
-        background: var(--uos-surface-2);
-        border: 1px solid var(--uos-border);
-        border-radius: 999px;
-        flex-wrap: wrap;
-    }
-    [data-testid="stRadio"] label {
-        margin: 0 !important;
-        padding: 6px 14px !important;
-        border-radius: 999px !important;
-        cursor: pointer;
-        transition: background 0.15s ease, color 0.15s ease;
-        font-size: 0.85rem !important;
-        font-weight: 500 !important;
-        color: var(--uos-text-secondary) !important;
-        background: transparent;
-    }
-    [data-testid="stRadio"] label:hover { color: var(--uos-text) !important; }
-    [data-testid="stRadio"] label > div:first-child { display: none !important; }
-    [data-testid="stRadio"] label:has(input:checked) {
-        background: var(--uos-surface) !important;
-        color: var(--uos-primary) !important;
-        box-shadow: var(--uos-shadow-xs);
-        font-weight: 600 !important;
-    }
-    [data-testid="stRadio"] label:has(input:checked) p { color: var(--uos-primary) !important; font-weight: 600 !important; }
-
-    [data-testid="stFileUploaderDropzone"], section[data-testid="stFileUploadDropzone"] {
-        background: var(--uos-surface-2) !important;
-        border: 1.5px dashed var(--uos-border-strong) !important;
-        border-radius: var(--uos-radius-lg) !important;
-        padding: 24px !important;
-        transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
-    }
-    [data-testid="stFileUploaderDropzone"]:hover, section[data-testid="stFileUploadDropzone"]:hover {
-        border-color: var(--uos-primary) !important;
-        background: var(--uos-primary-50) !important;
-        transform: translateY(-1px);
-    }
-    [data-testid="stFileUploaderDropzoneInstructions"] div, [data-testid="stFileUploaderDropzone"] small {
-        color: var(--uos-text-muted) !important;
-    }
-
-    [data-testid="stExpander"] {
-        border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius-lg) !important;
-        background: var(--uos-surface) !important;
-        box-shadow: var(--uos-shadow-xs);
-        overflow: hidden;
-    }
-    [data-testid="stExpander"] summary, [data-testid="stExpander"] > details > summary {
-        padding: 14px 18px !important;
-        font-weight: 600 !important;
-        color: var(--uos-text) !important;
-        background: var(--uos-surface) !important;
-    }
-    [data-testid="stExpander"] summary:hover { background: var(--uos-surface-2) !important; }
-
+    /* Table & Data Editors */
     [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
         border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius) !important;
-        overflow: hidden;
-        background: var(--uos-surface);
-    }
-    .stDataFrame [role="columnheader"], [data-testid="stDataFrame"] [role="columnheader"] {
-        background: var(--uos-surface-2) !important;
-        font-weight: 600 !important;
-        color: var(--uos-text) !important;
+        border-radius: 8px !important;
+        background-color: var(--uos-surface) !important;
+        overflow: auto !important;
     }
 
-    [data-testid="stAlert"] {
-        border-radius: var(--uos-radius) !important;
-        border: 1px solid transparent !important;
-        padding: 12px 14px !important;
-        font-size: 0.88rem !important;
-    }
-    [data-testid="stAlert"][kind="success"], div[data-baseweb="notification"][kind="positive"] {
-        background: var(--uos-accent-50) !important;
-        color: var(--uos-accent-600) !important;
-        border-color: rgba(16, 185, 129, 0.25) !important;
-    }
-    [data-testid="stAlert"][kind="info"], div[data-baseweb="notification"][kind="info"] {
-        background: var(--uos-primary-50) !important;
-        color: var(--uos-primary) !important;
-        border-color: var(--uos-primary-100) !important;
-    }
-    [data-testid="stAlert"][kind="warning"], div[data-baseweb="notification"][kind="warning"] {
-        background: var(--uos-warning-50) !important;
-        color: var(--uos-warning) !important;
-        border-color: rgba(245, 158, 11, 0.25) !important;
-    }
-    [data-testid="stAlert"][kind="error"], div[data-baseweb="notification"][kind="negative"] {
-        background: var(--uos-danger-50) !important;
-        color: var(--uos-danger-600) !important;
-        border-color: rgba(239, 68, 68, 0.25) !important;
-    }
-    [data-testid="stToast"] {
-        border-radius: var(--uos-radius) !important;
-        border: 1px solid var(--uos-border) !important;
-        box-shadow: var(--uos-shadow-md) !important;
-        background: var(--uos-surface) !important;
-    }
-    [data-testid="stStatusWidget"], [data-testid="stStatus"] {
-        border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius) !important;
-        background: var(--uos-surface) !important;
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        border-bottom: 1px solid var(--uos-border);
+        background: transparent !important;
     }
 
-    .uos-auth-hero {
-        text-align: center;
-        padding: 20px 0 24px 0;
+    /* MOBILE SPECIFIC MEDIA QUERY FIXES */
+    @media (max-width: 768px) {
+        .block-container {
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+        div[data-testid="stColumn"] {
+            width: 100% !important;
+            margin-bottom: 12px !important;
+        }
+        [data-testid="stMetric"] {
+            padding: 12px !important;
+        }
+        .uos-store-pill {
+            margin-top: 8px;
+        }
     }
-    .uos-auth-mark {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 64px;
-        height: 64px;
-        border-radius: 20px;
-        background: linear-gradient(135deg, var(--uos-primary) 0%, var(--uos-primary-700) 100%);
-        color: #FFFFFF;
-        font-size: 2rem;
-        margin-bottom: 14px;
-        box-shadow: 0 10px 30px rgba(79, 70, 229, 0.28), 0 4px 8px rgba(79, 70, 229, 0.18);
-    }
-    .uos-auth-title {
-        font-size: 2rem; font-weight: 700; color: var(--uos-text);
-        letter-spacing: -0.03em; margin: 0;
-    }
-    .uos-auth-tagline {
-        color: var(--uos-text-muted); font-size: 0.98rem; margin-top: 6px; font-weight: 400;
-    }
-
-    [data-testid="stCameraInput"] button { border-radius: var(--uos-radius) !important; }
-
-    .uos-num-badge {
-        display: inline-flex; align-items: center; justify-content: center;
-        width: 26px; height: 26px; border-radius: 8px;
-        background: var(--uos-primary-50); color: var(--uos-primary);
-        font-weight: 700; font-size: 0.82rem; margin-right: 10px; vertical-align: -3px;
-    }
-
-    [data-testid="stProgress"] > div > div > div { background: var(--uos-primary) !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -898,7 +589,6 @@ def bulk_upsert_audited_skus(store_slug: str, records: list):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
-    # SINGLE ATOMIC BULK TRANSACTION
     with engine.begin() as conn:
         for rec in records:
             conn.execute(
@@ -925,11 +615,11 @@ def delete_multiple_skus(store_slug: str, sku_list: list):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
     
-    # SAFE TUPLE PARAMETER BINDING (FIXES POSTGRES ARRAY SYNTAX BUG)
+    # SAFE PARAMETER TUPLE BINDING (PREVENTS POSTGRES TUPLE PARSING ERRORS)
     with engine.begin() as conn:
         conn.execute(
-            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name = ANY(:sku_names)"),
-            {"store_id": store_id, "sku_names": list(sku_list)}
+            text("DELETE FROM master_skus WHERE store_id = :store_id AND official_sku_name IN :sku_names"),
+            {"store_id": store_id, "sku_names": tuple(sku_list)}
         )
     load_master.clear()
 
@@ -1484,7 +1174,6 @@ with tab_parser:
         
         df = st.session_state["parsed_df"]
         
-        # SELF-HEALING SCHEMA GUARANTEE
         required_cols = [
             "Raw Vendor Item", "Official SKU", "Current Quantity", "Unit", "HSN/SAC",
             "Purchase Price", "GST Rate", "Selling Price", "Category"
@@ -1594,7 +1283,6 @@ with tab_parser:
                         "sp": sp_val
                     })
 
-            # FAST BATCH TRANSACTION (ELIMINATES DB LOOP FREEZES)
             if upsert_records:
                 bulk_upsert_audited_skus(selected_store_slug, upsert_records)
 
