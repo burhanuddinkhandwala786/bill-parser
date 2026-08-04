@@ -19,19 +19,21 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import create_engine, text
 
-# Optional Imports with Fallbacks
+# Optional PyMuPDF (fitz) Import for Catalog Extraction
 try:
     import fitz  # PyMuPDF
     PYMUPDF_AVAILABLE = True
 except ImportError:
     PYMUPDF_AVAILABLE = False
 
+# Optional Groq SDK Import for Secondary Failover
 try:
     from groq import Groq
     GROQ_AVAILABLE = True
 except ImportError:
     GROQ_AVAILABLE = False
 
+# --- SAFE REPORTLAB PDF IMPORTS ---
 try:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import letter
@@ -49,7 +51,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- GLOBAL SESSION STATE ---
+# --- GLOBAL SESSION STATE INITIALIZATION ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "user_store" not in st.session_state:
@@ -70,46 +72,387 @@ st.markdown("""
         --uos-primary-600: #4338CA;
         --uos-primary-700: #3730A3;
         --uos-primary-50: #EEF2FF;
+        --uos-primary-100: #E0E7FF;
+
         --uos-accent: #10B981;
+        --uos-accent-600: #059669;
+        --uos-accent-50: #ECFDF5;
+
+        --uos-danger: #EF4444;
+        --uos-danger-600: #DC2626;
+        --uos-danger-50: #FEF2F2;
+
+        --uos-warning: #F59E0B;
+        --uos-warning-50: #FFFBEB;
+
         --uos-canvas: #F8FAFC;
         --uos-surface: #FFFFFF;
         --uos-surface-2: #F1F5F9;
         --uos-border: #E2E8F0;
+        --uos-border-strong: #CBD5E1;
+
         --uos-text: #0F172A;
         --uos-text-secondary: #475569;
         --uos-text-muted: #64748B;
+        --uos-text-inverse: #F8FAFC;
+
+        --uos-radius-sm: 8px;
         --uos-radius: 12px;
+        --uos-radius-lg: 16px;
+        --uos-radius-xl: 20px;
+
+        --uos-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+        --uos-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+        --uos-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+        --uos-shadow-md: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.05);
+
+        --uos-focus-ring: 0 0 0 3px rgba(79, 70, 229, 0.20);
     }
+
     html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        letter-spacing: -0.005em;
+    }
+    .stApp, [data-testid="stAppViewContainer"] {
         background: var(--uos-canvas) !important;
         color: var(--uos-text) !important;
     }
     [data-testid="stHeader"] { background: transparent !important; }
-    .block-container { padding-top: 1.5rem !important; padding-bottom: 3rem !important; max-width: 1400px; }
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 3rem !important;
+        max-width: 1400px;
+    }
     div[data-testid="InputInstructions"] { display: none !important; }
-    h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; color: var(--uos-text) !important; font-weight: 700 !important; }
-    [data-testid="stSidebar"] { background: var(--uos-surface) !important; border-right: 1px solid var(--uos-border); }
-    .uos-store-avatar { display: flex; align-items: center; gap: 12px; padding: 4px 2px 14px 2px; }
+
+    h1, h2, h3, h4, h5, h6, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4 {
+        font-family: 'Inter', sans-serif !important;
+        color: var(--uos-text) !important;
+        letter-spacing: -0.02em !important;
+        font-weight: 700 !important;
+        line-height: 1.25 !important;
+    }
+    h1, .stMarkdown h1 { font-size: 2rem !important; font-weight: 700 !important; }
+    h2, .stMarkdown h2 { font-size: 1.5rem !important; font-weight: 700 !important; }
+    h3, .stMarkdown h3 { font-size: 1.15rem !important; font-weight: 600 !important; }
+    p, .stMarkdown p, label, span { color: var(--uos-text-secondary); }
+    [data-testid="stCaptionContainer"], .stCaption, small {
+        color: var(--uos-text-muted) !important;
+        font-size: 0.82rem !important;
+    }
+    hr, [data-testid="stDivider"] {
+        border-color: var(--uos-border) !important;
+        margin: 1.25rem 0 !important;
+        opacity: 1 !important;
+    }
+
+    [data-testid="stSidebar"] {
+        background: var(--uos-surface) !important;
+        border-right: 1px solid var(--uos-border);
+    }
+    [data-testid="stSidebar"] > div:first-child { padding-top: 1.5rem; }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+        font-size: 1rem !important;
+        font-weight: 600 !important;
+        color: var(--uos-text) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+        font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace !important;
+        font-size: 0.72rem !important;
+    }
+    .uos-store-avatar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 4px 2px 14px 2px;
+    }
     .uos-store-avatar .uos-avatar-circle {
-        width: 42px; height: 42px; border-radius: 12px;
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
         background: linear-gradient(135deg, var(--uos-primary) 0%, var(--uos-primary-700) 100%);
-        color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700;
+        color: #FFFFFF;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1rem;
+        letter-spacing: -0.02em;
+        box-shadow: var(--uos-shadow-sm);
+        flex-shrink: 0;
     }
+    .uos-store-avatar .uos-avatar-meta {
+        display: flex; flex-direction: column; min-width: 0;
+    }
+    .uos-store-avatar .uos-avatar-name {
+        font-weight: 600; color: var(--uos-text); font-size: 0.92rem;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .uos-store-avatar .uos-avatar-slug {
+        font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+        font-size: 0.68rem; color: var(--uos-text-muted); letter-spacing: 0;
+    }
+    [data-testid="stSidebar"] .stButton > button {
+        background: var(--uos-surface) !important;
+        color: var(--uos-text-secondary) !important;
+        border: 1px solid var(--uos-border) !important;
+        box-shadow: none !important;
+        font-weight: 500 !important;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        border-color: var(--uos-danger) !important;
+        color: var(--uos-danger) !important;
+        background: var(--uos-danger-50) !important;
+    }
+
     .uos-store-pill {
-        display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 10px;
-        background: var(--uos-primary-50); color: var(--uos-primary); border: 1px solid #E0E7FF;
-        border-radius: 999px; font-size: 0.82rem; font-weight: 600;
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 6px 14px 6px 10px;
+        background: var(--uos-primary-50);
+        color: var(--uos-primary);
+        border: 1px solid var(--uos-primary-100);
+        border-radius: 999px;
+        font-size: 0.82rem; font-weight: 600;
+        letter-spacing: 0.01em;
     }
-    .uos-store-pill .uos-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--uos-accent); }
-    .stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid var(--uos-border); background: transparent !important; }
-    .stTabs [data-baseweb="tab"] { padding: 12px 18px !important; font-weight: 500 !important; color: var(--uos-text-muted) !important; }
-    .stTabs [data-baseweb="tab"][aria-selected="true"] { color: var(--uos-primary) !important; font-weight: 600 !important; border-bottom-color: var(--uos-primary) !important; }
-    [data-testid="stMetric"] { background: var(--uos-surface) !important; border: 1px solid var(--uos-border) !important; border-radius: var(--uos-radius) !important; padding: 18px !important; }
+    .uos-store-pill .uos-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--uos-accent);
+        box-shadow: 0 0 0 3px var(--uos-accent-50);
+        animation: uos-pulse 2.4s ease-in-out infinite;
+    }
+    .uos-store-pill .uos-pill-label {
+        font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+        font-size: 0.68rem; color: var(--uos-text-muted); margin-right: 2px;
+        text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500;
+    }
+    @keyframes uos-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px;
+        border-bottom: 1px solid var(--uos-border);
+        background: transparent !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        padding: 12px 18px !important;
+        background: transparent !important;
+        border-radius: 0 !important;
+        font-weight: 500 !important;
+        font-size: 0.92rem !important;
+        color: var(--uos-text-muted) !important;
+        border-bottom: 2px solid transparent !important;
+        transition: color 0.15s ease, border-color 0.15s ease;
+        margin-bottom: -1px !important;
+    }
+    .stTabs [data-baseweb="tab"]:hover { color: var(--uos-text) !important; background: transparent !important; }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        color: var(--uos-primary) !important;
+        font-weight: 600 !important;
+        border-bottom-color: var(--uos-primary) !important;
+    }
+    .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
+    .stTabs [data-baseweb="tab-panel"] { padding-top: 1.25rem; }
+
+    [data-testid="stMetric"] {
+        background: var(--uos-surface) !important;
+        border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius-lg) !important;
+        padding: 18px 20px !important;
+        box-shadow: var(--uos-shadow-xs) !important;
+        min-height: 108px;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 0.72rem !important;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--uos-text-muted) !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stMetricLabel"] p { color: var(--uos-text-muted) !important; }
+    [data-testid="stMetricValue"] {
+        font-size: 1.75rem !important;
+        font-weight: 700 !important;
+        color: var(--uos-text) !important;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em !important;
+        margin-top: 4px;
+    }
+    [data-testid="stMetricValue"] div { color: var(--uos-text) !important; }
+
+    [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stForm"], [data-testid="stExpander"] {
+        border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius-lg) !important;
+        background: var(--uos-surface) !important;
+        box-shadow: var(--uos-shadow-xs) !important;
+        padding: 18px 20px !important;
+    }
+    div[data-testid="stColumn"] { display: flex; flex-direction: column; }
+    div[data-testid="stColumn"] > div { flex: 1; }
+    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] { height: 100% !important; }
+
     .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
-        border-radius: var(--uos-radius) !important; font-weight: 600 !important; border: 1px solid var(--uos-border) !important;
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 600 !important;
+        font-size: 0.9rem !important;
+        letter-spacing: -0.005em !important;
+        border-radius: var(--uos-radius) !important;
+        padding: 10px 18px !important;
+        border: 1px solid var(--uos-border) !important;
+        background: var(--uos-surface) !important;
+        color: var(--uos-text) !important;
+        box-shadow: var(--uos-shadow-xs) !important;
     }
-    .stButton > button[kind="primary"] { background: var(--uos-primary) !important; color: #FFFFFF !important; }
+    .stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover {
+        border-color: var(--uos-border-strong) !important;
+        box-shadow: var(--uos-shadow-sm) !important;
+        transform: translateY(-1px);
+    }
+    .stButton > button[kind="primary"],
+    .stDownloadButton > button[kind="primary"],
+    .stFormSubmitButton > button[kind="primary"] {
+        background: var(--uos-primary) !important;
+        color: #FFFFFF !important;
+        border: 1px solid var(--uos-primary) !important;
+        box-shadow: 0 1px 2px rgba(79, 70, 229, 0.15) !important;
+    }
+    .stButton > button[kind="primary"] p,
+    .stDownloadButton > button[kind="primary"] p,
+    .stFormSubmitButton > button[kind="primary"] p { color: #FFFFFF !important; }
+    .stButton > button[kind="primary"]:hover {
+        background: var(--uos-primary-600) !important;
+        border-color: var(--uos-primary-600) !important;
+    }
+
+    .stTextInput input, .stNumberInput input, .stTextArea textarea,
+    div[data-baseweb="input"] input, div[data-baseweb="select"] > div {
+        background: var(--uos-surface) !important;
+        border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius) !important;
+        color: var(--uos-text) !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.92rem !important;
+        box-shadow: none !important;
+    }
+    .stTextInput input, .stNumberInput input, .stTextArea textarea { padding: 10px 12px !important; }
+    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus,
+    div[data-baseweb="input"]:focus-within, div[data-baseweb="select"] > div:focus-within {
+        border-color: var(--uos-primary) !important;
+        box-shadow: var(--uos-focus-ring) !important;
+        outline: none !important;
+    }
+    [data-testid="stWidgetLabel"] label, [data-testid="stWidgetLabel"] p {
+        font-size: 0.85rem !important;
+        font-weight: 500 !important;
+        color: var(--uos-text-secondary) !important;
+        margin-bottom: 6px !important;
+    }
+    div[data-baseweb="spinbutton"] button {
+        background-color: var(--uos-surface-2) !important;
+        color: var(--uos-text) !important;
+        border-color: var(--uos-border) !important;
+    }
+
+    [data-testid="stRadio"] > div[role="radiogroup"] {
+        display: inline-flex;
+        gap: 4px;
+        padding: 4px;
+        background: var(--uos-surface-2);
+        border: 1px solid var(--uos-border);
+        border-radius: 999px;
+        flex-wrap: wrap;
+    }
+    [data-testid="stRadio"] label {
+        margin: 0 !important;
+        padding: 6px 14px !important;
+        border-radius: 999px !important;
+        cursor: pointer;
+        font-size: 0.85rem !important;
+        font-weight: 500 !important;
+        color: var(--uos-text-secondary) !important;
+        background: transparent;
+    }
+    [data-testid="stRadio"] label:hover { color: var(--uos-text) !important; }
+    [data-testid="stRadio"] label > div:first-child { display: none !important; }
+    [data-testid="stRadio"] label:has(input:checked) {
+        background: var(--uos-surface) !important;
+        color: var(--uos-primary) !important;
+        box-shadow: var(--uos-shadow-xs);
+        font-weight: 600 !important;
+    }
+    [data-testid="stRadio"] label:has(input:checked) p { color: var(--uos-primary) !important; font-weight: 600 !important; }
+
+    [data-testid="stFileUploaderDropzone"], section[data-testid="stFileUploadDropzone"] {
+        background: var(--uos-surface-2) !important;
+        border: 1.5px dashed var(--uos-border-strong) !important;
+        border-radius: var(--uos-radius-lg) !important;
+        padding: 24px !important;
+    }
+    [data-testid="stFileUploaderDropzoneInstructions"] div, [data-testid="stFileUploaderDropzone"] small {
+        color: var(--uos-text-muted) !important;
+    }
+
+    [data-testid="stExpander"] summary, [data-testid="stExpander"] > details > summary {
+        padding: 14px 18px !important;
+        font-weight: 600 !important;
+        color: var(--uos-text) !important;
+        background: var(--uos-surface) !important;
+    }
+    [data-testid="stExpander"] summary:hover { background: var(--uos-surface-2) !important; }
+
+    [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
+        border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius) !important;
+        overflow: hidden;
+        background: var(--uos-surface) !important;
+    }
+    .stDataFrame [role="grid"], [data-testid="stDataEditor"] [role="grid"] {
+        background-color: var(--uos-surface) !important;
+        color: var(--uos-text) !important;
+    }
+    .stDataFrame [role="columnheader"], [data-testid="stDataFrame"] [role="columnheader"] {
+        background: var(--uos-surface-2) !important;
+        font-weight: 600 !important;
+        color: var(--uos-text) !important;
+    }
+
+    .uos-num-badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 8px;
+        background: var(--uos-primary-50); color: var(--uos-primary);
+        font-weight: 700; font-size: 0.82rem; margin-right: 10px; vertical-align: -3px;
+    }
+
+    .uos-auth-hero { text-align: center; padding: 20px 0 24px 0; }
+    .uos-auth-mark {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 64px; height: 64px; border-radius: 20px;
+        background: linear-gradient(135deg, var(--uos-primary) 0%, var(--uos-primary-700) 100%);
+        color: #FFFFFF; font-size: 2rem; margin-bottom: 14px;
+        box-shadow: 0 10px 30px rgba(79, 70, 229, 0.28);
+    }
+    .uos-auth-title { font-size: 2rem; font-weight: 700; color: var(--uos-text); margin: 0; }
+    .uos-auth-tagline { color: var(--uos-text-muted); font-size: 0.98rem; margin-top: 6px; }
+
+    [data-testid="stProgress"] > div > div > div { background: var(--uos-primary) !important; }
+
+    @media (max-width: 768px) {
+        .block-container {
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+        div[data-testid="stColumn"] {
+            width: 100% !important;
+            margin-bottom: 12px !important;
+        }
+        [data-testid="stMetric"] {
+            padding: 12px !important;
+        }
+        .uos-store-pill {
+            margin-top: 8px;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -171,7 +514,7 @@ def save_store_phone(store_slug: str, phone: str):
     except Exception:
         pass
 
-# --- PERMANENT DATABASE DUPLICATE CHECKER ---
+# --- PERMANENT DATABASE DUPLICATE CHECKER (LEGAL COMPLIANCE) ---
 def is_duplicate_invoice_db(store_id: int, vendor_name: str, invoice_number: str) -> bool:
     if not invoice_number or not vendor_name:
         return False
@@ -216,7 +559,7 @@ def log_invoice_to_db(store_id: int, vendor_name: str, invoice_number: str, invo
     except Exception:
         pass
 
-# --- AUTHENTICATION ---
+# --- AUTHENTICATION & MULTI-TENANT SESSION MANAGEMENT ---
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
@@ -303,9 +646,9 @@ def reset_user_password(email: str, new_password: str):
             text("UPDATE stores SET password = :password WHERE email = :email"),
             {"password": hashed_pwd, "email": email.strip().lower()}
         )
-    return True, "Password updated successfully!"
+    return True, "Password updated successfully! Please log in with your new password."
 
-# --- FAST SESSION RESOLUTION ---
+# --- FAST SESSION & AUTO-LOGIN RESOLUTION ---
 if not st.session_state["authenticated"]:
     url_session = st.query_params.get("session", None)
     if url_session:
@@ -317,7 +660,7 @@ if not st.session_state["authenticated"]:
             st.session_state["authenticated"] = True
             st.session_state["user_store"] = store_data
 
-# --- LOGIN SCREEN ---
+# --- LOGIN / SIGNUP / RESET SCREEN ---
 if not st.session_state["authenticated"]:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -345,6 +688,7 @@ if not st.session_state["authenticated"]:
                             st.session_state["authenticated"] = True
                             st.session_state["user_store"] = store_data
                             st.query_params["session"] = store_data["slug"]
+                            st.success(f"Welcome back, {store_data['display_name']}!")
                             st.rerun()
                         else:
                             st.error("Invalid email or password.")
@@ -381,7 +725,7 @@ if not st.session_state["authenticated"]:
                         else: st.error(msg)
     st.stop()
 
-# Active user details
+# Active user details post-login
 selected_store_slug = st.session_state["user_store"]["slug"]
 ACTIVE_STORE_DISPLAY = st.session_state["user_store"]["display_name"].upper()
 ACTIVE_STORE_ID = get_or_create_store_id(selected_store_slug)
@@ -423,7 +767,7 @@ def get_api_key_pool():
 
 API_KEYS_POOL = get_api_key_pool()
 if not API_KEYS_POOL:
-    st.error("⚠️ Gemini API Key missing.")
+    st.error("⚠️ Gemini API Key missing. Please configure GEMINI_API_KEY in secrets.")
     st.stop()
 
 # --- HEADER SECTION ---
@@ -455,7 +799,7 @@ with header_right:
 
 st.divider()
 
-# --- STORE LOADERS ---
+# --- FAST CACHED DATABASE STORE LOADERS ---
 @st.cache_data(ttl=3600)
 def load_json_memory(store_slug: str) -> dict:
     engine = get_db_engine()
@@ -533,6 +877,7 @@ def save_master(df: pd.DataFrame, store_slug: str):
             )
     load_master.clear()
 
+# --- ATOMIC OPTIMIZED SQL EXECUTORS ---
 def add_single_sku_direct(store_slug: str, sku_name: str, category: str, unit: str, gst_rate: float, selling_price: float):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
