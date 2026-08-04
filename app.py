@@ -1755,8 +1755,210 @@ with tab_parser:
                 use_container_width=True
             )
 
+# =======================================================
+# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (NEW)
+# =======================================================
+with tab_catalog:
+    st.subheader(
+        f"📚 Multi-Vendor Price List & Catalog Batch Extractor ({ACTIVE_STORE_DISPLAY})"
+    )
+    col_cat_left, col_cat_right = st.columns([2, 1])
+
+    with col_cat_left:
+        catalog_files = st.file_uploader(
+            "Upload Supplier Price Lists",
+            type=["pdf", "png", "jpg", "jpeg"],
+            accept_multiple_files=True,
+            key="catalog_file_uploader_batch",
+        )
+
+    with col_cat_right:
+        catalog_tax_type = st.radio(
+            "Catalog Tax Status:",
+            ["Taxable GST Rate", "Non-GST / Net Rate"],
+            horizontal=True,
+            key="cat_tax_status_radio",
+        )
+
+    all_extracted_catalog_items = []
+
+    if catalog_files:
+        # Build (bytes, mime) tuples for each uploaded file
+        st_files_tuples = []
+        for f in catalog_files:
+            raw_bytes = f.read()
+            if f.name.lower().endswith(".pdf"):
+                mime = "application/pdf"
+            else:
+                mime = "image/jpeg"
+            st_files_tuples.append((raw_bytes, mime))
+
+        if st.button(
+            "🚀 Process All Price Lists Concurrently",
+            type="primary",
+            use_container_width=True,
+            key="btn_run_catalog_ai",
+        ):
+            with st.status(
+                f"Parsing {len(st_files_tuples)} price catalog(s) in parallel...",
+                expanded=True,
+            ) as status_box:
+                try:
+                    with ThreadPoolExecutor(
+                        max_workers=min(len(st_files_tuples), 6)
+                    ) as executor:
+                        results = list(
+                            executor.map(parse_single_catalog_file, st_files_tuples)
+                        )
+
+                    for file_items in results:
+                        for prod in file_items:
+                            if catalog_tax_type == "Non-GST / Net Rate":
+                                prod["GST Rate %"] = 0.0
+                            else:
+                                prod["GST Rate %"] = float(prod.get("GST Rate %", 18.0))
+                            all_extracted_catalog_items.append(prod)
+
+                    status_box.update(
+                        label=f"✅ Extracted & Grouped {len(all_extracted_catalog_items)} total items!",
+                        state="complete",
+                        expanded=False,
+                    )
+                except Exception as cat_err:
+                    status_box.update(
+                        label=f"❌ Failed to parse price lists: {cat_err}",
+                        state="error",
+                    )
+
+            if all_extracted_catalog_items:
+                df_raw_cat = pd.DataFrame(all_extracted_catalog_items)
+                df_sorted_cat = df_raw_cat.sort_values(
+                    by=["Supplier / Brand", "Model Name / Description"]
+                ).reset_index(drop=True)
+                st.session_state["catalog_df"] = df_sorted_cat
+                st.rerun()
+
+    if (
+        "catalog_df" in st.session_state
+        and st.session_state["catalog_df"] is not None
+        and not st.session_state["catalog_df"].empty
+    ):
+        st.divider()
+        st.markdown("#### 📋 Extracted & Brand-Grouped Price Lists Preview")
+
+        edited_cat_df = st.data_editor(
+            st.session_state["catalog_df"],
+            num_rows="dynamic",
+            use_container_width=True,
+            key="catalog_editor",
+        )
+
+        c_cat1, c_cat2 = st.columns([1, 1])
+
+        # Import into Master Catalog
+        with c_cat1:
+            if st.button(
+                "📥 Import Grouped Items into Master Catalog",
+                type="primary",
+                use_container_width=True,
+                key="btn_import_catalog_master",
+            ):
+                new_cat_records = []
+                for _, row in edited_cat_df.iterrows():
+                    sku_name = f"[{row.get('Supplier / Brand', 'GENERIC')}] {row['Model Name / Description']}".strip()
+                    if sku_name:
+                        new_cat_records.append(
+                            {
+                                "Official_SKU_Name": sku_name,
+                                "Category": str(row.get("Supplier / Brand", "General")),
+                                "Default_Unit": str(row.get("Unit", "PCS")).upper(),
+                                "GST_Rate": float(row.get("GST Rate %", 18.0)),
+                                "Selling_Price": float(
+                                    row.get("Catalog Rate ₹", 0.0)
+                                ),
+                            }
+                        )
+                if new_cat_records:
+                    bulk_df = pd.DataFrame(new_cat_records)
+                    combined = (
+                        pd.concat([master_df, bulk_df], ignore_index=True)
+                        .drop_duplicates(
+                            subset=["Official_SKU_Name"], keep="last"
+                        )
+                    )
+                    save_master(combined, selected_store_slug)
+                    st.toast(
+                        f"Imported {len(new_cat_records)} items to Master Catalog!"
+                    )
+                    st.rerun()
+
+        # Download as Excel
+        with c_cat2:
+            wb_cat = openpyxl.Workbook()
+            ws_cat = wb_cat.active
+            ws_cat.title = "Price Lists"
+            ws_cat.cell(row=1, column=1, value=ACTIVE_STORE_DISPLAY)
+            ws_cat.cell(row=2, column=1, value="Consolidated Supplier Price Lists")
+            ws_cat.cell(
+                row=3,
+                column=1,
+                value=f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}",
+            )
+
+            exact_headers = [
+                "S. No.",
+                "Supplier / Brand",
+                "Model Name / Description",
+                "Catalog Rate ₹",
+                "GST Rate %",
+                "Unit",
+            ]
+            for col_num, header_title in enumerate(exact_headers, 1):
+                ws_cat.cell(row=5, column=col_num, value=header_title)
+
+            for i, row in edited_cat_df.iterrows():
+                row_idx = 6 + i
+                ws_cat.cell(row=row_idx, column=1, value=i + 1)
+                ws_cat.cell(
+                    row=row_idx,
+                    column=2,
+                    value=str(row.get("Supplier / Brand", "")).strip(),
+                )
+                ws_cat.cell(
+                    row=row_idx,
+                    column=3,
+                    value=str(row["Model Name / Description"]).strip(),
+                )
+                ws_cat.cell(
+                    row=row_idx,
+                    column=4,
+                    value=float(row.get("Catalog Rate ₹", 0.0)),
+                )
+                ws_cat.cell(
+                    row=row_idx,
+                    column=5,
+                    value=float(row.get("GST Rate %", 18.0)),
+                )
+                ws_cat.cell(
+                    row=row_idx,
+                    column=6,
+                    value=str(row.get("Unit", "PCS")).upper(),
+                )
+
+            buf_cat = BytesIO()
+            wb_cat.save(buf_cat)
+            buf_cat.seek(0)
+
+            st.download_button(
+                "📥 Download Grouped Price List Excel File",
+                data=buf_cat.getvalue(),
+                file_name=f"{selected_store_slug}_Grouped_Price_Lists.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="btn_dl_catalog_excel",
+            )
 # ==========================================
-# TAB 2: STORE MASTER CATALOG MANAGER
+# TAB 3: STORE MASTER CATALOG MANAGER
 # ==========================================
 with tab_master:
     st.subheader(f"⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
@@ -1900,7 +2102,7 @@ with tab_master:
                 st.info("Master catalog for this store is currently empty.")
 
 # ==========================================
-# TAB 3: VENDOR SKU MEMORY WORKSPACE
+# TAB 4: VENDOR SKU MEMORY WORKSPACE
 # ==========================================
 with tab_memory:
     st.subheader(f"🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
@@ -1926,7 +2128,7 @@ with tab_memory:
         st.info("No learned vendor mappings recorded yet for this store location.")
 
 # ==========================================
-# TAB 4: IMPORT GUIDE
+# TAB 5: IMPORT GUIDE
 # ==========================================
 with tab_guide:
     st.subheader("📖 Standard Operating Procedure")
