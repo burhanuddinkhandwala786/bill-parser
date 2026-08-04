@@ -108,7 +108,6 @@ st.markdown("""
         --uos-focus-ring: 0 0 0 3px rgba(79, 70, 229, 0.20);
     }
 
-    /* Force Clean Canvas & Text Legibility Everywhere */
     html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
         -webkit-font-smoothing: antialiased;
@@ -127,7 +126,6 @@ st.markdown("""
     }
     div[data-testid="InputInstructions"] { display: none !important; }
 
-    /* Crisp Heading System */
     h1, h2, h3, h4, h5, h6, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4 {
         font-family: 'Inter', sans-serif !important;
         color: var(--uos-text) !important;
@@ -149,7 +147,6 @@ st.markdown("""
         opacity: 1 !important;
     }
 
-    /* Sidebar Interface */
     [data-testid="stSidebar"] {
         background: var(--uos-surface) !important;
         border-right: 1px solid var(--uos-border);
@@ -209,7 +206,6 @@ st.markdown("""
         background: var(--uos-danger-50) !important;
     }
 
-    /* Active Store Header Pill */
     .uos-store-pill {
         display: inline-flex; align-items: center; gap: 8px;
         padding: 6px 14px 6px 10px;
@@ -233,7 +229,6 @@ st.markdown("""
     }
     @keyframes uos-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
 
-    /* Navigation Tabs */
     .stTabs [data-baseweb="tab-list"] {
         gap: 4px;
         border-bottom: 1px solid var(--uos-border);
@@ -259,7 +254,6 @@ st.markdown("""
     .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
     .stTabs [data-baseweb="tab-panel"] { padding-top: 1.25rem; }
 
-    /* Metric Cards */
     [data-testid="stMetric"] {
         background: var(--uos-surface) !important;
         border: 1px solid var(--uos-border) !important;
@@ -286,7 +280,6 @@ st.markdown("""
     }
     [data-testid="stMetricValue"] div { color: var(--uos-text) !important; }
 
-    /* Bordered Section Wrapper & Form Cards */
     [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stForm"], [data-testid="stExpander"] {
         border: 1px solid var(--uos-border) !important;
         border-radius: var(--uos-radius-lg) !important;
@@ -298,7 +291,6 @@ st.markdown("""
     div[data-testid="stColumn"] > div { flex: 1; }
     div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] { height: 100% !important; }
 
-    /* Buttons */
     .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
         font-family: 'Inter', sans-serif !important;
         font-weight: 600 !important;
@@ -332,7 +324,6 @@ st.markdown("""
         border-color: var(--uos-primary-600) !important;
     }
 
-    /* Input Controls & Spin Buttons */
     .stTextInput input, .stNumberInput input, .stTextArea textarea,
     div[data-baseweb="input"] input, div[data-baseweb="select"] > div {
         background: var(--uos-surface) !important;
@@ -362,7 +353,6 @@ st.markdown("""
         border-color: var(--uos-border) !important;
     }
 
-    /* Radio Segmented Control Pills */
     [data-testid="stRadio"] > div[role="radiogroup"] {
         display: inline-flex;
         gap: 4px;
@@ -392,7 +382,6 @@ st.markdown("""
     }
     [data-testid="stRadio"] label:has(input:checked) p { color: var(--uos-primary) !important; font-weight: 600 !important; }
 
-    /* Dropzone Upload Box */
     [data-testid="stFileUploaderDropzone"], section[data-testid="stFileUploadDropzone"] {
         background: var(--uos-surface-2) !important;
         border: 1.5px dashed var(--uos-border-strong) !important;
@@ -403,7 +392,6 @@ st.markdown("""
         color: var(--uos-text-muted) !important;
     }
 
-    /* Expander Container */
     [data-testid="stExpander"] summary, [data-testid="stExpander"] > details > summary {
         padding: 14px 18px !important;
         font-weight: 600 !important;
@@ -412,7 +400,6 @@ st.markdown("""
     }
     [data-testid="stExpander"] summary:hover { background: var(--uos-surface-2) !important; }
 
-    /* Data Editor & DataFrame Override (Forces Clean White Table Surface) */
     [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
         border: 1px solid var(--uos-border) !important;
         border-radius: var(--uos-radius) !important;
@@ -429,7 +416,6 @@ st.markdown("""
         color: var(--uos-text) !important;
     }
 
-    /* Section Number Badge */
     .uos-num-badge {
         display: inline-flex; align-items: center; justify-content: center;
         width: 26px; height: 26px; border-radius: 8px;
@@ -437,7 +423,6 @@ st.markdown("""
         font-weight: 700; font-size: 0.82rem; margin-right: 10px; vertical-align: -3px;
     }
 
-    /* Auth Screen Lockup */
     .uos-auth-hero { text-align: center; padding: 20px 0 24px 0; }
     .uos-auth-mark {
         display: inline-flex; align-items: center; justify-content: center;
@@ -451,7 +436,6 @@ st.markdown("""
 
     [data-testid="stProgress"] > div > div > div { background: var(--uos-primary) !important; }
 
-    /* MOBILE SPECIFIC RESPONSIVE OVERRIDES */
     @media (max-width: 768px) {
         .block-container {
             padding-left: 0.75rem !important;
@@ -1027,7 +1011,6 @@ def extract_invoice_data_with_groq(file_bytes, mime_type="image/jpeg"):
     return json.loads(text_res)
 
 def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
-    # Defensive, Thread-Safe Session File Hash Cache Check
     file_hash = hashlib.md5(file_bytes).hexdigest()
     try:
         cache = getattr(st.session_state, "ocr_file_hash_cache", {})
@@ -1036,9 +1019,6 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
     except Exception:
         pass
 
-    # -------------------------------------------------------------
-    # TRY 1: PRIMARY GEMINI POOL (Shuffled API Keys for Load Balancing)
-    # -------------------------------------------------------------
     try:
         if "pdf" in mime_type.lower():
             file_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
@@ -1049,13 +1029,11 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
             if img_copy.mode in ("RGBA", "P"):
                 img_copy = img_copy.convert("RGB")
             
-            # FAST PRE-PROCESSING FOR BLURRY/DARK IMAGES
             enhancer = ImageEnhance.Contrast(img_copy)
             img_copy = enhancer.enhance(1.2)
             sharpness = ImageEnhance.Sharpness(img_copy)
             img_copy = sharpness.enhance(1.5)
             
-            # Optimized Thumbnail Downsizing for lightning-fast inference
             img_copy.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
             
             buffer = BytesIO()
@@ -1063,7 +1041,6 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
             buffer.seek(0)
             contents = [Image.open(buffer)]
             
-            # Instant RAM Cleanup
             del img_copy
             del img
             gc.collect()
@@ -1105,7 +1082,6 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         config = types.GenerateContentConfig(response_mime_type="application/json")
         candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
         
-        # Load Balance Gemini Keys Randomly Per Execution Request
         shuffled_keys = list(API_KEYS_POOL)
         random.shuffle(shuffled_keys)
 
@@ -1134,9 +1110,6 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         
         raise Exception("All Gemini API keys failed or quota exhausted.")
 
-    # -------------------------------------------------------------
-    # TRY 2: FAIL-SAFE FALLBACK TO GROQ LLAMA 3.2 VISION
-    # -------------------------------------------------------------
     except Exception as gemini_err:
         try:
             st.toast("⚡ Gemini quota limit reached. Auto-switching to Groq Llama Vision Engine...")
@@ -1304,14 +1277,12 @@ with tab_parser:
 
     st.divider()
 
-    # --- EASY STREAMLINED QUOTATION GENERATOR ---
     with st.expander("📄 Generate Customer Quotation (On-the-go)", expanded=False):
         st.caption("Create a professional PDF quote instantly either by manual quick entry or auto-calculating from an audited purchase bill.")
         
         saved_phone = st.session_state["user_store"].get("phone") or get_store_phone(selected_store_slug)
         q_tab_manual, q_tab_bill = st.tabs(["✍️ Quick Manual Entry", "📥 Auto-Quote from Parsed Bill"])
         
-        # --- MODE 1: MANUAL QUICK QUOTATION ---
         with q_tab_manual:
             col_m1, col_m2 = st.columns([2, 2])
             with col_m1:
@@ -1389,7 +1360,6 @@ with tab_parser:
                     else:
                         st.warning("⚠️ 'reportlab' library is missing in environment.")
 
-        # --- MODE 2: AUTO-QUOTATION FROM PARSED BILL ---
         with q_tab_bill:
             if "parsed_df" not in st.session_state or st.session_state["parsed_df"].empty:
                 st.info("ℹ️ No parsed bill found. Upload a bill below or use 'Quick Manual Entry' above.")
@@ -1451,7 +1421,6 @@ with tab_parser:
 
     st.divider()
 
-    # --- INGESTION DROPZONE ---
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
@@ -1536,7 +1505,6 @@ with tab_parser:
                     inv_num = parsed_json.get("Invoice Number", "")
                     inv_date = parsed_json.get("Invoice Date", "")
                     
-                    # Soft Duplicate Invoice Detection
                     if inv_num:
                         duplicate_key = f"{supplier.strip().upper()}_{inv_num.strip().upper()}"
                         if duplicate_key in st.session_state.get("processed_invoice_keys", set()):
@@ -1587,7 +1555,6 @@ with tab_parser:
                 gc.collect()
                 st.rerun()
 
-    # --- REVIEW & EDIT WORKSPACE ---
     if "parsed_df" in st.session_state:
         st.divider()
         st.markdown('<h3><span class="uos-num-badge">2</span>Live Inventory Audit Workspace</h3>', unsafe_allow_html=True)
@@ -1764,7 +1731,7 @@ with tab_parser:
             )
 
 # ==========================================
-# TAB 2: PRICE CATALOG & MODEL EXTRACTOR
+# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (ULTRA-FAST & OPTIMIZED)
 # ==========================================
 with tab_catalog:
     st.subheader(f"📚 Multimodal Price Catalog Extractor ({ACTIVE_STORE_DISPLAY})")
@@ -1838,6 +1805,7 @@ with tab_catalog:
 
                         enhancer = ImageEnhance.Contrast(img_obj)
                         img_obj = enhancer.enhance(1.2)
+                        img_obj.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
 
                         buf = BytesIO()
                         img_obj.save(buf, format="JPEG", quality=85, optimize=True)
@@ -2006,7 +1974,6 @@ with tab_catalog:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
-
 
 # ==========================================
 # TAB 3: STORE MASTER CATALOG MANAGER
