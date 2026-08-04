@@ -18,6 +18,13 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import create_engine, text
 
+# Optional PyMuPDF (fitz) Import for Catalog Extraction
+try:
+    import fitz  # PyMuPDF
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
+
 # Optional Groq SDK Import for Secondary Failover
 try:
     from groq import Groq
@@ -52,8 +59,10 @@ if "ocr_file_hash_cache" not in st.session_state:
     st.session_state["ocr_file_hash_cache"] = {}
 if "processed_invoice_keys" not in st.session_state:
     st.session_state["processed_invoice_keys"] = set()
+if "catalog_df" not in st.session_state:
+    st.session_state["catalog_df"] = None
 
-# --- UNIVERSAL OS — MODERN SAAS DESIGN SYSTEM ---
+# --- DESIGN SYSTEM ---
 st.markdown("""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -65,33 +74,42 @@ st.markdown("""
         --uos-primary-700: #3730A3;
         --uos-primary-50: #EEF2FF;
         --uos-primary-100: #E0E7FF;
+
         --uos-accent: #10B981;
         --uos-accent-600: #059669;
         --uos-accent-50: #ECFDF5;
+
         --uos-danger: #EF4444;
         --uos-danger-600: #DC2626;
         --uos-danger-50: #FEF2F2;
+
         --uos-warning: #F59E0B;
         --uos-warning-50: #FFFBEB;
+
         --uos-canvas: #F8FAFC;
         --uos-surface: #FFFFFF;
         --uos-surface-2: #F1F5F9;
         --uos-border: #E2E8F0;
         --uos-border-strong: #CBD5E1;
+
         --uos-text: #0F172A;
         --uos-text-secondary: #475569;
         --uos-text-muted: #64748B;
         --uos-text-inverse: #F8FAFC;
+
         --uos-radius-sm: 8px;
         --uos-radius: 12px;
         --uos-radius-lg: 16px;
         --uos-radius-xl: 20px;
+
         --uos-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
         --uos-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
         --uos-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
         --uos-shadow-md: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.05);
+
         --uos-focus-ring: 0 0 0 3px rgba(79, 70, 229, 0.20);
     }
+
     html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
         -webkit-font-smoothing: antialiased;
@@ -109,6 +127,7 @@ st.markdown("""
         max-width: 1400px;
     }
     div[data-testid="InputInstructions"] { display: none !important; }
+
     h1, h2, h3, h4, h5, h6, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4 {
         font-family: 'Inter', sans-serif !important;
         color: var(--uos-text) !important;
@@ -129,118 +148,311 @@ st.markdown("""
         margin: 1.25rem 0 !important;
         opacity: 1 !important;
     }
+
     [data-testid="stSidebar"] {
         background: var(--uos-surface) !important;
         border-right: 1px solid var(--uos-border);
     }
     [data-testid="stSidebar"] > div:first-child { padding-top: 1.5rem; }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+        font-size: 1rem !important;
+        font-weight: 600 !important;
+        color: var(--uos-text) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+        font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace !important;
+        font-size: 0.72rem !important;
+    }
     .uos-store-avatar {
-        display: flex; align-items: center; gap: 12px; padding: 4px 2px 14px 2px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 4px 2px 14px 2px;
     }
     .uos-store-avatar .uos-avatar-circle {
-        width: 42px; height: 42px; border-radius: 12px;
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
         background: linear-gradient(135deg, var(--uos-primary) 0%, var(--uos-primary-700) 100%);
-        color: #FFFFFF; display: flex; align-items: center; justify-content: center;
-        font-weight: 700; font-size: 1rem; flex-shrink: 0;
+        color: #FFFFFF;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1rem;
+        letter-spacing: -0.02em;
+        box-shadow: var(--uos-shadow-sm);
+        flex-shrink: 0;
     }
-    .uos-store-avatar .uos-avatar-meta { display: flex; flex-direction: column; min-width: 0; }
+    .uos-store-avatar .uos-avatar-meta {
+        display: flex; flex-direction: column; min-width: 0;
+    }
     .uos-store-avatar .uos-avatar-name {
         font-weight: 600; color: var(--uos-text); font-size: 0.92rem;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .uos-store-avatar .uos-avatar-slug {
-        font-family: 'JetBrains Mono', ui-monospace, monospace;
-        font-size: 0.68rem; color: var(--uos-text-muted);
+        font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+        font-size: 0.68rem; color: var(--uos-text-muted); letter-spacing: 0;
     }
+    [data-testid="stSidebar"] .stButton > button {
+        background: var(--uos-surface) !important;
+        color: var(--uos-text-secondary) !important;
+        border: 1px solid var(--uos-border) !important;
+        box-shadow: none !important;
+        font-weight: 500 !important;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        border-color: var(--uos-danger) !important;
+        color: var(--uos-danger) !important;
+        background: var(--uos-danger-50) !important;
+    }
+
     .uos-store-pill {
         display: inline-flex; align-items: center; gap: 8px;
-        padding: 6px 14px 6px 10px; background: var(--uos-primary-50);
-        color: var(--uos-primary); border: 1px solid var(--uos-primary-100);
-        border-radius: 999px; font-size: 0.82rem; font-weight: 600;
+        padding: 6px 14px 6px 10px;
+        background: var(--uos-primary-50);
+        color: var(--uos-primary);
+        border: 1px solid var(--uos-primary-100);
+        border-radius: 999px;
+        font-size: 0.82rem; font-weight: 600;
+        letter-spacing: 0.01em;
     }
     .uos-store-pill .uos-dot {
-        width: 8px; height: 8px; border-radius: 50%; background: var(--uos-accent);
-        box-shadow: 0 0 0 3px var(--uos-accent-50); animation: uos-pulse 2.4s ease-in-out infinite;
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--uos-accent);
+        box-shadow: 0 0 0 3px var(--uos-accent-50);
+        animation: uos-pulse 2.4s ease-in-out infinite;
     }
     .uos-store-pill .uos-pill-label {
-        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
         font-size: 0.68rem; color: var(--uos-text-muted); margin-right: 2px;
         text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500;
     }
     @keyframes uos-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-    .stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid var(--uos-border); }
-    .stTabs [data-baseweb="tab"] {
-        padding: 12px 18px !important; background: transparent !important;
-        font-weight: 500 !important; font-size: 0.92rem !important; color: var(--uos-text-muted) !important;
-        border-bottom: 2px solid transparent !important; margin-bottom: -1px !important;
+
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px;
+        border-bottom: 1px solid var(--uos-border);
+        background: transparent !important;
     }
+    .stTabs [data-baseweb="tab"] {
+        padding: 12px 18px !important;
+        background: transparent !important;
+        border-radius: 0 !important;
+        font-weight: 500 !important;
+        font-size: 0.92rem !important;
+        color: var(--uos-text-muted) !important;
+        border-bottom: 2px solid transparent !important;
+        transition: color 0.15s ease, border-color 0.15s ease;
+        margin-bottom: -1px !important;
+    }
+    .stTabs [data-baseweb="tab"]:hover { color: var(--uos-text) !important; background: transparent !important; }
     .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        color: var(--uos-primary) !important; font-weight: 600 !important; border-bottom-color: var(--uos-primary) !important;
+        color: var(--uos-primary) !important;
+        font-weight: 600 !important;
+        border-bottom-color: var(--uos-primary) !important;
     }
     .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
     .stTabs [data-baseweb="tab-panel"] { padding-top: 1.25rem; }
+
     [data-testid="stMetric"] {
-        background: var(--uos-surface) !important; border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius-lg) !important; padding: 18px 20px !important;
-        box-shadow: var(--uos-shadow-xs) !important; min-height: 108px;
+        background: var(--uos-surface) !important;
+        border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius-lg) !important;
+        padding: 18px 20px !important;
+        box-shadow: var(--uos-shadow-xs) !important;
+        min-height: 108px;
     }
     [data-testid="stMetricLabel"] {
-        font-size: 0.72rem !important; text-transform: uppercase; letter-spacing: 0.08em;
-        color: var(--uos-text-muted) !important; font-weight: 600 !important;
+        font-size: 0.72rem !important;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--uos-text-muted) !important;
+        font-weight: 600 !important;
     }
+    [data-testid="stMetricLabel"] p { color: var(--uos-text-muted) !important; }
     [data-testid="stMetricValue"] {
-        font-size: 1.75rem !important; font-weight: 700 !important; color: var(--uos-text) !important;
-        letter-spacing: -0.02em !important; margin-top: 4px;
+        font-size: 1.75rem !important;
+        font-weight: 700 !important;
+        color: var(--uos-text) !important;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em !important;
+        margin-top: 4px;
     }
+    [data-testid="stMetricValue"] div { color: var(--uos-text) !important; }
+
     [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stForm"], [data-testid="stExpander"] {
-        border: 1px solid var(--uos-border) !important; border-radius: var(--uos-radius-lg) !important;
-        background: var(--uos-surface) !important; box-shadow: var(--uos-shadow-xs) !important;
+        border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius-lg) !important;
+        background: var(--uos-surface) !important;
+        box-shadow: var(--uos-shadow-xs) !important;
         padding: 18px 20px !important;
     }
+    div[data-testid="stColumn"] { display: flex; flex-direction: column; }
+    div[data-testid="stColumn"] > div { flex: 1; }
+    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] { height: 100% !important; }
+
     .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
-        font-family: 'Inter', sans-serif !important; font-weight: 600 !important;
-        font-size: 0.9rem !important; border-radius: var(--uos-radius) !important;
-        padding: 10px 18px !important; border: 1px solid var(--uos-border) !important;
-        background: var(--uos-surface) !important; color: var(--uos-text) !important;
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 600 !important;
+        font-size: 0.9rem !important;
+        letter-spacing: -0.005em !important;
+        border-radius: var(--uos-radius) !important;
+        padding: 10px 18px !important;
+        border: 1px solid var(--uos-border) !important;
+        background: var(--uos-surface) !important;
+        color: var(--uos-text) !important;
+        box-shadow: var(--uos-shadow-xs) !important;
     }
-    .stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"] {
-        background: var(--uos-primary) !important; color: #FFFFFF !important; border: 1px solid var(--uos-primary) !important;
+    .stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover {
+        border-color: var(--uos-border-strong) !important;
+        box-shadow: var(--uos-shadow-sm) !important;
+        transform: translateY(-1px);
     }
-    .stTextInput input, .stNumberInput input, .stTextArea textarea, div[data-baseweb="input"] input, div[data-baseweb="select"] > div {
-        background: var(--uos-surface) !important; border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius) !important; color: var(--uos-text) !important;
-        font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important;
+    .stButton > button[kind="primary"],
+    .stDownloadButton > button[kind="primary"],
+    .stFormSubmitButton > button[kind="primary"] {
+        background: var(--uos-primary) !important;
+        color: #FFFFFF !important;
+        border: 1px solid var(--uos-primary) !important;
+        box-shadow: 0 1px 2px rgba(79, 70, 229, 0.15) !important;
     }
+    .stButton > button[kind="primary"] p,
+    .stDownloadButton > button[kind="primary"] p,
+    .stFormSubmitButton > button[kind="primary"] p { color: #FFFFFF !important; }
+    .stButton > button[kind="primary"]:hover {
+        background: var(--uos-primary-600) !important;
+        border-color: var(--uos-primary-600) !important;
+    }
+
+    .stTextInput input, .stNumberInput input, .stTextArea textarea,
+    div[data-baseweb="input"] input, div[data-baseweb="select"] > div {
+        background: var(--uos-surface) !important;
+        border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius) !important;
+        color: var(--uos-text) !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.92rem !important;
+        box-shadow: none !important;
+    }
+    .stTextInput input, .stNumberInput input, .stTextArea textarea { padding: 10px 12px !important; }
+    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus,
+    div[data-baseweb="input"]:focus-within, div[data-baseweb="select"] > div:focus-within {
+        border-color: var(--uos-primary) !important;
+        box-shadow: var(--uos-focus-ring) !important;
+        outline: none !important;
+    }
+    [data-testid="stWidgetLabel"] label, [data-testid="stWidgetLabel"] p {
+        font-size: 0.85rem !important;
+        font-weight: 500 !important;
+        color: var(--uos-text-secondary) !important;
+        margin-bottom: 6px !important;
+    }
+    div[data-baseweb="spinbutton"] button {
+        background-color: var(--uos-surface-2) !important;
+        color: var(--uos-text) !important;
+        border-color: var(--uos-border) !important;
+    }
+
     [data-testid="stRadio"] > div[role="radiogroup"] {
-        display: inline-flex; gap: 4px; padding: 4px; background: var(--uos-surface-2);
-        border: 1px solid var(--uos-border); border-radius: 999px; flex-wrap: wrap;
+        display: inline-flex;
+        gap: 4px;
+        padding: 4px;
+        background: var(--uos-surface-2);
+        border: 1px solid var(--uos-border);
+        border-radius: 999px;
+        flex-wrap: wrap;
     }
     [data-testid="stRadio"] label {
-        margin: 0 !important; padding: 6px 14px !important; border-radius: 999px !important;
-        font-size: 0.85rem !important; font-weight: 500 !important; color: var(--uos-text-secondary) !important;
+        margin: 0 !important;
+        padding: 6px 14px !important;
+        border-radius: 999px !important;
+        cursor: pointer;
+        font-size: 0.85rem !important;
+        font-weight: 500 !important;
+        color: var(--uos-text-secondary) !important;
+        background: transparent;
     }
+    [data-testid="stRadio"] label:hover { color: var(--uos-text) !important; }
+    [data-testid="stRadio"] label > div:first-child { display: none !important; }
     [data-testid="stRadio"] label:has(input:checked) {
-        background: var(--uos-surface) !important; color: var(--uos-primary) !important; font-weight: 600 !important;
+        background: var(--uos-surface) !important;
+        color: var(--uos-primary) !important;
+        box-shadow: var(--uos-shadow-xs);
+        font-weight: 600 !important;
     }
+    [data-testid="stRadio"] label:has(input:checked) p { color: var(--uos-primary) !important; font-weight: 600 !important; }
+
     [data-testid="stFileUploaderDropzone"], section[data-testid="stFileUploadDropzone"] {
-        background: var(--uos-surface-2) !important; border: 1.5px dashed var(--uos-border-strong) !important;
-        border-radius: var(--uos-radius-lg) !important; padding: 24px !important;
+        background: var(--uos-surface-2) !important;
+        border: 1.5px dashed var(--uos-border-strong) !important;
+        border-radius: var(--uos-radius-lg) !important;
+        padding: 24px !important;
     }
-    [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
-        border: 1px solid var(--uos-border) !important; border-radius: var(--uos-radius) !important;
+    [data-testid="stFileUploaderDropzoneInstructions"] div, [data-testid="stFileUploaderDropzone"] small {
+        color: var(--uos-text-muted) !important;
+    }
+
+    [data-testid="stExpander"] summary, [data-testid="stExpander"] > details > summary {
+        padding: 14px 18px !important;
+        font-weight: 600 !important;
+        color: var(--uos-text) !important;
         background: var(--uos-surface) !important;
     }
+    [data-testid="stExpander"] summary:hover { background: var(--uos-surface-2) !important; }
+
+    [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
+        border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius) !important;
+        overflow: hidden;
+        background: var(--uos-surface) !important;
+    }
+    .stDataFrame [role="grid"], [data-testid="stDataEditor"] [role="grid"] {
+        background-color: var(--uos-surface) !important;
+        color: var(--uos-text) !important;
+    }
+    .stDataFrame [role="columnheader"], [data-testid="stDataFrame"] [role="columnheader"] {
+        background: var(--uos-surface-2) !important;
+        font-weight: 600 !important;
+        color: var(--uos-text) !important;
+    }
+
     .uos-num-badge {
         display: inline-flex; align-items: center; justify-content: center;
-        width: 26px; height: 26px; border-radius: 8px; background: var(--uos-primary-50);
-        color: var(--uos-primary); font-weight: 700; font-size: 0.82rem; margin-right: 10px;
+        width: 26px; height: 26px; border-radius: 8px;
+        background: var(--uos-primary-50); color: var(--uos-primary);
+        font-weight: 700; font-size: 0.82rem; margin-right: 10px; vertical-align: -3px;
     }
+
     .uos-auth-hero { text-align: center; padding: 20px 0 24px 0; }
     .uos-auth-mark {
         display: inline-flex; align-items: center; justify-content: center;
         width: 64px; height: 64px; border-radius: 20px;
         background: linear-gradient(135deg, var(--uos-primary) 0%, var(--uos-primary-700) 100%);
         color: #FFFFFF; font-size: 2rem; margin-bottom: 14px;
+        box-shadow: 0 10px 30px rgba(79, 70, 229, 0.28);
+    }
+    .uos-auth-title { font-size: 2rem; font-weight: 700; color: var(--uos-text); margin: 0; }
+    .uos-auth-tagline { color: var(--uos-text-muted); font-size: 0.98rem; margin-top: 6px; }
+
+    [data-testid="stProgress"] > div > div > div { background: var(--uos-primary) !important; }
+
+    @media (max-width: 768px) {
+        .block-container {
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+        div[data-testid="stColumn"] {
+            width: 100% !important;
+            margin-bottom: 12px !important;
+        }
+        [data-testid="stMetric"] {
+            padding: 12px !important;
+        }
+        .uos-store-pill {
+            margin-top: 8px;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -303,7 +515,7 @@ def save_store_phone(store_slug: str, phone: str):
     except Exception:
         pass
 
-# --- AUTHENTICATION & SESSION MANAGEMENT ---
+# --- AUTHENTICATION & MULTI-TENANT SESSION MANAGEMENT ---
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
@@ -505,7 +717,7 @@ if st.sidebar.button("🚪 Logout", use_container_width=True):
 
 st.sidebar.divider()
 
-# --- MULTI-KEY POOL SETUP ---
+# --- MULTI-KEY & MULTI-MODEL FAIL-SAFE API POOL SETUP ---
 def get_api_key_pool():
     keys = []
     for i in range(1, 6):
@@ -642,6 +854,7 @@ def save_master(df: pd.DataFrame, store_slug: str):
             )
     load_master.clear()
 
+# --- ATOMIC OPTIMIZED SQL EXECUTORS ---
 def add_single_sku_direct(store_slug: str, sku_name: str, category: str, unit: str, gst_rate: float, selling_price: float):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
@@ -731,102 +944,183 @@ def get_known_selling_price(sku_name):
                 return float(price)
     return 0.0
 
-# --- HIGH-PRECISION OCR EXTRACTION ENGINE ---
-def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
-    file_hash = hashlib.md5(file_bytes).hexdigest()
-    if file_hash in st.session_state.get("ocr_file_hash_cache", {}):
-        return st.session_state["ocr_file_hash_cache"][file_hash]
+# --- FAIL-SAFE AI ENGINE WITH RANDOMIZED KEY LOAD BALANCING & GROQ FALLBACK ---
+def is_server_error(exception):
+    err_str = str(exception).lower()
+    return "503" in err_str or "unavailable" in err_str or "overloaded" in err_str or "429" in err_str or "resourceexhausted" in err_str
 
-    if "pdf" in mime_type.lower():
-        contents = [types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")]
-    else:
-        img = Image.open(BytesIO(file_bytes)).convert("RGB")
-        
-        # High resolution preservation & clarity boost
-        enhancer = ImageEnhance.Contrast(img)
-        img = enhancer.enhance(1.15)
-        img.thumbnail((2048, 2048), Image.Resampling.LANCZOS)
-        
-        buffer = BytesIO()
-        img.save(buffer, format="JPEG", quality=92, optimize=True)
-        buffer.seek(0)
-        contents = [Image.open(buffer)]
+@retry(
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=1, min=1, max=3),
+    retry=retry_if_exception(is_server_error),
+    reraise=True
+)
+def _call_gemini_with_retry(client, model_name, contents, config):
+    return client.models.generate_content(
+        model=model_name,
+        contents=contents,
+        config=config
+    )
 
+def extract_invoice_data_with_groq(file_bytes, mime_type="image/jpeg"):
+    groq_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+    if not groq_key or not GROQ_AVAILABLE:
+        raise Exception("GROQ_API_KEY or groq package missing for fallback.")
+
+    base64_img = base64.b64encode(file_bytes).decode('utf-8')
     prompt = """
-    You are an expert Indian Financial B2B OCR System specializing in Hardware, Plywood, Laminates, and Building Material Tax Invoices.
-    Analyze the invoice image carefully and extract all line items with 100% mathematical accuracy.
-
-    EXTRACTION RULES:
-    1. Extract every single product line item, plus Freight/Transport or Round Off lines separately if listed as a row.
-    2. "Primary Quantity": Pure numeric count of physical items/pieces received (e.g. 70, 6, 1). If billed in Sq.Mtr or Sq.Ft, keep physical Pcs in Quantity and note measurement in item name if needed.
-    3. "Unit Base Rate": The printed base unit price per item before trade discount or tax.
-    4. "Discount Percent": Trade discount percentage explicitly written in discount columns (e.g., 50.0 for 50%).
-    5. "Printed Taxable Amount": The subtotal line amount BEFORE GST tax (after trade discount).
-    6. "GST Rate": Combined total GST percentage (e.g., 18.0 for 9% CGST + 9% SGST or 18% IGST).
-
-    STRICT JSON OUTPUT SCHEMA:
+    You are an enterprise financial OCR system for invoices.
+    OUTPUT STRICT JSON ONLY:
     {
-        "Supplier Company Name": "Full Vendor Company Title",
-        "Invoice Number": "Invoice Number String",
-        "Invoice Date": "DD-MM-YYYY",
+        "Supplier Company Name": "",
+        "Invoice Number": "",
+        "Invoice Date": "",
         "Line Items": [
             {
-                "Item Name": "Full Product Description",
+                "Item Name": "",
                 "Primary Quantity": 1.0,
                 "Unit": "PCS",
-                "Unit Base Rate": 0.0,
-                "Discount Percent": 0.0,
                 "Printed Taxable Amount": 0.0,
                 "GST Rate": 18.0,
-                "HSN Code": "HSN/SAC String"
+                "HSN Code": ""
             }
         ]
     }
     """
-    contents.append(prompt)
-    config = types.GenerateContentConfig(
-        response_mime_type="application/json",
-        temperature=0.0
+
+    client = Groq(api_key=groq_key)
+    completion = client.chat.completions.create(
+        model="llama-3.2-11b-vision-preview",
+        response_format={"type": "json_object"},
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{base64_img}"
+                        }
+                    }
+                ]
+            }
+        ],
+        temperature=0.1
     )
-    
-    client = genai.Client(api_key=random.choice(API_KEYS_POOL))
-    candidate_models = ['gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite']
-    
-    parsed_json = None
-    for model_name in candidate_models:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=contents,
-                config=config
-            )
-            text_res = response.text.strip()
-            if text_res.startswith("```json"):
-                text_res = text_res[7:-3].strip()
-            elif text_res.startswith("```"):
-                text_res = text_res[3:-3].strip()
-            parsed_json = json.loads(text_res)
-            break
-        except Exception:
-            continue
 
-    if not parsed_json:
-        raise Exception("Failed to process document with Vision AI models.")
+    text_res = completion.choices[0].message.content.strip()
+    return json.loads(text_res)
 
-    # Mathematical Verification & Correction Layer
-    for item in parsed_json.get("Line Items", []):
-        qty = float(item.get("Primary Quantity") or 1.0)
-        rate = float(item.get("Unit Base Rate") or 0.0)
-        disc = float(item.get("Discount Percent") or 0.0)
-        printed_taxable = float(item.get("Printed Taxable Amount") or 0.0)
+def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
+    file_hash = hashlib.md5(file_bytes).hexdigest()
+    try:
+        cache = getattr(st.session_state, "ocr_file_hash_cache", {})
+        if file_hash in cache:
+            return cache[file_hash]
+    except Exception:
+        pass
+
+    try:
+        if "pdf" in mime_type.lower() and PYMUPDF_AVAILABLE:
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            page = doc[0]
+            pix = page.get_pixmap(dpi=110)
+            img = Image.open(BytesIO(pix.tobytes("jpeg")))
+            doc.close()
+        else:
+            img = Image.open(BytesIO(file_bytes))
+
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
         
-        # Verify subtotal mathematically
-        expected_taxable = round(qty * rate * (1.0 - (disc / 100.0)), 2)
-        if printed_taxable == 0.0 and expected_taxable > 0:
-            item["Printed Taxable Amount"] = expected_taxable
+        img.thumbnail((800, 800), Image.Resampling.BILINEAR)
+        
+        buffer = BytesIO()
+        img.save(buffer, format="JPEG", quality=75, optimize=True)
+        buffer.seek(0)
+        optimized_bytes = buffer.getvalue()
+        
+        del img
+        gc.collect()
 
-    st.session_state["ocr_file_hash_cache"][file_hash] = parsed_json
-    return parsed_json
+        contents = [Image.open(BytesIO(optimized_bytes))]
+
+        prompt = """
+        You are an enterprise financial OCR system for wholesale, retail, plywood, hardware, and building material invoices.
+
+        CRITICAL EXTRACTION & GROUND-TRUTH RULES:
+        1. "Supplier Company Name": Main vendor/seller title from bill top header.
+        2. "Invoice Number": Invoice/Bill number string if present, else "".
+        3. "Invoice Date": Date string if present, else "".
+        4. "Line Items": Extract every product row accurately.
+           - "Item Name": Full product title or description. Read handwritten notes and pen edits carefully.
+           - "Primary Quantity": Pure numeric count of physical pieces/sheets/boxes received (e.g., 6.0, 1.0, 270.12).
+           - "Unit": Unit string (PCS, SQM, SQFT, BOX, KG, LTR, NOS, SET). Default to "PCS".
+           - "Printed Taxable Amount": ABSOLUTE GROUND TRUTH. Extract the printed line subtotal/amount value before tax directly from the bill's "Amount" column.
+           - "GST Rate": Total GST percentage as a pure number (0, 5, 12, 18, 28). Default to 18.0.
+           - "HSN Code": HSN/SAC code as string. If missing, "".
+
+        OUTPUT SCHEMA (STRICT JSON ONLY):
+        {
+            "Supplier Company Name": "Vendor Title",
+            "Invoice Number": "",
+            "Invoice Date": "",
+            "Line Items": [
+                {
+                    "Item Name": "Description",
+                    "Primary Quantity": 1.0,
+                    "Unit": "PCS",
+                    "Printed Taxable Amount": 0.0,
+                    "GST Rate": 18.0,
+                    "HSN Code": ""
+                }
+            ]
+        }
+        """
+        
+        contents.append(prompt)
+        config = types.GenerateContentConfig(response_mime_type="application/json")
+        candidate_models = ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']
+        
+        shuffled_keys = list(API_KEYS_POOL)
+        random.shuffle(shuffled_keys)
+
+        for api_key in shuffled_keys:
+            try:
+                client = genai.Client(api_key=api_key)
+                for model_name in candidate_models:
+                    try:
+                        response = _call_gemini_with_retry(client, model_name, contents, config)
+                        text_res = response.text.strip()
+                        if text_res.startswith("```json"):
+                            text_res = text_res[7:-3].strip()
+                        elif text_res.startswith("```"):
+                            text_res = text_res[3:-3].strip()
+                        
+                        parsed_res = json.loads(text_res)
+                        try:
+                            st.session_state["ocr_file_hash_cache"][file_hash] = parsed_res
+                        except Exception:
+                            pass
+                        return parsed_res
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+        
+        raise Exception("All Gemini API keys failed or quota exhausted.")
+
+    except Exception as gemini_err:
+        try:
+            parsed_res = extract_invoice_data_with_groq(file_bytes, mime_type)
+            try:
+                st.session_state["ocr_file_hash_cache"][file_hash] = parsed_res
+            except Exception:
+                pass
+            return parsed_res
+        except Exception as groq_err:
+            raise Exception(f"All Primary (Gemini) and Secondary (Groq) AI services failed: {groq_err}")
 
 def process_single_item_tuple(item_tuple):
     file_bytes, mime_type = item_tuple
@@ -835,6 +1129,132 @@ def process_single_item_tuple(item_tuple):
     except Exception as e:
         return {"ERROR": str(e)}
 
+# --- TAB 2 CATALOG PARSER HELPER (SINGLE FILE) ---
+def parse_single_catalog_file(file_tuple):
+    file_bytes, mime_type = file_tuple
+    catalog_items = []
+    try:
+        images_to_process = []
+        if "pdf" in mime_type.lower() and PYMUPDF_AVAILABLE:
+            pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
+            for page_idx in range(len(pdf_doc)):
+                page = pdf_doc[page_idx]
+                pix = page.get_pixmap(dpi=110)
+                img = Image.open(BytesIO(pix.tobytes("jpeg")))
+                images_to_process.append(img)
+            pdf_doc.close()
+        else:
+            img = Image.open(BytesIO(file_bytes))
+            images_to_process.append(img)
+
+        cat_prompt = """
+        You are an enterprise catalog OCR system for building materials, laminates, door skins, plywood, and hardware.
+        Extract the Supplier/Brand Company Name (e.g. DAARVI, GREENPLY, EBCO) from the page header, and every product row listed in the table or price list.
+
+        CRITICAL EXTRACTION RULES:
+        1. "Supplier Name": Brand or company name publishing this price list.
+        2. "Item Name": Full product title or description.
+        3. "Model Code": Model number or series code if present, else "".
+        4. "Unit": PCS, BOX, SET, LTR, KG, SQFT, MTR. Default "PCS".
+        5. "GST Rate": GST percentage (0, 5, 12, 18, 28). Default 18.0.
+        6. "Dealer Rate": Printed rate per piece or MRP as printed under RATE PER PCS / PRICE column.
+
+        OUTPUT SCHEMA (STRICT JSON ONLY):
+        {
+            "Supplier Name": "Brand Name",
+            "Products": [
+                {
+                    "Item Name": "",
+                    "Model Code": "",
+                    "Unit": "PCS",
+                    "GST Rate": 18.0,
+                    "Dealer Rate": 0.0
+                }
+            ]
+        }
+        """
+
+        config = types.GenerateContentConfig(response_mime_type="application/json")
+        candidate_models = ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']
+        shuffled_keys = list(API_KEYS_POOL)
+        random.shuffle(shuffled_keys)
+
+        for img_obj in images_to_process:
+            if img_obj.mode in ("RGBA", "P"):
+                img_obj = img_obj.convert("RGB")
+            img_obj.thumbnail((800, 800), Image.Resampling.BILINEAR)
+
+            buf = BytesIO()
+            img_obj.save(buf, format="JPEG", quality=75, optimize=True)
+            buf.seek(0)
+            raw_page_bytes = buf.getvalue()
+            
+            contents = [Image.open(BytesIO(raw_page_bytes)), cat_prompt]
+            parsed_page = None
+
+            for key in shuffled_keys:
+                try:
+                    client = genai.Client(api_key=key)
+                    for model_name in candidate_models:
+                        try:
+                            res = _call_gemini_with_retry(client, model_name, contents, config)
+                            text_res = res.text.strip()
+                            if text_res.startswith("```json"):
+                                text_res = text_res[7:-3].strip()
+                            elif text_res.startswith("```"):
+                                text_res = text_res[3:-3].strip()
+                            
+                            parsed_page = json.loads(text_res)
+                            break
+                        except Exception:
+                            continue
+                    if parsed_page:
+                        break
+                except Exception:
+                    continue
+
+            if not parsed_page and GROQ_AVAILABLE:
+                try:
+                    groq_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+                    if groq_key:
+                        base64_img = base64.b64encode(raw_page_bytes).decode('utf-8')
+                        groq_client = Groq(api_key=groq_key)
+                        comp = groq_client.chat.completions.create(
+                            model="llama-3.2-11b-vision-preview",
+                            response_format={"type": "json_object"},
+                            messages=[{
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": cat_prompt},
+                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
+                                ]
+                            }],
+                            temperature=0.1
+                        )
+                        parsed_page = json.loads(comp.choices[0].message.content.strip())
+                except Exception:
+                    pass
+
+            if parsed_page:
+                supplier_name = str(parsed_page.get("Supplier Name", "GENERIC VENDOR")).strip().upper()
+                for prod in parsed_page.get("Products", []):
+                    item_name = str(prod.get("Item Name", "")).strip()
+                    model_code = str(prod.get("Model Code", "")).strip()
+                    full_title = f"{item_name} {model_code}".strip() if model_code and model_code not in item_name else item_name
+
+                    printed_rate = float(prod.get("Dealer Rate") or 0.0)
+                    if full_title and printed_rate >= 0:
+                        catalog_items.append({
+                            "Supplier / Brand": supplier_name,
+                            "Model Name / Description": full_title,
+                            "Catalog Rate ₹": printed_rate,
+                            "GST Rate %": float(prod.get("GST Rate") or 18.0),
+                            "Unit": str(prod.get("Unit", "PCS")).upper()
+                        })
+    except Exception:
+        pass
+    return catalog_items
+
 # --- REPORTLAB PDF GENERATOR ---
 def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
     if not REPORTLAB_AVAILABLE:
@@ -842,20 +1262,38 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
         
     buffer = BytesIO()
     doc = SimpleDocTemplate(
-        buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36
+        buffer, 
+        pagesize=letter, 
+        rightMargin=36, 
+        leftMargin=36, 
+        topMargin=36, 
+        bottomMargin=36
     )
     story = []
     styles = getSampleStyleSheet()
 
     title_style = ParagraphStyle(
-        'DocTitle', parent=styles['Heading1'], fontSize=20, leading=24,
-        textColor=colors.HexColor('#1E3A8A'), fontName='Helvetica-Bold', spaceAfter=4
+        'DocTitle', 
+        parent=styles['Heading1'], 
+        fontSize=20, 
+        leading=24, 
+        textColor=colors.HexColor('#1E3A8A'), 
+        fontName='Helvetica-Bold',
+        spaceAfter=4
     )
     subtitle_style = ParagraphStyle(
-        'DocSubtitle', parent=styles['Normal'], fontSize=9.5, leading=13, textColor=colors.HexColor('#4B5563')
+        'DocSubtitle', 
+        parent=styles['Normal'], 
+        fontSize=9.5, 
+        leading=13, 
+        textColor=colors.HexColor('#4B5563')
     )
     meta_label = ParagraphStyle(
-        'MetaLabel', parent=styles['Normal'], fontSize=9, leading=12, textColor=colors.HexColor('#374151')
+        'MetaLabel', 
+        parent=styles['Normal'], 
+        fontSize=9, 
+        leading=12, 
+        textColor=colors.HexColor('#374151')
     )
 
     story.append(Paragraph("OFFICIAL QUOTATION", title_style))
@@ -889,10 +1327,14 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     cell_right = ParagraphStyle('CellR', fontSize=8, leading=11, textColor=colors.HexColor('#111827'), alignment=2)
 
     table_data = [[
-        Paragraph("S.No", hdr_center), Paragraph("Item Description", hdr_left), 
-        Paragraph("Qty", hdr_center), Paragraph("Unit", hdr_center), 
-        Paragraph("MRP (Rs.)", hdr_right), Paragraph("Disc (%)", hdr_center),
-        Paragraph("Final Rate (Rs.)", hdr_right), Paragraph("Total (Rs.)", hdr_right)
+        Paragraph("S.No", hdr_center), 
+        Paragraph("Item Description", hdr_left), 
+        Paragraph("Qty", hdr_center), 
+        Paragraph("Unit", hdr_center), 
+        Paragraph("MRP (Rs.)", hdr_right),
+        Paragraph("Disc (%)", hdr_center),
+        Paragraph("Final Rate (Rs.)", hdr_right), 
+        Paragraph("Total (Rs.)", hdr_right)
     ]]
 
     for i, row in quote_df.iterrows():
@@ -902,17 +1344,24 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
         line_total = float(row['Total Value (₹)'])
         
         table_data.append([
-            Paragraph(str(i + 1), cell_center), Paragraph(str(row["Item Name"]), cell_left),
-            Paragraph(f"{float(row['Quantity']):g}", cell_center), Paragraph(str(row["Unit"]), cell_center),
-            Paragraph(f"Rs. {mrp_val:,.2f}", cell_right), Paragraph(f"{disc_val:g}%" if disc_val > 0 else "-", cell_center),
-            Paragraph(f"Rs. {final_rate:,.2f}", cell_right), Paragraph(f"Rs. {line_total:,.2f}", cell_right)
+            Paragraph(str(i + 1), cell_center),
+            Paragraph(str(row["Item Name"]), cell_left),
+            Paragraph(f"{float(row['Quantity']):g}", cell_center),
+            Paragraph(str(row["Unit"]), cell_center),
+            Paragraph(f"Rs. {mrp_val:,.2f}", cell_right),
+            Paragraph(f"{disc_val:g}%" if disc_val > 0 else "-", cell_center),
+            Paragraph(f"Rs. {final_rate:,.2f}", cell_right),
+            Paragraph(f"Rs. {line_total:,.2f}", cell_right)
         ])
 
     item_table = Table(table_data, colWidths=[25, 175, 35, 35, 70, 45, 75, 80])
     item_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 5), ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, 0), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+        ('TOPPADDING', (0, 1), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E5E7EB')),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')])
     ]))
@@ -920,8 +1369,13 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     story.append(Spacer(1, 14))
 
     total_style = ParagraphStyle(
-        'GrandTotal', parent=styles['Heading2'], fontSize=13, leading=16,
-        textColor=colors.HexColor('#1E3A8A'), fontName='Helvetica-Bold', alignment=2
+        'GrandTotal', 
+        parent=styles['Heading2'], 
+        fontSize=13, 
+        leading=16, 
+        textColor=colors.HexColor('#1E3A8A'), 
+        fontName='Helvetica-Bold',
+        alignment=2
     )
     story.append(Paragraph(f"<b>Grand Total: Rs. {grand_total:,.2f}</b>", total_style))
 
@@ -930,8 +1384,9 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     return buffer.getvalue()
 
 # --- WORKSPACE TABS ---
-tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
+tab_parser, tab_catalog, tab_master, tab_memory, tab_guide = st.tabs([
     "📥 Batch Invoice Parser", 
+    "📚 Price Catalog Extractor",
     "⚙️ Master Catalog",
     "📋 Vendor Memory", 
     "📖 Operating Guide"
@@ -992,6 +1447,7 @@ with tab_parser:
             )
             
             st.session_state["manual_quote_data"] = edited_manual_df.copy()
+            
             calc_manual_df = edited_manual_df.copy()
             calc_manual_df["Quantity"] = pd.to_numeric(calc_manual_df["Quantity"], errors='coerce').fillna(1.0)
             calc_manual_df["MRP (₹)"] = pd.to_numeric(calc_manual_df.get("MRP / Base Rate (₹)", 0.0), errors='coerce').fillna(0.0)
@@ -999,6 +1455,7 @@ with tab_parser:
             
             marked_up_mrp = (calc_manual_df["MRP (₹)"] * (1 + (manual_markup_pct / 100))).round(2)
             calc_manual_df["MRP (₹)"] = marked_up_mrp
+            
             calc_manual_df["Customer Unit Price (₹)"] = (calc_manual_df["MRP (₹)"] * (1 - (calc_manual_df["Discount (%)"] / 100))).round(2)
             calc_manual_df["Total Value (₹)"] = (calc_manual_df["Quantity"] * calc_manual_df["Customer Unit Price (₹)"]).round(2)
             
@@ -1026,6 +1483,8 @@ with tab_parser:
                             use_container_width=True,
                             key="dl_man_pdf"
                         )
+                    else:
+                        st.warning("⚠️ 'reportlab' library is missing in environment.")
 
         with q_tab_bill:
             if "parsed_df" not in st.session_state or st.session_state["parsed_df"].empty:
@@ -1088,7 +1547,6 @@ with tab_parser:
 
     st.divider()
 
-    # --- INGESTION DROPZONE ---
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
@@ -1109,10 +1567,12 @@ with tab_parser:
                     "Bill Tax Status:", 
                     ["Taxable GST Bill", "Non-GST / Net Rate Bill (0% Tax)"], 
                     horizontal=True,
-                    key="gst_bill_type_toggle"
+                    key="gst_bill_type_toggle",
+                    help="Non-GST overrides tax rate to 0% across all extracted items."
                 )
             
             staged_file_tuples = []
+            
             if upload_mode == "📸 Direct Camera Snap":
                 cam_photo = st.camera_input("Take a photo of the purchase bill", key="direct_cam_input")
                 if cam_photo is not None:
@@ -1139,6 +1599,7 @@ with tab_parser:
                 st.caption(f"Mode: **{tax_status_str}**")
             else:
                 st.info("No files staged.")
+                st.caption("Snap a photo or drop purchase bills to begin structured extraction.")
 
     if staged_file_tuples:
         st.write("")
@@ -1169,16 +1630,30 @@ with tab_parser:
                     supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
                     inv_num = parsed_json.get("Invoice Number", "")
                     inv_date = parsed_json.get("Invoice Date", "")
+                    
+                    if inv_num:
+                        duplicate_key = f"{supplier.strip().upper()}_{inv_num.strip().upper()}"
+                        if duplicate_key in st.session_state.get("processed_invoice_keys", set()):
+                            st.warning(f"⚠️ Notice: Invoice '{inv_num}' from '{supplier}' was already ingested earlier.")
+                        else:
+                            if "processed_invoice_keys" not in st.session_state:
+                                st.session_state["processed_invoice_keys"] = set()
+                            st.session_state["processed_invoice_keys"].add(duplicate_key)
 
                     for row in parsed_json.get("Line Items", []):
                         qty = float(row.get("Primary Quantity") or 1.0)
                         if qty <= 0: qty = 1.0
                         
-                        gst_rate = 0.0 if gst_bill_type == "Non-GST / Net Rate Bill (0% Tax)" else float(row.get("GST Rate") or 18.0)
+                        if gst_bill_type == "Non-GST / Net Rate Bill (0% Tax)":
+                            gst_rate = 0.0
+                        else:
+                            gst_rate = float(row.get("GST Rate") or 18.0)
+                            
                         printed_taxable = float(row.get("Printed Taxable Amount") or 0.0)
                         hsn_sac = str(row.get("HSN Code") or "").strip()
                         
                         base_rate_per_pc = printed_taxable / qty if qty > 0 else 0.0
+                        
                         raw_item_name = str(row.get("Item Name", "")).strip()
                         matched_sku = match_sku(raw_item_name)
                         known_selling = get_known_selling_price(matched_sku)
@@ -1206,7 +1681,6 @@ with tab_parser:
                 gc.collect()
                 st.rerun()
 
-    # --- REVIEW & EDIT WORKSPACE ---
     if "parsed_df" in st.session_state:
         st.divider()
         st.markdown('<h3><span class="uos-num-badge">2</span>Live Inventory Audit Workspace</h3>', unsafe_allow_html=True)
@@ -1244,16 +1718,24 @@ with tab_parser:
         c_m2.metric("Stock Quantities by UOM", uom_summary_str)
         c_m3.metric("Taxable Base (Excl. GST)", f"₹{total_taxable:,.2f}")
         
-        round_off_val = st.sidebar.number_input("Bill Round-Off Adjustment (₹)", value=0.0, step=0.05, format="%.2f")
+        round_off_val = st.sidebar.number_input("Bill Round-Off Adjustment (₹)", value=0.0, step=0.05, format="%.2f", help="Adjust to match paper invoice total exactly.")
         final_bill_total = subtotal_incl_tax + round_off_val
         c_m4.metric("Grand Total (GST Paid)", f"₹{final_bill_total:,.2f}", delta=f"GST Tax: ₹{total_gst:,.2f}")
         
         st.write("")
         
         display_columns = [
-            "Raw Vendor Item", "Official SKU", "Current Quantity", "Unit", "HSN/SAC",
-            "Purchase Price", "Line Total (Excl. GST)", "GST Rate",
-            "Unit Cost (GST Paid) ₹", "Line Total (Incl. GST)", "Selling Price"
+            "Raw Vendor Item",
+            "Official SKU",
+            "Current Quantity",
+            "Unit",
+            "HSN/SAC",
+            "Purchase Price",
+            "Line Total (Excl. GST)",
+            "GST Rate",
+            "Unit Cost (GST Paid) ₹",
+            "Line Total (Incl. GST)",
+            "Selling Price"
         ]
         
         edited_display_df = st.data_editor(
@@ -1298,7 +1780,7 @@ with tab_parser:
                 raw = str(row.get("Raw Vendor Item", "")).strip().upper()
                 official = str(row.get("Official SKU", "")).replace("⚠️ Needs Review: ", "").strip()
                 cat_val = str(row.get("Category", "General"))
-                unit_val = str(row.get("Unit", "PCS"))
+                unit_val = str(row.get("Unit", "PCS")).upper()
                 gst_val = float(row.get("GST Rate", 18.0))
                 sp_val = float(row.get("Selling Price", 0.0))
                 
@@ -1346,12 +1828,13 @@ with tab_parser:
                 raw_selling = row.get("Selling Price", 0.0)
                 selling_val = float(raw_selling) if pd.notnull(raw_selling) and float(raw_selling) > 0 else ""
                 purchase_val = float(row.get("Purchase Price", 0.0)) if pd.notnull(row.get("Purchase Price")) else 0.0
+                clean_sku_name = str(row["Official SKU"]).replace("⚠️ Needs Review: ", "").strip()
                 
                 ws.cell(row=row_idx, column=1, value=i + 1)
-                ws.cell(row=row_idx, column=2, value=str(row["Official SKU"]).replace("⚠️ Needs Review: ", ""))
+                ws.cell(row=row_idx, column=2, value=clean_sku_name)
                 ws.cell(row=row_idx, column=3, value=float(row["Current Quantity"]))
-                ws.cell(row=row_idx, column=4, value=str(row["Unit"]))
-                ws.cell(row=row_idx, column=5, value=str(row["HSN/SAC"]))
+                ws.cell(row=row_idx, column=4, value=str(row["Unit"]).upper())
+                ws.cell(row=row_idx, column=5, value=str(row.get("HSN/SAC", "")))
                 ws.cell(row=row_idx, column=6, value=str(row.get("Category", "General")))
                 ws.cell(row=row_idx, column=7, value=float(row["GST Rate"]))
                 ws.cell(row=row_idx, column=8, value=selling_val)
@@ -1366,15 +1849,150 @@ with tab_parser:
             buffer.seek(0)
             
             st.download_button(
-                label=f"📥 Download Bulk Import Spreadsheet for {ACTIVE_STORE_DISPLAY}",
+                label=f"📥 Download ERP Bulk Import File for {ACTIVE_STORE_DISPLAY}",
                 data=buffer.getvalue(),
-                file_name=f"{selected_store_slug}_Inventory_Import.xlsx",
+                file_name=f"{selected_store_slug}_ERP_Stock_Import.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
 
 # ==========================================
-# TAB 2: STORE MASTER CATALOG MANAGER
+# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (BATCH CONCURRENT & GROUPED BY BRAND)
+# ==========================================
+with tab_catalog:
+    st.subheader(f"📚 Multi-Vendor Price List & Catalog Batch Extractor ({ACTIVE_STORE_DISPLAY})")
+    st.caption("Drop multiple supplier price lists/catalogs at once. The AI will extract and automatically group products together by company/brand name.")
+
+    col_cat_left, col_cat_right = st.columns([2, 1])
+
+    with col_cat_left:
+        catalog_files = st.file_uploader(
+            "Upload Multiple Supplier Price Lists (PDFs or Images)",
+            type=["pdf", "png", "jpg", "jpeg"],
+            accept_multiple_files=True,
+            key="catalog_file_uploader_batch"
+        )
+
+    with col_cat_right:
+        catalog_tax_type = st.radio(
+            "Catalog Tax Status:",
+            ["Taxable GST Rate", "Non-GST / Net Rate"],
+            horizontal=True,
+            key="cat_tax_status_radio",
+            help="Select whether the printed catalog prices include GST or are net rates."
+        )
+
+    if catalog_files:
+        st_files_tuples = []
+        for f in catalog_files:
+            mtype = "application/pdf" if f.name.lower().endswith(".pdf") else "image/jpeg"
+            st_files_tuples.append((f.read(), mtype))
+
+        if st.button("🚀 Process All Price Lists Concurrently", type="primary", use_container_width=True, key="btn_run_catalog_ai"):
+            all_extracted_catalog_items = []
+
+            with st.status(f"Parsing {len(st_files_tuples)} price catalog(s) simultaneously in parallel...", expanded=True) as status_box:
+                try:
+                    with ThreadPoolExecutor(max_workers=min(len(st_files_tuples), 6)) as executor:
+                        results = list(executor.map(parse_single_catalog_file, st_files_tuples))
+                        
+                    for file_items in results:
+                        for prod in file_items:
+                            gst_val = 0.0 if catalog_tax_type == "Non-GST / Net Rate" else float(prod.get("GST Rate %", 18.0))
+                            prod["GST Rate %"] = gst_val
+                            all_extracted_catalog_items.append(prod)
+
+                    status_box.update(label=f"✅ Successfully extracted & grouped {len(all_extracted_catalog_items)} total items!", state="complete", expanded=False)
+
+                except Exception as cat_err:
+                    status_box.update(label=f"❌ Failed to parse price lists: {cat_err}", state="error")
+
+            if all_extracted_catalog_items:
+                df_raw_cat = pd.DataFrame(all_extracted_catalog_items)
+                df_sorted_cat = df_raw_cat.sort_values(by=["Supplier / Brand", "Model Name / Description"]).reset_index(drop=True)
+                st.session_state["catalog_df"] = df_sorted_cat
+                st.rerun()
+
+    if "catalog_df" in st.session_state and st.session_state["catalog_df"] is not None and not st.session_state["catalog_df"].empty:
+        st.divider()
+        st.markdown("#### 📋 Extracted & Brand-Grouped Price Lists Preview")
+        
+        edited_cat_df = st.data_editor(
+            st.session_state["catalog_df"],
+            num_rows="dynamic",
+            use_container_width=True,
+            key="catalog_editor",
+            column_config={
+                "Supplier / Brand": st.column_config.TextColumn("Supplier / Brand", required=True),
+                "Model Name / Description": st.column_config.TextColumn("Model Name / Description", required=True),
+                "Catalog Rate ₹": st.column_config.NumberColumn("Catalog Rate ₹", format="₹%.2f"),
+                "GST Rate %": st.column_config.NumberColumn("GST Rate %", format="%d%%"),
+                "Unit": st.column_config.TextColumn("Unit"),
+            }
+        )
+
+        c_cat1, c_cat2 = st.columns([1, 1])
+
+        with c_cat1:
+            if st.button("📥 Import Grouped Items into Master Catalog", type="primary", use_container_width=True, key="btn_import_catalog_master"):
+                new_cat_records = []
+                for _, row in edited_cat_df.iterrows():
+                    sku_name = f"[{row.get('Supplier / Brand', 'GENERIC')}] {row['Model Name / Description']}".strip()
+                    if sku_name:
+                        new_cat_records.append({
+                            "Official_SKU_Name": sku_name,
+                            "Category": str(row.get("Supplier / Brand", "General")),
+                            "Default_Unit": str(row.get("Unit", "PCS")).upper(),
+                            "GST_Rate": float(row.get("GST Rate %", 18.0)),
+                            "Selling_Price": float(row.get("Catalog Rate ₹", 0.0))
+                        })
+                
+                if new_cat_records:
+                    bulk_df = pd.DataFrame(new_cat_records)
+                    combined = pd.concat([master_df, bulk_df], ignore_index=True)
+                    combined = combined.drop_duplicates(subset=["Official_SKU_Name"], keep="last")
+                    save_master(combined, selected_store_slug)
+                    st.toast(f"Imported {len(new_cat_records)} items to Master Catalog!")
+                    st.rerun()
+
+        with c_cat2:
+            wb_cat = openpyxl.Workbook()
+            ws_cat = wb_cat.active
+            ws_cat.title = "Price Lists"
+
+            ws_cat.cell(row=1, column=1, value=ACTIVE_STORE_DISPLAY)
+            ws_cat.cell(row=2, column=1, value="Consolidated Supplier Price Lists")
+            ws_cat.cell(row=3, column=1, value=f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}")
+
+            exact_headers = ["S. No.", "Supplier / Brand", "Model Name / Description", "Catalog Rate ₹", "GST Rate %", "Unit"]
+
+            for col_num, header_title in enumerate(exact_headers, 1):
+                ws_cat.cell(row=5, column=col_num, value=header_title)
+
+            for i, row in edited_cat_df.iterrows():
+                row_idx = 6 + i
+                ws_cat.cell(row=row_idx, column=1, value=i + 1)
+                ws_cat.cell(row=row_idx, column=2, value=str(row.get("Supplier / Brand", "")).strip())
+                ws_cat.cell(row=row_idx, column=3, value=str(row["Model Name / Description"]).strip())
+                ws_cat.cell(row=row_idx, column=4, value=float(row.get("Catalog Rate ₹", 0.0)))
+                ws_cat.cell(row=row_idx, column=5, value=float(row.get("GST Rate %", 18.0)))
+                ws_cat.cell(row=row_idx, column=6, value=str(row.get("Unit", "PCS")).upper())
+
+            buf_cat = BytesIO()
+            wb_cat.save(buf_cat)
+            buf_cat.seek(0)
+
+            st.download_button(
+                label="📥 Download Grouped Price List Excel File",
+                data=buf_cat.getvalue(),
+                file_name=f"{selected_store_slug}_Grouped_Price_Lists.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="btn_dl_catalog_excel"
+            )
+
+# ==========================================
+# TAB 3: STORE MASTER CATALOG MANAGER
 # ==========================================
 with tab_master:
     st.subheader(f"⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
@@ -1516,7 +2134,7 @@ with tab_master:
                 st.info("Master catalog for this store is currently empty.")
 
 # ==========================================
-# TAB 3: VENDOR SKU MEMORY WORKSPACE
+# TAB 4: VENDOR SKU MEMORY WORKSPACE
 # ==========================================
 with tab_memory:
     st.subheader(f"🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
@@ -1542,7 +2160,7 @@ with tab_memory:
         st.info("No learned vendor mappings recorded yet for this store location.")
 
 # ==========================================
-# TAB 4: IMPORT GUIDE
+# TAB 5: IMPORT GUIDE
 # ==========================================
 with tab_guide:
     st.subheader("📖 Standard Operating Procedure")
@@ -1551,7 +2169,7 @@ with tab_guide:
         ### How to Process & Sync Invoices:
         1. **Select Store:** Choose your active store location in the left sidebar directory.
         2. **Upload Bills:** Drop images, PDFs, or click a photo directly with your camera in **Tab 1**. Select whether the bill is Taxable GST or Non-GST.
-        3. **Run AI Engine:** Click **Process Invoices with Fast AI Engine** to extract structured line items.
+        3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
         4. **Audit Workspace:** Check quantities, HSN codes, landed purchase rates, and mapped SKUs.
         5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer with your Profit Markup (%).
         6. **Download Import File:** Generate the `.xlsx` spreadsheet.
