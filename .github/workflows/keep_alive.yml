@@ -3,7 +3,7 @@ name: Keep Streamlit Alive 24/7
 on:
   schedule:
     - cron: '0 */3 * * *'  # Runs every 3 hours
-  workflow_dispatch:        # Allows manual trigger
+  workflow_dispatch:
 
 jobs:
   keep-alive:
@@ -17,11 +17,38 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Selenium & Chrome
+      - name: Install Playwright & Browsers
         run: |
-          pip install selenium
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
+          pip install playwright
+          playwright install chromium
 
-      - name: Run Keep Alive Script
-        run: python keep_alive.py
+      - name: Run Headless Streamlit Keep-Alive
+        env:
+          STREAMLIT_URL: "https://ai-bill-converter.streamlit.app" # REPLACE THIS WITH YOUR REAL URL
+        run: |
+          python -c "
+          import os, time
+          from playwright.sync_api import sync_playwright
+
+          url = os.environ.get('STREAMLIT_URL')
+          with sync_playwright() as p:
+              # Launch Chromium with realistic User Agent
+              browser = p.chromium.launch(headless=True)
+              context = browser.new_context(
+                  user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+              )
+              page = context.new_page()
+              print(f'Navigating to {url}...')
+              page.goto(url, timeout=90000, wait_until='domcontentloaded')
+              time.sleep(10)
+
+              # Auto-click 'Yes, get this app back up!' button if Streamlit is sleeping
+              wake_button = page.query_selector('button:has-text(\"Yes, get this app back up!\")')
+              if wake_button:
+                  print('App was sleeping! Clicking wake-up button...')
+                  wake_button.click()
+                  time.sleep(15)
+
+              print('Successfully connected and registered session.')
+              browser.close()
+          "
