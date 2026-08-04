@@ -1733,7 +1733,7 @@ with tab_parser:
             )
 
 # ==========================================
-# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (ULTRA-FAST & B2B ENTERPRISE SPEC)
+# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (ENTERPRISE GST-LEGAL SPEC)
 # ==========================================
 with tab_catalog:
     st.subheader(f"📚 B2B Supplier Price List Extractor ({ACTIVE_STORE_DISPLAY})")
@@ -1749,8 +1749,19 @@ with tab_catalog:
         )
 
     with col_cat_right:
-        trade_discount_pct = st.number_input("Standard Trade Discount (%)", min_value=0.0, max_value=90.0, value=0.0, step=5.0, help="e.g. Set 50% if the sheet notes '50% discount in above prices'")
-        retail_markup_pct = st.number_input("Retail Selling Markup (%)", min_value=0.0, value=20.0, step=5.0, help="Markup added on top of Net Dealer Cost to calculate Selling Price")
+        price_list_tax_status = st.radio(
+            "Price List Tax Status:",
+            ["GST Included in Printed Rates (Tax Paid)", "GST Extra / Excluded"],
+            horizontal=True,
+            key="catalog_tax_status_toggle",
+            help="Most manufacturer catalog price sheets are GST Included. This strips tax legally to compute exact base rates."
+        )
+        
+        c_disc1, c_disc2 = st.columns(2)
+        with c_disc1:
+            trade_discount_pct = st.number_input("Trade Discount (%)", min_value=0.0, max_value=90.0, value=50.0, step=5.0, help="e.g. Set 50% for Daarvi '50-60% discount' note")
+        with c_disc2:
+            retail_markup_pct = st.number_input("Retail Selling Markup (%)", min_value=0.0, value=20.0, step=5.0, help="Store margin added on top of Net Landed Cost")
 
     if catalog_file is not None:
         file_bytes = catalog_file.read()
@@ -1871,19 +1882,28 @@ with tab_catalog:
                                 model_code = str(prod.get("Model Code", "")).strip()
                                 full_title = f"{item_name} {model_code}".strip() if model_code and model_code not in item_name else item_name
 
-                                gross_rate = float(prod.get("Gross Catalog Rate") or 0.0)
-                                net_dealer_cost = round(gross_rate * (1 - (trade_discount_pct / 100)), 2)
+                                gross_printed_rate = float(prod.get("Gross Catalog Rate") or 0.0)
+                                gst_rate_val = float(prod.get("GST Rate") or 18.0)
+
+                                # Legal Calculation Logic
+                                if price_list_tax_status == "GST Included in Printed Rates (Tax Paid)" and gst_rate_val > 0:
+                                    base_taxable_rate = round(gross_printed_rate / (1 + (gst_rate_val / 100)), 2)
+                                else:
+                                    base_taxable_rate = gross_printed_rate
+
+                                net_dealer_cost = round(base_taxable_rate * (1 - (trade_discount_pct / 100)), 2)
                                 selling_price = round(net_dealer_cost * (1 + (retail_markup_pct / 100)), 2)
 
-                                if full_title and gross_rate >= 0:
+                                if full_title and gross_printed_rate >= 0:
                                     catalog_items.append({
                                         "Name": full_title,
                                         "Category": str(prod.get("Category", "General")),
                                         "Unit": str(prod.get("Unit", "PCS")).upper(),
-                                        "GST Rate": float(prod.get("GST Rate") or 18.0),
-                                        "Printed List Rate ₹": gross_rate,
-                                        "Dealer Purchase Price (Cost) ₹": net_dealer_cost,
-                                        "Retail Selling Price (SP) ₹": selling_price
+                                        "GST Rate": gst_rate_val,
+                                        "Printed List Rate (Inclusive) ₹": gross_printed_rate,
+                                        "Taxable Base Rate (Excl. Tax) ₹": base_taxable_rate,
+                                        "Dealer Landed Cost ₹": net_dealer_cost,
+                                        "Suggested Selling Price ₹": selling_price
                                     })
 
                     status_box.update(label=f"✅ Extracted {len(catalog_items)} products from price list!", state="complete", expanded=False)
@@ -1909,9 +1929,10 @@ with tab_catalog:
                 "Category": st.column_config.TextColumn("Category"),
                 "Unit": st.column_config.TextColumn("Unit"),
                 "GST Rate": st.column_config.NumberColumn("GST %", format="%d%%"),
-                "Printed List Rate ₹": st.column_config.NumberColumn("Printed List Rate ₹", format="₹%.2f"),
-                "Dealer Purchase Price (Cost) ₹": st.column_config.NumberColumn("Dealer Purchase Price (Cost) ₹", format="₹%.2f"),
-                "Retail Selling Price (SP) ₹": st.column_config.NumberColumn("Retail Selling Price (SP) ₹", format="₹%.2f"),
+                "Printed List Rate (Inclusive) ₹": st.column_config.NumberColumn("Printed Rate (Gross) ₹", format="₹%.2f"),
+                "Taxable Base Rate (Excl. Tax) ₹": st.column_config.NumberColumn("Taxable Rate (Excl. Tax) ₹", format="₹%.2f"),
+                "Dealer Landed Cost ₹": st.column_config.NumberColumn("Dealer Cost (Purchase Price) ₹", format="₹%.2f"),
+                "Suggested Selling Price ₹": st.column_config.NumberColumn("Retail Selling Price (SP) ₹", format="₹%.2f"),
             }
         )
 
@@ -1928,7 +1949,7 @@ with tab_catalog:
                             "Category": str(row.get("Category", "General")),
                             "Default_Unit": str(row.get("Unit", "PCS")).upper(),
                             "GST_Rate": float(row.get("GST Rate", 18.0)),
-                            "Selling_Price": float(row.get("Retail Selling Price (SP) ₹", 0.0))
+                            "Selling_Price": float(row.get("Suggested Selling Price ₹", 0.0))
                         })
                 
                 if new_cat_records:
@@ -1966,9 +1987,9 @@ with tab_catalog:
                 ws_cat.cell(row=row_idx, column=5, value="")
                 ws_cat.cell(row=row_idx, column=6, value=str(row.get("Category", "General")))
                 ws_cat.cell(row=row_idx, column=7, value=float(row.get("GST Rate", 18.0)))
-                ws_cat.cell(row=row_idx, column=8, value=float(row.get("Retail Selling Price (SP) ₹", 0.0)))
+                ws_cat.cell(row=row_idx, column=8, value=float(row.get("Suggested Selling Price ₹", 0.0)))
                 ws_cat.cell(row=row_idx, column=9, value="")
-                ws_cat.cell(row=row_idx, column=10, value=float(row.get("Dealer Purchase Price (Cost) ₹", 0.0)))
+                ws_cat.cell(row=row_idx, column=10, value=float(row.get("Dealer Landed Cost ₹", 0.0)))
 
             buf_cat = BytesIO()
             wb_cat.save(buf_cat)
