@@ -1022,12 +1022,10 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         pass
 
     try:
-        # LIGHTWEIGHT COMPRESSION FOR MAXIMUM UPTIME SPEED
         if "pdf" in mime_type.lower() and PYMUPDF_AVAILABLE:
-            # Render first page quickly at a lower, optimized DPI for instant OCR
             doc = fitz.open(stream=file_bytes, filetype="pdf")
             page = doc[0]
-            pix = page.get_pixmap(dpi=110) # Optimized DPI for speed
+            pix = page.get_pixmap(dpi=110)
             img = Image.open(BytesIO(pix.tobytes("jpeg")))
             doc.close()
         else:
@@ -1036,7 +1034,6 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
         
-        # Aggressive downscaling for lightning-fast payload delivery
         img.thumbnail((800, 800), Image.Resampling.BILINEAR)
         
         buffer = BytesIO()
@@ -1124,7 +1121,6 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
             return parsed_res
         except Exception as groq_err:
             raise Exception(f"All Primary (Gemini) and Secondary (Groq) AI services failed: {groq_err}")
-
 
 def process_single_item_tuple(item_tuple):
     file_bytes, mime_type = item_tuple
@@ -1773,7 +1769,7 @@ with tab_catalog:
                         pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
                         for page_idx in range(len(pdf_doc)):
                             page = pdf_doc[page_idx]
-                            pix = page.get_pixmap(dpi=150)
+                            pix = page.get_pixmap(dpi=110)
                             img = Image.open(BytesIO(pix.tobytes("jpeg")))
                             images_to_process.append(img)
                         pdf_doc.close()
@@ -1809,7 +1805,7 @@ with tab_catalog:
                     """
 
                     config = types.GenerateContentConfig(response_mime_type="application/json")
-                    candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
+                    candidate_models = ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']
                     shuffled_keys = list(API_KEYS_POOL)
                     random.shuffle(shuffled_keys)
 
@@ -1817,16 +1813,14 @@ with tab_catalog:
                         if img_obj.mode in ("RGBA", "P"):
                             img_obj = img_obj.convert("RGB")
 
-                        enhancer = ImageEnhance.Contrast(img_obj)
-                        img_obj = enhancer.enhance(1.2)
-                        img_obj.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
+                        img_obj.thumbnail((800, 800), Image.Resampling.BILINEAR)
 
                         buf = BytesIO()
-                        img_obj.save(buf, format="JPEG", quality=85, optimize=True)
+                        img_obj.save(buf, format="JPEG", quality=75, optimize=True)
                         buf.seek(0)
                         raw_page_bytes = buf.getvalue()
                         
-                        contents = [Image.open(buf), cat_prompt]
+                        contents = [Image.open(BytesIO(raw_page_bytes)), cat_prompt]
                         parsed_page = None
 
                         for key in shuffled_keys:
@@ -2059,7 +2053,6 @@ with tab_master:
 
     col_add, col_list = st.columns([1, 2])
     
-    # --- INSTANT SINGLE SKU SAVER ---
     with col_add:
         with st.container(border=True):
             st.markdown("#### ➕ Add Single Master SKU")
@@ -2076,7 +2069,6 @@ with tab_master:
                     st.toast(f"⚡ Saved '{clean_sku}' instantly!")
                     st.rerun()
                     
-    # --- COMPACT CHECKBOX MULTI-DELETE TABLE WITH LIVE SEARCH ---
     with col_list:
         with st.container(border=True):
             st.markdown("#### 📋 Catalog Register")
