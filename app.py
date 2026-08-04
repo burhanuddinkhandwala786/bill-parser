@@ -2057,6 +2057,7 @@ with tab_master:
 
     col_add, col_list = st.columns([1, 2])
     
+    # --- INSTANT SINGLE SKU SAVER ---
     with col_add:
         with st.container(border=True):
             st.markdown("#### ➕ Add Single Master SKU")
@@ -2073,6 +2074,7 @@ with tab_master:
                     st.toast(f"⚡ Saved '{clean_sku}' instantly!")
                     st.rerun()
                     
+    # --- COMPACT CHECKBOX MULTI-DELETE TABLE WITH LIVE SEARCH ---
     with col_list:
         with st.container(border=True):
             st.markdown("#### 📋 Catalog Register")
