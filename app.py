@@ -1,5 +1,6 @@
 import os
 import gc
+import re
 import json
 import time
 import base64
@@ -1129,7 +1130,7 @@ def process_single_item_tuple(item_tuple):
     except Exception as e:
         return {"ERROR": str(e)}
 
-# --- TAB 2 CATALOG PARSER HELPER (SINGLE FILE) ---
+# --- TAB 2 CATALOG PARSER HELPER (SINGLE FILE - MULTI-PAGE STABILITY FIX) ---
 def parse_single_catalog_file(file_tuple):
     file_bytes, mime_type = file_tuple
     catalog_items = []
@@ -1137,9 +1138,10 @@ def parse_single_catalog_file(file_tuple):
         images_to_process = []
         if "pdf" in mime_type.lower() and PYMUPDF_AVAILABLE:
             pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
-            for page_idx in range(len(pdf_doc)):
+            max_pages = min(len(pdf_doc), 30)  # Render up to 30 pages safely
+            for page_idx in range(max_pages):
                 page = pdf_doc[page_idx]
-                pix = page.get_pixmap(dpi=110)
+                pix = page.get_pixmap(dpi=130)
                 img = Image.open(BytesIO(pix.tobytes("jpeg")))
                 images_to_process.append(img)
             pdf_doc.close()
@@ -1149,15 +1151,15 @@ def parse_single_catalog_file(file_tuple):
 
         cat_prompt = """
         You are an enterprise catalog OCR system for building materials, laminates, door skins, plywood, and hardware.
-        Extract the Supplier/Brand Company Name (e.g. DAARVI, GREENPLY, EBCO) from the page header, and every product row listed in the table or price list.
+        Extract the Supplier/Brand Company Name (e.g. DAARVI, GODREJ, GREENPLY) from the page header, and EVERY SINGLE product model and price row listed in the table.
 
         CRITICAL EXTRACTION RULES:
-        1. "Supplier Name": Brand or company name publishing this price list.
+        1. "Supplier Name": Exact brand or company name publishing this price list. Standardize spacing (e.g. use "DAARVI" instead of "DA ARVI").
         2. "Item Name": Full product title or description.
-        3. "Model Code": Model number or series code if present, else "".
+        3. "Model Code": Model number, item code, or series code if present, else "".
         4. "Unit": PCS, BOX, SET, LTR, KG, SQFT, MTR. Default "PCS".
         5. "GST Rate": GST percentage (0, 5, 12, 18, 28). Default 18.0.
-        6. "Dealer Rate": Printed rate per piece or MRP as printed under RATE PER PCS / PRICE column.
+        6. "Dealer Rate": Printed price/rate per piece as printed under RATE / PRICE column.
 
         OUTPUT SCHEMA (STRICT JSON ONLY):
         {
@@ -1182,10 +1184,10 @@ def parse_single_catalog_file(file_tuple):
         for img_obj in images_to_process:
             if img_obj.mode in ("RGBA", "P"):
                 img_obj = img_obj.convert("RGB")
-            img_obj.thumbnail((800, 800), Image.Resampling.BILINEAR)
+            img_obj.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
 
             buf = BytesIO()
-            img_obj.save(buf, format="JPEG", quality=75, optimize=True)
+            img_obj.save(buf, format="JPEG", quality=80, optimize=True)
             buf.seek(0)
             raw_page_bytes = buf.getvalue()
             
@@ -1236,7 +1238,10 @@ def parse_single_catalog_file(file_tuple):
                     pass
 
             if parsed_page:
-                supplier_name = str(parsed_page.get("Supplier Name", "GENERIC VENDOR")).strip().upper()
+                raw_supplier = str(parsed_page.get("Supplier Name", "GENERIC VENDOR")).strip().upper()
+                # Clean spacing variations like DA ARVI -> DAARVI
+                supplier_name = re.sub(r'\s+', '', raw_supplier) if "DA" in raw_supplier and "ARVI" in raw_supplier else raw_supplier
+                
                 for prod in parsed_page.get("Products", []):
                     item_name = str(prod.get("Item Name", "")).strip()
                     model_code = str(prod.get("Model Code", "")).strip()
