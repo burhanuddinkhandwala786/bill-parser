@@ -1799,16 +1799,17 @@ with tab_catalog:
                         images_to_process.append(img)
 
                     cat_prompt = """
-                    You are an enterprise catalog OCR system. Extract all products, model numbers, and prices from this catalog page.
+                    You are an enterprise catalog OCR system for building materials, laminates, door skins, plywood, and hardware.
+                    Extract every product row listed in the table or price list on this page.
 
-                    STRICT GROUND-TRUTH RULES:
-                    1. "Item Name": Full product title including brand or series name.
-                    2. "Model Code": Model number, item code, or article number if printed, else "".
-                    3. "Category": Product category (e.g. Hardware, Plywood, Sanitary, Electrical). Default "General".
+                    CRITICAL EXTRACTION RULES:
+                    1. "Item Name": Full product title or description (e.g. "DAARVI CD SERIES (7x3.25) 39\"").
+                    2. "Model Code": Model number, series code, or dimension code if present, else "".
+                    3. "Category": Product category (e.g. Door Skins, Laminates, Hardware). Default "General".
                     4. "Unit": PCS, BOX, SET, LTR, KG, SQFT, MTR. Default "PCS".
                     5. "GST Rate": GST percentage (0, 5, 12, 18, 28). Default 18.0.
-                    6. "Selling Price": Exact numerical price/MRP. Do NOT add currency symbols or modify digits.
-                    7. "Purchase Price": Dealer/Cost price if printed, else 0.0.
+                    6. "Selling Price": Exact rate per piece or MRP as printed under RATE PER PCS / PRICE column (e.g. 500, 650, 600).
+                    7. "Purchase Price": Cost price if printed, else 0.0.
 
                     OUTPUT SCHEMA (STRICT JSON ONLY):
                     {
@@ -1827,6 +1828,7 @@ with tab_catalog:
                     """
 
                     config = types.GenerateContentConfig(response_mime_type="application/json")
+                    candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
                     shuffled_keys = list(API_KEYS_POOL)
                     random.shuffle(shuffled_keys)
 
@@ -1834,47 +1836,78 @@ with tab_catalog:
                         if img_obj.mode in ("RGBA", "P"):
                             img_obj = img_obj.convert("RGB")
 
-                        img_obj.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
+                        enhancer = ImageEnhance.Contrast(img_obj)
+                        img_obj = enhancer.enhance(1.2)
+
                         buf = BytesIO()
                         img_obj.save(buf, format="JPEG", quality=85, optimize=True)
                         buf.seek(0)
+                        raw_page_bytes = buf.getvalue()
                         
                         contents = [Image.open(buf), cat_prompt]
                         parsed_page = None
 
+                        # 1. Try Gemini Multi-Key / Multi-Model Loop
                         for key in shuffled_keys:
                             try:
                                 client = genai.Client(api_key=key)
-                                res = client.models.generate_content(
-                                    model="gemini-2.5-flash",
-                                    contents=contents,
-                                    config=config
-                                )
-                                text_res = res.text.strip()
-                                if text_res.startswith("```json"):
-                                    text_res = text_res[7:-3].strip()
-                                elif text_res.startswith("```"):
-                                    text_res = text_res[3:-3].strip()
-                                
-                                parsed_page = json.loads(text_res)
-                                break
+                                for model_name in candidate_models:
+                                    try:
+                                        res = _call_gemini_with_retry(client, model_name, contents, config)
+                                        text_res = res.text.strip()
+                                        if text_res.startswith("```json"):
+                                            text_res = text_res[7:-3].strip()
+                                        elif text_res.startswith("```"):
+                                            text_res = text_res[3:-3].strip()
+                                        
+                                        parsed_page = json.loads(text_res)
+                                        break
+                                    except Exception:
+                                        continue
+                                if parsed_page:
+                                    break
                             except Exception:
                                 continue
+
+                        # 2. Groq Llama 3.2 Fallback if Gemini failed
+                        if not parsed_page and GROQ_AVAILABLE:
+                            try:
+                                groq_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+                                if groq_key:
+                                    base64_img = base64.b64encode(raw_page_bytes).decode('utf-8')
+                                    groq_client = Groq(api_key=groq_key)
+                                    comp = groq_client.chat.completions.create(
+                                        model="llama-3.2-11b-vision-preview",
+                                        response_format={"type": "json_object"},
+                                        messages=[{
+                                            "role": "user",
+                                            "content": [
+                                                {"type": "text", "text": cat_prompt},
+                                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
+                                            ]
+                                        }],
+                                        temperature=0.1
+                                    )
+                                    parsed_page = json.loads(comp.choices[0].message.content.strip())
+                            except Exception:
+                                pass
 
                         if parsed_page:
                             for prod in parsed_page.get("Products", []):
                                 item_name = str(prod.get("Item Name", "")).strip()
                                 model_code = str(prod.get("Model Code", "")).strip()
-                                full_title = f"{item_name} {model_code}".strip() if model_code else item_name
+                                full_title = f"{item_name} {model_code}".strip() if model_code and model_code not in item_name else item_name
 
-                                if full_title:
+                                price_val = float(prod.get("Selling Price") or 0.0)
+
+                                if full_title and price_val >= 0:
                                     catalog_items.append({
                                         "Name": full_title,
                                         "Model Code": model_code,
                                         "Category": str(prod.get("Category", "General")),
                                         "Unit": str(prod.get("Unit", "PCS")).upper(),
                                         "GST Rate": float(prod.get("GST Rate") or 18.0),
-                                        "Selling Price": float(prod.get("Selling Price") or 0.0),
+                                        "Selling Price": price_val,
                                         "Purchase Price": float(prod.get("Purchase Price") or 0.0)
                                     })
 
@@ -1885,6 +1918,7 @@ with tab_catalog:
 
             if catalog_items:
                 st.session_state["catalog_df"] = pd.DataFrame(catalog_items)
+                st.rerun()
 
     if "catalog_df" in st.session_state and not st.session_state["catalog_df"].empty:
         st.divider()
@@ -1972,6 +2006,7 @@ with tab_catalog:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
+
 
 # ==========================================
 # TAB 3: STORE MASTER CATALOG MANAGER
