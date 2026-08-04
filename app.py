@@ -1043,7 +1043,6 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
                 img_copy = img_copy.convert("RGB")
             
             # FAST PRE-PROCESSING FOR BLURRY/DARK IMAGES
-            # Enhance contrast and sharpness slightly to speed up OCR parsing accuracy
             enhancer = ImageEnhance.Contrast(img_copy)
             img_copy = enhancer.enhance(1.2)
             sharpness = ImageEnhance.Sharpness(img_copy)
@@ -1056,6 +1055,11 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
             img_copy.save(buffer, format="JPEG", quality=85, optimize=True)
             buffer.seek(0)
             contents = [Image.open(buffer)]
+            
+            # Instant RAM Cleanup
+            del img_copy
+            del img
+            gc.collect()
 
         prompt = """
         You are an enterprise financial OCR system for wholesale, retail, plywood, hardware, and building material invoices.
@@ -1675,7 +1679,7 @@ with tab_parser:
                 raw = str(row.get("Raw Vendor Item", "")).strip().upper()
                 official = str(row.get("Official SKU", "")).replace("⚠️ Needs Review: ", "").strip()
                 cat_val = str(row.get("Category", "General"))
-                unit_val = str(row.get("Unit", "PCS"))
+                unit_val = str(row.get("Unit", "PCS")).upper()
                 gst_val = float(row.get("GST Rate", 18.0))
                 sp_val = float(row.get("Selling Price", 0.0))
                 
@@ -1723,12 +1727,13 @@ with tab_parser:
                 raw_selling = row.get("Selling Price", 0.0)
                 selling_val = float(raw_selling) if pd.notnull(raw_selling) and float(raw_selling) > 0 else ""
                 purchase_val = float(row.get("Purchase Price", 0.0)) if pd.notnull(row.get("Purchase Price")) else 0.0
+                clean_sku_name = str(row["Official SKU"]).replace("⚠️ Needs Review: ", "").strip()
                 
                 ws.cell(row=row_idx, column=1, value=i + 1)
-                ws.cell(row=row_idx, column=2, value=str(row["Official SKU"]).replace("⚠️ Needs Review: ", ""))
+                ws.cell(row=row_idx, column=2, value=clean_sku_name)
                 ws.cell(row=row_idx, column=3, value=float(row["Current Quantity"]))
-                ws.cell(row=row_idx, column=4, value=str(row["Unit"]))
-                ws.cell(row=row_idx, column=5, value=str(row["HSN/SAC"]))
+                ws.cell(row=row_idx, column=4, value=str(row["Unit"]).upper())
+                ws.cell(row=row_idx, column=5, value=str(row.get("HSN/SAC", "")))
                 ws.cell(row=row_idx, column=6, value=str(row.get("Category", "General")))
                 ws.cell(row=row_idx, column=7, value=float(row["GST Rate"]))
                 ws.cell(row=row_idx, column=8, value=selling_val)
@@ -1743,9 +1748,9 @@ with tab_parser:
             buffer.seek(0)
             
             st.download_button(
-                label=f"📥 Download Bulk Import Spreadsheet for {ACTIVE_STORE_DISPLAY}",
+                label=f"📥 Download ERP Bulk Import File for {ACTIVE_STORE_DISPLAY}",
                 data=buffer.getvalue(),
-                file_name=f"{selected_store_slug}_Inventory_Import.xlsx",
+                file_name=f"{selected_store_slug}_ERP_Stock_Import.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
