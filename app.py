@@ -514,7 +514,7 @@ def save_store_phone(store_slug: str, phone: str):
     except Exception:
         pass
 
-# --- PERMANENT DATABASE DUPLICATE CHECKER (LEGAL COMPLIANCE) ---
+# --- PERMANENT DATABASE DUPLICATE CHECKER ---
 def is_duplicate_invoice_db(store_id: int, vendor_name: str, invoice_number: str) -> bool:
     if not invoice_number or not vendor_name:
         return False
@@ -559,7 +559,7 @@ def log_invoice_to_db(store_id: int, vendor_name: str, invoice_number: str, invo
     except Exception:
         pass
 
-# --- AUTHENTICATION & MULTI-TENANT SESSION MANAGEMENT ---
+# --- AUTHENTICATION ---
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
@@ -648,7 +648,7 @@ def reset_user_password(email: str, new_password: str):
         )
     return True, "Password updated successfully!"
 
-# --- FAST SESSION & AUTO-LOGIN RESOLUTION ---
+# --- FAST SESSION RESOLUTION ---
 if not st.session_state["authenticated"]:
     url_session = st.query_params.get("session", None)
     if url_session:
@@ -660,7 +660,7 @@ if not st.session_state["authenticated"]:
             st.session_state["authenticated"] = True
             st.session_state["user_store"] = store_data
 
-# --- LOGIN / SIGNUP / RESET SCREEN ---
+# --- LOGIN SCREEN ---
 if not st.session_state["authenticated"]:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -706,8 +706,7 @@ if not st.session_state["authenticated"]:
                         success, msg = register_user(reg_store, reg_email, reg_password)
                         if success: st.success(msg)
                         else: st.error(msg)
-                    else:
-                        st.warning("All fields are required.")
+                    else: st.warning("All fields are required.")
 
         with auth_tab3:
             with st.form("reset_password_form"):
@@ -725,7 +724,7 @@ if not st.session_state["authenticated"]:
                         else: st.error(msg)
     st.stop()
 
-# Active user details post-login
+# Active user details
 selected_store_slug = st.session_state["user_store"]["slug"]
 ACTIVE_STORE_DISPLAY = st.session_state["user_store"]["display_name"].upper()
 ACTIVE_STORE_ID = get_or_create_store_id(selected_store_slug)
@@ -767,39 +766,10 @@ def get_api_key_pool():
 
 API_KEYS_POOL = get_api_key_pool()
 if not API_KEYS_POOL:
-    st.error("⚠️ Gemini API Key missing. Please configure GEMINI_API_KEY in secrets.")
+    st.error("⚠️ Gemini API Key missing.")
     st.stop()
 
-# --- HEADER SECTION ---
-header_left, header_right = st.columns([3, 1.5])
-with header_left:
-    st.markdown("""
-        <div style="display:flex;align-items:center;gap:14px;">
-            <div style="width:44px;height:44px;border-radius:14px;
-                        background:linear-gradient(135deg,#4F46E5 0%,#3730A3 100%);
-                        color:#fff;display:flex;align-items:center;justify-content:center;
-                        font-size:1.4rem;box-shadow:0 8px 20px rgba(79,70,229,0.25);flex-shrink:0;">⚡</div>
-            <div>
-                <h1 style="margin:0;font-size:1.75rem;font-weight:700;letter-spacing:-0.03em;line-height:1.2;">Universal OS</h1>
-                <div style="color:var(--uos-text-muted);font-size:0.85rem;margin-top:2px;">Commercial Multi-Store AI Purchase Intake &amp; Inventory Synchronizer</div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-with header_right:
-    st.markdown(f"""
-        <div style="display:flex;justify-content:flex-end;align-items:center;height:100%;padding-top:12px;">
-            <div class="uos-store-pill">
-                <span class="uos-dot"></span>
-                <span class="uos-pill-label">Active Store</span>
-                <span>{ACTIVE_STORE_DISPLAY}</span>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-st.divider()
-
-# --- FAST CACHED DATABASE STORE LOADERS ---
+# --- STORE LOADERS ---
 @st.cache_data(ttl=3600)
 def load_json_memory(store_slug: str) -> dict:
     engine = get_db_engine()
@@ -877,7 +847,6 @@ def save_master(df: pd.DataFrame, store_slug: str):
             )
     load_master.clear()
 
-# --- ATOMIC OPTIMIZED SQL EXECUTORS ---
 def add_single_sku_direct(store_slug: str, sku_name: str, category: str, unit: str, gst_rate: float, selling_price: float):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
@@ -951,7 +920,7 @@ def get_known_selling_price(sku_name):
             if pd.notnull(price) and float(price) > 0: return float(price)
     return 0.0
 
-# --- FAIL-SAFE AI INVOICE OCR ENGINE ---
+# --- FAIL-SAFE AI INVOICE OCR ENGINE WITH STRICT NET TAXABLE GROUND TRUTH ---
 def is_server_error(exception):
     err_str = str(exception).lower()
     return "503" in err_str or "unavailable" in err_str or "overloaded" in err_str or "429" in err_str or "resourceexhausted" in err_str
@@ -972,16 +941,16 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         if "pdf" in mime_type.lower() and PYMUPDF_AVAILABLE:
             doc = fitz.open(stream=file_bytes, filetype="pdf")
             page = doc[0]
-            pix = page.get_pixmap(dpi=110)
+            pix = page.get_pixmap(dpi=120)
             img = Image.open(BytesIO(pix.tobytes("jpeg")))
             doc.close()
         else:
             img = Image.open(BytesIO(file_bytes))
 
         if img.mode in ("RGBA", "P"): img = img.convert("RGB")
-        img.thumbnail((800, 800), Image.Resampling.BILINEAR)
+        img.thumbnail((900, 900), Image.Resampling.BILINEAR)
         buffer = BytesIO()
-        img.save(buffer, format="JPEG", quality=75, optimize=True)
+        img.save(buffer, format="JPEG", quality=80, optimize=True)
         buffer.seek(0)
         optimized_bytes = buffer.getvalue()
         del img
@@ -989,17 +958,17 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
 
         contents = [Image.open(BytesIO(optimized_bytes))]
         prompt = """
-        You are an enterprise financial OCR system for wholesale, retail, plywood, hardware, and building material invoices.
+        You are an enterprise financial OCR system for Indian commercial wholesale and retail hardware/plywood invoices.
 
-        CRITICAL EXTRACTION & GROUND-TRUTH RULES:
+        STRICT GROUND-TRUTH RULES FOR LEGAL AUDIT:
         1. "Supplier Company Name": Main vendor/seller title from bill top header.
         2. "Invoice Number": Invoice/Bill number string if present, else "".
         3. "Invoice Date": Date string if present, else "".
         4. "Line Items": Extract every product row accurately.
-           - "Item Name": Full product title or description. Read handwritten notes and pen edits carefully.
-           - "Primary Quantity": Pure numeric count of physical pieces/sheets/boxes received (e.g. 6.0, 1.0, 70.0).
+           - "Item Name": Full product title or description. Read discounts (e.g. "50%") and pen edits carefully.
+           - "Primary Quantity": Pure numeric count of physical pieces/sets/sheets received (e.g. 6.0, 70.0, 1.0).
            - "Unit": Unit string (PCS, SET, SQM, SQFT, BOX, KG, LTR, NOS). Default "PCS".
-           - "Printed Taxable Amount": Net Taxable Base value before tax after applying trade discounts.
+           - "Printed Taxable Amount": ABSOLUTE GROUND TRUTH. Extract the EXACT final net taxable amount printed in the amount column *after* trade discounts and *before* GST additions.
            - "GST Rate": Total GST percentage as a pure number (0, 5, 12, 18, 28). Default 18.0.
            - "HSN Code": HSN/SAC code as string. If missing, "".
 
@@ -1050,7 +1019,7 @@ def process_single_item_tuple(item_tuple):
     try: return extract_invoice_data_multiformat(file_bytes, mime_type)
     except Exception as e: return {"ERROR": str(e)}
 
-# --- TAB 2 CATALOG PARSER HELPER (FIXED FOR BOTH PDF & IMAGES) ---
+# --- TAB 2 CATALOG PARSER HELPER (CHUNKED PDF OCR FOR 100+ PAGE SHEETS) ---
 def parse_single_catalog_file(file_tuple):
     file_bytes, mime_type = file_tuple
     catalog_items = []
@@ -1063,7 +1032,6 @@ def parse_single_catalog_file(file_tuple):
             chunk_size = 5
             for start_idx in range(0, total_pages, chunk_size):
                 end_idx = min(start_idx + chunk_size, total_pages)
-                
                 for page_idx in range(start_idx, end_idx):
                     page = pdf_doc[page_idx]
                     pix = page.get_pixmap(dpi=120)
@@ -1071,7 +1039,6 @@ def parse_single_catalog_file(file_tuple):
                     images_to_process.append(img)
             pdf_doc.close()
         else:
-            # Direct Image Handling (.jpg, .png, .jpeg)
             img = Image.open(BytesIO(file_bytes))
             images_to_process.append(img)
 
@@ -1182,7 +1149,6 @@ def parse_single_catalog_file(file_tuple):
 
     except Exception:
         pass
-
     return catalog_items
 
 # --- REPORTLAB PDF GENERATOR ---
@@ -1337,8 +1303,11 @@ with tab_parser:
                         qty = float(row.get("Primary Quantity") or 1.0)
                         if qty <= 0: qty = 1.0
                         gst_rate = 0.0 if gst_bill_type == "Non-GST / Net Rate Bill (0% Tax)" else float(row.get("GST Rate") or 18.0)
+                        
+                        # GROUND TRUTH: Use the exact net printed taxable amount from the bill amount column
                         printed_taxable = float(row.get("Printed Taxable Amount") or 0.0)
                         base_rate_per_pc = printed_taxable / qty if qty > 0 else 0.0
+                        
                         raw_item_name = str(row.get("Item Name", "")).strip()
                         matched_sku = match_sku(raw_item_name)
                         
@@ -1361,7 +1330,7 @@ with tab_parser:
         st.markdown('<h3><span class="uos-num-badge">2</span>Live Inventory Audit Workspace</h3>', unsafe_allow_html=True)
         df = st.session_state["parsed_df"]
         
-        # DETERMINISTIC ACCOUNTING MATH ENGINE
+        # STRICT ACCOUNTING MATH ENGINE
         df["Current Quantity"] = pd.to_numeric(df["Current Quantity"], errors='coerce').fillna(1.0)
         df["Purchase Price"] = pd.to_numeric(df["Purchase Price"], errors='coerce').fillna(0.0)
         df["GST Rate"] = pd.to_numeric(df["GST Rate"], errors='coerce').fillna(18.0)
