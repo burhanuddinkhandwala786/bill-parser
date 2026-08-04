@@ -59,6 +59,8 @@ if "ocr_file_hash_cache" not in st.session_state:
     st.session_state["ocr_file_hash_cache"] = {}
 if "processed_invoice_keys" not in st.session_state:
     st.session_state["processed_invoice_keys"] = set()
+if "catalog_df" not in st.session_state:
+    st.session_state["catalog_df"] = None
 
 # --- UNIVERSAL OS — MODERN SAAS DESIGN SYSTEM ---
 st.markdown("""
@@ -1731,23 +1733,30 @@ with tab_parser:
             )
 
 # ==========================================
-# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (ULTRA-FAST & OPTIMIZED)
+# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (ULTRA-FAST & B2B ENTERPRISE SPEC)
 # ==========================================
 with tab_catalog:
-    st.subheader(f"📚 Multimodal Price Catalog Extractor ({ACTIVE_STORE_DISPLAY})")
-    st.caption("Extract product models, exact numeric prices, and categories from supplier PDF catalogs directly into an ERP import spreadsheet.")
+    st.subheader(f"📚 B2B Supplier Price List Extractor ({ACTIVE_STORE_DISPLAY})")
+    st.caption("Parse manufacturer list prices into Dealer Purchase Rates (Cost) and Retail Selling Prices for ERP import.")
 
-    catalog_file = st.file_uploader(
-        "Upload Supplier Price List Catalog (PDF or Image)",
-        type=["pdf", "png", "jpg", "jpeg"],
-        key="catalog_file_uploader"
-    )
+    col_cat_left, col_cat_right = st.columns([2, 1])
+
+    with col_cat_left:
+        catalog_file = st.file_uploader(
+            "Upload Supplier Price List Catalog (PDF or Image)",
+            type=["pdf", "png", "jpg", "jpeg"],
+            key="catalog_file_uploader"
+        )
+
+    with col_cat_right:
+        trade_discount_pct = st.number_input("Standard Trade Discount (%)", min_value=0.0, max_value=90.0, value=0.0, step=5.0, help="e.g. Set 50% if the sheet notes '50% discount in above prices'")
+        retail_markup_pct = st.number_input("Retail Selling Markup (%)", min_value=0.0, value=20.0, step=5.0, help="Markup added on top of Net Dealer Cost to calculate Selling Price")
 
     if catalog_file is not None:
         file_bytes = catalog_file.read()
         mime_type = "application/pdf" if catalog_file.name.lower().endswith(".pdf") else "image/jpeg"
 
-        if st.button("🚀 Process Price Catalog with Vision AI Engine", type="primary", use_container_width=True):
+        if st.button("🚀 Process Price Catalog with Vision AI Engine", type="primary", use_container_width=True, key="btn_run_catalog_ai"):
             catalog_items = []
 
             with st.status("Parsing visual catalog and extracting model numbers & prices...", expanded=True) as status_box:
@@ -1775,8 +1784,7 @@ with tab_catalog:
                     3. "Category": Product category (e.g. Door Skins, Laminates, Hardware). Default "General".
                     4. "Unit": PCS, BOX, SET, LTR, KG, SQFT, MTR. Default "PCS".
                     5. "GST Rate": GST percentage (0, 5, 12, 18, 28). Default 18.0.
-                    6. "Selling Price": Exact rate per piece or MRP as printed under RATE PER PCS / PRICE column (e.g. 500, 650, 600).
-                    7. "Purchase Price": Cost price if printed, else 0.0.
+                    6. "Gross Catalog Rate": Printed rate per piece under RATE PER PCS / PARTICULARS column (e.g. 500, 650, 600).
 
                     OUTPUT SCHEMA (STRICT JSON ONLY):
                     {
@@ -1787,8 +1795,7 @@ with tab_catalog:
                                 "Category": "General",
                                 "Unit": "PCS",
                                 "GST Rate": 18.0,
-                                "Selling Price": 0.0,
-                                "Purchase Price": 0.0
+                                "Gross Catalog Rate": 0.0
                             }
                         ]
                     }
@@ -1815,7 +1822,6 @@ with tab_catalog:
                         contents = [Image.open(buf), cat_prompt]
                         parsed_page = None
 
-                        # 1. Try Gemini Multi-Key / Multi-Model Loop
                         for key in shuffled_keys:
                             try:
                                 client = genai.Client(api_key=key)
@@ -1837,7 +1843,6 @@ with tab_catalog:
                             except Exception:
                                 continue
 
-                        # 2. Groq Llama 3.2 Fallback if Gemini failed
                         if not parsed_page and GROQ_AVAILABLE:
                             try:
                                 groq_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
@@ -1866,17 +1871,19 @@ with tab_catalog:
                                 model_code = str(prod.get("Model Code", "")).strip()
                                 full_title = f"{item_name} {model_code}".strip() if model_code and model_code not in item_name else item_name
 
-                                price_val = float(prod.get("Selling Price") or 0.0)
+                                gross_rate = float(prod.get("Gross Catalog Rate") or 0.0)
+                                net_dealer_cost = round(gross_rate * (1 - (trade_discount_pct / 100)), 2)
+                                selling_price = round(net_dealer_cost * (1 + (retail_markup_pct / 100)), 2)
 
-                                if full_title and price_val >= 0:
+                                if full_title and gross_rate >= 0:
                                     catalog_items.append({
                                         "Name": full_title,
-                                        "Model Code": model_code,
                                         "Category": str(prod.get("Category", "General")),
                                         "Unit": str(prod.get("Unit", "PCS")).upper(),
                                         "GST Rate": float(prod.get("GST Rate") or 18.0),
-                                        "Selling Price": price_val,
-                                        "Purchase Price": float(prod.get("Purchase Price") or 0.0)
+                                        "Printed List Rate ₹": gross_rate,
+                                        "Dealer Purchase Price (Cost) ₹": net_dealer_cost,
+                                        "Retail Selling Price (SP) ₹": selling_price
                                     })
 
                     status_box.update(label=f"✅ Extracted {len(catalog_items)} products from price list!", state="complete", expanded=False)
@@ -1888,7 +1895,7 @@ with tab_catalog:
                 st.session_state["catalog_df"] = pd.DataFrame(catalog_items)
                 st.rerun()
 
-    if "catalog_df" in st.session_state and not st.session_state["catalog_df"].empty:
+    if "catalog_df" in st.session_state and st.session_state["catalog_df"] is not None and not st.session_state["catalog_df"].empty:
         st.divider()
         st.markdown("#### 📋 Parsed Catalog Products Preview")
         
@@ -1899,19 +1906,19 @@ with tab_catalog:
             key="catalog_editor",
             column_config={
                 "Name": st.column_config.TextColumn("Product / Model Title", required=True),
-                "Model Code": st.column_config.TextColumn("Model No."),
                 "Category": st.column_config.TextColumn("Category"),
                 "Unit": st.column_config.TextColumn("Unit"),
                 "GST Rate": st.column_config.NumberColumn("GST %", format="%d%%"),
-                "Selling Price": st.column_config.NumberColumn("Selling Price (MRP) ₹", format="₹%.2f"),
-                "Purchase Price": st.column_config.NumberColumn("Purchase Price ₹", format="₹%.2f"),
+                "Printed List Rate ₹": st.column_config.NumberColumn("Printed List Rate ₹", format="₹%.2f"),
+                "Dealer Purchase Price (Cost) ₹": st.column_config.NumberColumn("Dealer Purchase Price (Cost) ₹", format="₹%.2f"),
+                "Retail Selling Price (SP) ₹": st.column_config.NumberColumn("Retail Selling Price (SP) ₹", format="₹%.2f"),
             }
         )
 
         c_cat1, c_cat2 = st.columns([1, 1])
 
         with c_cat1:
-            if st.button("📥 Import All Extracted Items into Master Catalog", type="primary", use_container_width=True):
+            if st.button("📥 Import All Extracted Items into Master Catalog", type="primary", use_container_width=True, key="btn_import_catalog_master"):
                 new_cat_records = []
                 for _, row in edited_cat_df.iterrows():
                     sku_name = str(row["Name"]).strip()
@@ -1921,7 +1928,7 @@ with tab_catalog:
                             "Category": str(row.get("Category", "General")),
                             "Default_Unit": str(row.get("Unit", "PCS")).upper(),
                             "GST_Rate": float(row.get("GST Rate", 18.0)),
-                            "Selling_Price": float(row.get("Selling Price", 0.0))
+                            "Selling_Price": float(row.get("Retail Selling Price (SP) ₹", 0.0))
                         })
                 
                 if new_cat_records:
@@ -1959,9 +1966,9 @@ with tab_catalog:
                 ws_cat.cell(row=row_idx, column=5, value="")
                 ws_cat.cell(row=row_idx, column=6, value=str(row.get("Category", "General")))
                 ws_cat.cell(row=row_idx, column=7, value=float(row.get("GST Rate", 18.0)))
-                ws_cat.cell(row=row_idx, column=8, value=float(row.get("Selling Price", 0.0)))
+                ws_cat.cell(row=row_idx, column=8, value=float(row.get("Retail Selling Price (SP) ₹", 0.0)))
                 ws_cat.cell(row=row_idx, column=9, value="")
-                ws_cat.cell(row=row_idx, column=10, value=float(row.get("Purchase Price", 0.0)))
+                ws_cat.cell(row=row_idx, column=10, value=float(row.get("Dealer Purchase Price (Cost) ₹", 0.0)))
 
             buf_cat = BytesIO()
             wb_cat.save(buf_cat)
@@ -1972,7 +1979,8 @@ with tab_catalog:
                 data=buf_cat.getvalue(),
                 file_name=f"{selected_store_slug}_Catalog_PriceList.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+                use_container_width=True,
+                key="btn_dl_catalog_excel"
             )
 
 # ==========================================
@@ -2057,7 +2065,6 @@ with tab_master:
 
     col_add, col_list = st.columns([1, 2])
     
-    # --- INSTANT SINGLE SKU SAVER ---
     with col_add:
         with st.container(border=True):
             st.markdown("#### ➕ Add Single Master SKU")
@@ -2074,7 +2081,6 @@ with tab_master:
                     st.toast(f"⚡ Saved '{clean_sku}' instantly!")
                     st.rerun()
                     
-    # --- COMPACT CHECKBOX MULTI-DELETE TABLE WITH LIVE SEARCH ---
     with col_list:
         with st.container(border=True):
             st.markdown("#### 📋 Catalog Register")
