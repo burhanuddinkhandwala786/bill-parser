@@ -43,7 +43,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- GLOBAL SESSION STATE INITIALIZATION (DEFENSIVE TOP-LEVEL) ---
+# --- GLOBAL SESSION STATE INITIALIZATION ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "user_store" not in st.session_state:
@@ -65,43 +65,33 @@ st.markdown("""
         --uos-primary-700: #3730A3;
         --uos-primary-50: #EEF2FF;
         --uos-primary-100: #E0E7FF;
-
         --uos-accent: #10B981;
         --uos-accent-600: #059669;
         --uos-accent-50: #ECFDF5;
-
         --uos-danger: #EF4444;
         --uos-danger-600: #DC2626;
         --uos-danger-50: #FEF2F2;
-
         --uos-warning: #F59E0B;
         --uos-warning-50: #FFFBEB;
-
         --uos-canvas: #F8FAFC;
         --uos-surface: #FFFFFF;
         --uos-surface-2: #F1F5F9;
         --uos-border: #E2E8F0;
         --uos-border-strong: #CBD5E1;
-
         --uos-text: #0F172A;
         --uos-text-secondary: #475569;
         --uos-text-muted: #64748B;
         --uos-text-inverse: #F8FAFC;
-
         --uos-radius-sm: 8px;
         --uos-radius: 12px;
         --uos-radius-lg: 16px;
         --uos-radius-xl: 20px;
-
         --uos-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
         --uos-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
         --uos-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
         --uos-shadow-md: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.05);
-
         --uos-focus-ring: 0 0 0 3px rgba(79, 70, 229, 0.20);
     }
-
-    /* Force Clean Canvas & Text Legibility Everywhere */
     html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
         -webkit-font-smoothing: antialiased;
@@ -119,8 +109,6 @@ st.markdown("""
         max-width: 1400px;
     }
     div[data-testid="InputInstructions"] { display: none !important; }
-
-    /* Crisp Heading System */
     h1, h2, h3, h4, h5, h6, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4 {
         font-family: 'Inter', sans-serif !important;
         color: var(--uos-text) !important;
@@ -141,325 +129,118 @@ st.markdown("""
         margin: 1.25rem 0 !important;
         opacity: 1 !important;
     }
-
-    /* Sidebar Interface */
     [data-testid="stSidebar"] {
         background: var(--uos-surface) !important;
         border-right: 1px solid var(--uos-border);
     }
     [data-testid="stSidebar"] > div:first-child { padding-top: 1.5rem; }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        font-size: 1rem !important;
-        font-weight: 600 !important;
-        color: var(--uos-text) !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
-        font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace !important;
-        font-size: 0.72rem !important;
-    }
     .uos-store-avatar {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 4px 2px 14px 2px;
+        display: flex; align-items: center; gap: 12px; padding: 4px 2px 14px 2px;
     }
     .uos-store-avatar .uos-avatar-circle {
-        width: 42px;
-        height: 42px;
-        border-radius: 12px;
+        width: 42px; height: 42px; border-radius: 12px;
         background: linear-gradient(135deg, var(--uos-primary) 0%, var(--uos-primary-700) 100%);
-        color: #FFFFFF;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 700;
-        font-size: 1rem;
-        letter-spacing: -0.02em;
-        box-shadow: var(--uos-shadow-sm);
-        flex-shrink: 0;
+        color: #FFFFFF; display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 1rem; flex-shrink: 0;
     }
-    .uos-store-avatar .uos-avatar-meta {
-        display: flex; flex-direction: column; min-width: 0;
-    }
+    .uos-store-avatar .uos-avatar-meta { display: flex; flex-direction: column; min-width: 0; }
     .uos-store-avatar .uos-avatar-name {
         font-weight: 600; color: var(--uos-text); font-size: 0.92rem;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .uos-store-avatar .uos-avatar-slug {
-        font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
-        font-size: 0.68rem; color: var(--uos-text-muted); letter-spacing: 0;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 0.68rem; color: var(--uos-text-muted);
     }
-    [data-testid="stSidebar"] .stButton > button {
-        background: var(--uos-surface) !important;
-        color: var(--uos-text-secondary) !important;
-        border: 1px solid var(--uos-border) !important;
-        box-shadow: none !important;
-        font-weight: 500 !important;
-    }
-    [data-testid="stSidebar"] .stButton > button:hover {
-        border-color: var(--uos-danger) !important;
-        color: var(--uos-danger) !important;
-        background: var(--uos-danger-50) !important;
-    }
-
-    /* Active Store Header Pill */
     .uos-store-pill {
         display: inline-flex; align-items: center; gap: 8px;
-        padding: 6px 14px 6px 10px;
-        background: var(--uos-primary-50);
-        color: var(--uos-primary);
-        border: 1px solid var(--uos-primary-100);
-        border-radius: 999px;
-        font-size: 0.82rem; font-weight: 600;
-        letter-spacing: 0.01em;
+        padding: 6px 14px 6px 10px; background: var(--uos-primary-50);
+        color: var(--uos-primary); border: 1px solid var(--uos-primary-100);
+        border-radius: 999px; font-size: 0.82rem; font-weight: 600;
     }
     .uos-store-pill .uos-dot {
-        width: 8px; height: 8px; border-radius: 50%;
-        background: var(--uos-accent);
-        box-shadow: 0 0 0 3px var(--uos-accent-50);
-        animation: uos-pulse 2.4s ease-in-out infinite;
+        width: 8px; height: 8px; border-radius: 50%; background: var(--uos-accent);
+        box-shadow: 0 0 0 3px var(--uos-accent-50); animation: uos-pulse 2.4s ease-in-out infinite;
     }
     .uos-store-pill .uos-pill-label {
-        font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
         font-size: 0.68rem; color: var(--uos-text-muted); margin-right: 2px;
         text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500;
     }
     @keyframes uos-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-
-    /* Navigation Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 4px;
-        border-bottom: 1px solid var(--uos-border);
-        background: transparent !important;
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid var(--uos-border); }
     .stTabs [data-baseweb="tab"] {
-        padding: 12px 18px !important;
-        background: transparent !important;
-        border-radius: 0 !important;
-        font-weight: 500 !important;
-        font-size: 0.92rem !important;
-        color: var(--uos-text-muted) !important;
-        border-bottom: 2px solid transparent !important;
-        transition: color 0.15s ease, border-color 0.15s ease;
-        margin-bottom: -1px !important;
+        padding: 12px 18px !important; background: transparent !important;
+        font-weight: 500 !important; font-size: 0.92rem !important; color: var(--uos-text-muted) !important;
+        border-bottom: 2px solid transparent !important; margin-bottom: -1px !important;
     }
-    .stTabs [data-baseweb="tab"]:hover { color: var(--uos-text) !important; background: transparent !important; }
     .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        color: var(--uos-primary) !important;
-        font-weight: 600 !important;
-        border-bottom-color: var(--uos-primary) !important;
+        color: var(--uos-primary) !important; font-weight: 600 !important; border-bottom-color: var(--uos-primary) !important;
     }
     .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
     .stTabs [data-baseweb="tab-panel"] { padding-top: 1.25rem; }
-
-    /* Metric Cards */
     [data-testid="stMetric"] {
-        background: var(--uos-surface) !important;
-        border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius-lg) !important;
-        padding: 18px 20px !important;
-        box-shadow: var(--uos-shadow-xs) !important;
-        min-height: 108px;
+        background: var(--uos-surface) !important; border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius-lg) !important; padding: 18px 20px !important;
+        box-shadow: var(--uos-shadow-xs) !important; min-height: 108px;
     }
     [data-testid="stMetricLabel"] {
-        font-size: 0.72rem !important;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--uos-text-muted) !important;
-        font-weight: 600 !important;
+        font-size: 0.72rem !important; text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--uos-text-muted) !important; font-weight: 600 !important;
     }
-    [data-testid="stMetricLabel"] p { color: var(--uos-text-muted) !important; }
     [data-testid="stMetricValue"] {
-        font-size: 1.75rem !important;
-        font-weight: 700 !important;
-        color: var(--uos-text) !important;
-        font-variant-numeric: tabular-nums;
-        letter-spacing: -0.02em !important;
-        margin-top: 4px;
+        font-size: 1.75rem !important; font-weight: 700 !important; color: var(--uos-text) !important;
+        letter-spacing: -0.02em !important; margin-top: 4px;
     }
-    [data-testid="stMetricValue"] div { color: var(--uos-text) !important; }
-
-    /* Bordered Section Wrapper & Form Cards */
     [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stForm"], [data-testid="stExpander"] {
-        border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius-lg) !important;
-        background: var(--uos-surface) !important;
-        box-shadow: var(--uos-shadow-xs) !important;
+        border: 1px solid var(--uos-border) !important; border-radius: var(--uos-radius-lg) !important;
+        background: var(--uos-surface) !important; box-shadow: var(--uos-shadow-xs) !important;
         padding: 18px 20px !important;
     }
-    div[data-testid="stColumn"] { display: flex; flex-direction: column; }
-    div[data-testid="stColumn"] > div { flex: 1; }
-    div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] { height: 100% !important; }
-
-    /* Buttons */
     .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
-        font-family: 'Inter', sans-serif !important;
-        font-weight: 600 !important;
-        font-size: 0.9rem !important;
-        letter-spacing: -0.005em !important;
-        border-radius: var(--uos-radius) !important;
-        padding: 10px 18px !important;
-        border: 1px solid var(--uos-border) !important;
-        background: var(--uos-surface) !important;
-        color: var(--uos-text) !important;
-        box-shadow: var(--uos-shadow-xs) !important;
+        font-family: 'Inter', sans-serif !important; font-weight: 600 !important;
+        font-size: 0.9rem !important; border-radius: var(--uos-radius) !important;
+        padding: 10px 18px !important; border: 1px solid var(--uos-border) !important;
+        background: var(--uos-surface) !important; color: var(--uos-text) !important;
     }
-    .stButton > button:hover, .stDownloadButton > button:hover, .stFormSubmitButton > button:hover {
-        border-color: var(--uos-border-strong) !important;
-        box-shadow: var(--uos-shadow-sm) !important;
-        transform: translateY(-1px);
+    .stButton > button[kind="primary"], .stDownloadButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"] {
+        background: var(--uos-primary) !important; color: #FFFFFF !important; border: 1px solid var(--uos-primary) !important;
     }
-    .stButton > button[kind="primary"],
-    .stDownloadButton > button[kind="primary"],
-    .stFormSubmitButton > button[kind="primary"] {
-        background: var(--uos-primary) !important;
-        color: #FFFFFF !important;
-        border: 1px solid var(--uos-primary) !important;
-        box-shadow: 0 1px 2px rgba(79, 70, 229, 0.15) !important;
+    .stTextInput input, .stNumberInput input, .stTextArea textarea, div[data-baseweb="input"] input, div[data-baseweb="select"] > div {
+        background: var(--uos-surface) !important; border: 1px solid var(--uos-border) !important;
+        border-radius: var(--uos-radius) !important; color: var(--uos-text) !important;
+        font-family: 'Inter', sans-serif !important; font-size: 0.92rem !important;
     }
-    .stButton > button[kind="primary"] p,
-    .stDownloadButton > button[kind="primary"] p,
-    .stFormSubmitButton > button[kind="primary"] p { color: #FFFFFF !important; }
-    .stButton > button[kind="primary"]:hover {
-        background: var(--uos-primary-600) !important;
-        border-color: var(--uos-primary-600) !important;
-    }
-
-    /* Input Controls & Spin Buttons */
-    .stTextInput input, .stNumberInput input, .stTextArea textarea,
-    div[data-baseweb="input"] input, div[data-baseweb="select"] > div {
-        background: var(--uos-surface) !important;
-        border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius) !important;
-        color: var(--uos-text) !important;
-        font-family: 'Inter', sans-serif !important;
-        font-size: 0.92rem !important;
-        box-shadow: none !important;
-    }
-    .stTextInput input, .stNumberInput input, .stTextArea textarea { padding: 10px 12px !important; }
-    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus,
-    div[data-baseweb="input"]:focus-within, div[data-baseweb="select"] > div:focus-within {
-        border-color: var(--uos-primary) !important;
-        box-shadow: var(--uos-focus-ring) !important;
-        outline: none !important;
-    }
-    [data-testid="stWidgetLabel"] label, [data-testid="stWidgetLabel"] p {
-        font-size: 0.85rem !important;
-        font-weight: 500 !important;
-        color: var(--uos-text-secondary) !important;
-        margin-bottom: 6px !important;
-    }
-    div[data-baseweb="spinbutton"] button {
-        background-color: var(--uos-surface-2) !important;
-        color: var(--uos-text) !important;
-        border-color: var(--uos-border) !important;
-    }
-
-    /* Radio Segmented Control Pills */
     [data-testid="stRadio"] > div[role="radiogroup"] {
-        display: inline-flex;
-        gap: 4px;
-        padding: 4px;
-        background: var(--uos-surface-2);
-        border: 1px solid var(--uos-border);
-        border-radius: 999px;
-        flex-wrap: wrap;
+        display: inline-flex; gap: 4px; padding: 4px; background: var(--uos-surface-2);
+        border: 1px solid var(--uos-border); border-radius: 999px; flex-wrap: wrap;
     }
     [data-testid="stRadio"] label {
-        margin: 0 !important;
-        padding: 6px 14px !important;
-        border-radius: 999px !important;
-        cursor: pointer;
-        font-size: 0.85rem !important;
-        font-weight: 500 !important;
-        color: var(--uos-text-secondary) !important;
-        background: transparent;
+        margin: 0 !important; padding: 6px 14px !important; border-radius: 999px !important;
+        font-size: 0.85rem !important; font-weight: 500 !important; color: var(--uos-text-secondary) !important;
     }
-    [data-testid="stRadio"] label:hover { color: var(--uos-text) !important; }
-    [data-testid="stRadio"] label > div:first-child { display: none !important; }
     [data-testid="stRadio"] label:has(input:checked) {
-        background: var(--uos-surface) !important;
-        color: var(--uos-primary) !important;
-        box-shadow: var(--uos-shadow-xs);
-        font-weight: 600 !important;
+        background: var(--uos-surface) !important; color: var(--uos-primary) !important; font-weight: 600 !important;
     }
-    [data-testid="stRadio"] label:has(input:checked) p { color: var(--uos-primary) !important; font-weight: 600 !important; }
-
-    /* Dropzone Upload Box */
     [data-testid="stFileUploaderDropzone"], section[data-testid="stFileUploadDropzone"] {
-        background: var(--uos-surface-2) !important;
-        border: 1.5px dashed var(--uos-border-strong) !important;
-        border-radius: var(--uos-radius-lg) !important;
-        padding: 24px !important;
+        background: var(--uos-surface-2) !important; border: 1.5px dashed var(--uos-border-strong) !important;
+        border-radius: var(--uos-radius-lg) !important; padding: 24px !important;
     }
-    [data-testid="stFileUploaderDropzoneInstructions"] div, [data-testid="stFileUploaderDropzone"] small {
-        color: var(--uos-text-muted) !important;
-    }
-
-    /* Expander Container */
-    [data-testid="stExpander"] summary, [data-testid="stExpander"] > details > summary {
-        padding: 14px 18px !important;
-        font-weight: 600 !important;
-        color: var(--uos-text) !important;
-        background: var(--uos-surface) !important;
-    }
-    [data-testid="stExpander"] summary:hover { background: var(--uos-surface-2) !important; }
-
-    /* Data Editor & DataFrame Override (Forces Clean White Table Surface) */
     [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
-        border: 1px solid var(--uos-border) !important;
-        border-radius: var(--uos-radius) !important;
-        overflow: hidden;
+        border: 1px solid var(--uos-border) !important; border-radius: var(--uos-radius) !important;
         background: var(--uos-surface) !important;
     }
-    .stDataFrame [role="grid"], [data-testid="stDataEditor"] [role="grid"] {
-        background-color: var(--uos-surface) !important;
-        color: var(--uos-text) !important;
-    }
-    .stDataFrame [role="columnheader"], [data-testid="stDataFrame"] [role="columnheader"] {
-        background: var(--uos-surface-2) !important;
-        font-weight: 600 !important;
-        color: var(--uos-text) !important;
-    }
-
-    /* Section Number Badge */
     .uos-num-badge {
         display: inline-flex; align-items: center; justify-content: center;
-        width: 26px; height: 26px; border-radius: 8px;
-        background: var(--uos-primary-50); color: var(--uos-primary);
-        font-weight: 700; font-size: 0.82rem; margin-right: 10px; vertical-align: -3px;
+        width: 26px; height: 26px; border-radius: 8px; background: var(--uos-primary-50);
+        color: var(--uos-primary); font-weight: 700; font-size: 0.82rem; margin-right: 10px;
     }
-
-    /* Auth Screen Lockup */
     .uos-auth-hero { text-align: center; padding: 20px 0 24px 0; }
     .uos-auth-mark {
         display: inline-flex; align-items: center; justify-content: center;
         width: 64px; height: 64px; border-radius: 20px;
         background: linear-gradient(135deg, var(--uos-primary) 0%, var(--uos-primary-700) 100%);
         color: #FFFFFF; font-size: 2rem; margin-bottom: 14px;
-        box-shadow: 0 10px 30px rgba(79, 70, 229, 0.28);
-    }
-    .uos-auth-title { font-size: 2rem; font-weight: 700; color: var(--uos-text); margin: 0; }
-    .uos-auth-tagline { color: var(--uos-text-muted); font-size: 0.98rem; margin-top: 6px; }
-
-    [data-testid="stProgress"] > div > div > div { background: var(--uos-primary) !important; }
-
-    /* MOBILE SPECIFIC RESPONSIVE OVERRIDES */
-    @media (max-width: 768px) {
-        .block-container {
-            padding-left: 0.75rem !important;
-            padding-right: 0.75rem !important;
-        }
-        div[data-testid="stColumn"] {
-            width: 100% !important;
-            margin-bottom: 12px !important;
-        }
-        [data-testid="stMetric"] {
-            padding: 12px !important;
-        }
-        .uos-store-pill {
-            margin-top: 8px;
-        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -522,7 +303,7 @@ def save_store_phone(store_slug: str, phone: str):
     except Exception:
         pass
 
-# --- AUTHENTICATION & MULTI-TENANT SESSION MANAGEMENT ---
+# --- AUTHENTICATION & SESSION MANAGEMENT ---
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
@@ -724,7 +505,7 @@ if st.sidebar.button("🚪 Logout", use_container_width=True):
 
 st.sidebar.divider()
 
-# --- MULTI-KEY & MULTI-MODEL FAIL-SAFE API POOL SETUP ---
+# --- MULTI-KEY POOL SETUP ---
 def get_api_key_pool():
     keys = []
     for i in range(1, 6):
@@ -861,7 +642,6 @@ def save_master(df: pd.DataFrame, store_slug: str):
             )
     load_master.clear()
 
-# --- ATOMIC OPTIMIZED SQL EXECUTORS ---
 def add_single_sku_direct(store_slug: str, sku_name: str, category: str, unit: str, gst_rate: float, selling_price: float):
     engine = get_db_engine()
     store_id = get_or_create_store_id(store_slug)
@@ -951,192 +731,102 @@ def get_known_selling_price(sku_name):
                 return float(price)
     return 0.0
 
-# --- FAIL-SAFE AI ENGINE WITH RANDOMIZED KEY LOAD BALANCING & GROQ FALLBACK ---
-def is_server_error(exception):
-    err_str = str(exception).lower()
-    return "503" in err_str or "unavailable" in err_str or "overloaded" in err_str or "429" in err_str or "resourceexhausted" in err_str
+# --- HIGH-PRECISION OCR EXTRACTION ENGINE ---
+def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
+    file_hash = hashlib.md5(file_bytes).hexdigest()
+    if file_hash in st.session_state.get("ocr_file_hash_cache", {}):
+        return st.session_state["ocr_file_hash_cache"][file_hash]
 
-@retry(
-    stop=stop_after_attempt(2),
-    wait=wait_exponential(multiplier=1, min=1, max=3),
-    retry=retry_if_exception(is_server_error),
-    reraise=True
-)
-def _call_gemini_with_retry(client, model_name, contents, config):
-    return client.models.generate_content(
-        model=model_name,
-        contents=contents,
-        config=config
-    )
+    if "pdf" in mime_type.lower():
+        contents = [types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")]
+    else:
+        img = Image.open(BytesIO(file_bytes)).convert("RGB")
+        
+        # High resolution preservation & clarity boost
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(1.15)
+        img.thumbnail((2048, 2048), Image.Resampling.LANCZOS)
+        
+        buffer = BytesIO()
+        img.save(buffer, format="JPEG", quality=92, optimize=True)
+        buffer.seek(0)
+        contents = [Image.open(buffer)]
 
-def extract_invoice_data_with_groq(file_bytes, mime_type="image/jpeg"):
-    groq_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
-    if not groq_key or not GROQ_AVAILABLE:
-        raise Exception("GROQ_API_KEY or groq package missing for fallback.")
-
-    base64_img = base64.b64encode(file_bytes).decode('utf-8')
     prompt = """
-    You are an enterprise financial OCR system for invoices.
-    OUTPUT STRICT JSON ONLY:
+    You are an expert Indian Financial B2B OCR System specializing in Hardware, Plywood, Laminates, and Building Material Tax Invoices.
+    Analyze the invoice image carefully and extract all line items with 100% mathematical accuracy.
+
+    EXTRACTION RULES:
+    1. Extract every single product line item, plus Freight/Transport or Round Off lines separately if listed as a row.
+    2. "Primary Quantity": Pure numeric count of physical items/pieces received (e.g. 70, 6, 1). If billed in Sq.Mtr or Sq.Ft, keep physical Pcs in Quantity and note measurement in item name if needed.
+    3. "Unit Base Rate": The printed base unit price per item before trade discount or tax.
+    4. "Discount Percent": Trade discount percentage explicitly written in discount columns (e.g., 50.0 for 50%).
+    5. "Printed Taxable Amount": The subtotal line amount BEFORE GST tax (after trade discount).
+    6. "GST Rate": Combined total GST percentage (e.g., 18.0 for 9% CGST + 9% SGST or 18% IGST).
+
+    STRICT JSON OUTPUT SCHEMA:
     {
-        "Supplier Company Name": "",
-        "Invoice Number": "",
-        "Invoice Date": "",
+        "Supplier Company Name": "Full Vendor Company Title",
+        "Invoice Number": "Invoice Number String",
+        "Invoice Date": "DD-MM-YYYY",
         "Line Items": [
             {
-                "Item Name": "",
+                "Item Name": "Full Product Description",
                 "Primary Quantity": 1.0,
                 "Unit": "PCS",
+                "Unit Base Rate": 0.0,
+                "Discount Percent": 0.0,
                 "Printed Taxable Amount": 0.0,
                 "GST Rate": 18.0,
-                "HSN Code": ""
+                "HSN Code": "HSN/SAC String"
             }
         ]
     }
     """
-
-    client = Groq(api_key=groq_key)
-    completion = client.chat.completions.create(
-        model="llama-3.2-11b-vision-preview",
-        response_format={"type": "json_object"},
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type};base64,{base64_img}"
-                        }
-                    }
-                ]
-            }
-        ],
-        temperature=0.1
+    contents.append(prompt)
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json",
+        temperature=0.0
     )
-
-    text_res = completion.choices[0].message.content.strip()
-    return json.loads(text_res)
-
-def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
-    # Defensive, Thread-Safe Session File Hash Cache Check
-    file_hash = hashlib.md5(file_bytes).hexdigest()
-    try:
-        cache = getattr(st.session_state, "ocr_file_hash_cache", {})
-        if file_hash in cache:
-            return cache[file_hash]
-    except Exception:
-        pass
-
-    # -------------------------------------------------------------
-    # TRY 1: PRIMARY GEMINI POOL (Shuffled API Keys for Load Balancing)
-    # -------------------------------------------------------------
-    try:
-        if "pdf" in mime_type.lower():
-            file_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
-            contents = [file_part]
-        else:
-            img = Image.open(BytesIO(file_bytes))
-            img_copy = img.copy()
-            if img_copy.mode in ("RGBA", "P"):
-                img_copy = img_copy.convert("RGB")
-            
-            # FAST PRE-PROCESSING FOR BLURRY/DARK IMAGES
-            # Enhance contrast and sharpness slightly to speed up OCR parsing accuracy
-            enhancer = ImageEnhance.Contrast(img_copy)
-            img_copy = enhancer.enhance(1.2)
-            sharpness = ImageEnhance.Sharpness(img_copy)
-            img_copy = sharpness.enhance(1.5)
-            
-            # Optimized Thumbnail Downsizing for lightning-fast inference
-            img_copy.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
-            
-            buffer = BytesIO()
-            img_copy.save(buffer, format="JPEG", quality=85, optimize=True)
-            buffer.seek(0)
-            contents = [Image.open(buffer)]
-
-        prompt = """
-        You are an enterprise financial OCR system for wholesale, retail, plywood, hardware, and building material invoices.
-
-        CRITICAL EXTRACTION & GROUND-TRUTH RULES:
-        1. "Supplier Company Name": Main vendor/seller title from bill top header.
-        2. "Invoice Number": Invoice/Bill number string if present, else "".
-        3. "Invoice Date": Date string if present, else "".
-        4. "Line Items": Extract every product row accurately.
-           - "Item Name": Full product title or description. Read handwritten notes and pen edits carefully.
-           - "Primary Quantity": Pure numeric count of physical pieces/sheets/boxes received (e.g., 6.0, 1.0, 270.12).
-           - "Unit": Unit string (PCS, SQM, SQFT, BOX, KG, LTR, NOS, SET). Default to "PCS".
-           - "Printed Taxable Amount": ABSOLUTE GROUND TRUTH. Extract the printed line subtotal/amount value before tax directly from the bill's "Amount" column.
-           - "GST Rate": Total GST percentage as a pure number (0, 5, 12, 18, 28). Default to 18.0.
-           - "HSN Code": HSN/SAC code as string. If missing, "".
-
-        OUTPUT SCHEMA (STRICT JSON ONLY):
-        {
-            "Supplier Company Name": "Vendor Title",
-            "Invoice Number": "",
-            "Invoice Date": "",
-            "Line Items": [
-                {
-                    "Item Name": "Description",
-                    "Primary Quantity": 1.0,
-                    "Unit": "PCS",
-                    "Printed Taxable Amount": 0.0,
-                    "GST Rate": 18.0,
-                    "HSN Code": ""
-                }
-            ]
-        }
-        """
-        
-        contents.append(prompt)
-        config = types.GenerateContentConfig(response_mime_type="application/json")
-        candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
-        
-        # Load Balance Gemini Keys Randomly Per Execution Request
-        shuffled_keys = list(API_KEYS_POOL)
-        random.shuffle(shuffled_keys)
-
-        for api_key in shuffled_keys:
-            try:
-                client = genai.Client(api_key=api_key)
-                for model_name in candidate_models:
-                    try:
-                        response = _call_gemini_with_retry(client, model_name, contents, config)
-                        text_res = response.text.strip()
-                        if text_res.startswith("```json"):
-                            text_res = text_res[7:-3].strip()
-                        elif text_res.startswith("```"):
-                            text_res = text_res[3:-3].strip()
-                        
-                        parsed_res = json.loads(text_res)
-                        try:
-                            st.session_state["ocr_file_hash_cache"][file_hash] = parsed_res
-                        except Exception:
-                            pass
-                        return parsed_res
-                    except Exception:
-                        continue
-            except Exception:
-                continue
-        
-        raise Exception("All Gemini API keys failed or quota exhausted.")
-
-    # -------------------------------------------------------------
-    # TRY 2: FAIL-SAFE FALLBACK TO GROQ LLAMA 3.2 VISION
-    # -------------------------------------------------------------
-    except Exception as gemini_err:
+    
+    client = genai.Client(api_key=random.choice(API_KEYS_POOL))
+    candidate_models = ['gemini-2.5-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash-lite']
+    
+    parsed_json = None
+    for model_name in candidate_models:
         try:
-            st.toast("⚡ Gemini quota limit reached. Auto-switching to Groq Llama Vision Engine...")
-            parsed_res = extract_invoice_data_with_groq(file_bytes, mime_type)
-            try:
-                st.session_state["ocr_file_hash_cache"][file_hash] = parsed_res
-            except Exception:
-                pass
-            return parsed_res
-        except Exception as groq_err:
-            raise Exception(f"All Primary (Gemini) and Secondary (Groq) AI services failed: {groq_err}")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config
+            )
+            text_res = response.text.strip()
+            if text_res.startswith("```json"):
+                text_res = text_res[7:-3].strip()
+            elif text_res.startswith("```"):
+                text_res = text_res[3:-3].strip()
+            parsed_json = json.loads(text_res)
+            break
+        except Exception:
+            continue
+
+    if not parsed_json:
+        raise Exception("Failed to process document with Vision AI models.")
+
+    # Mathematical Verification & Correction Layer
+    for item in parsed_json.get("Line Items", []):
+        qty = float(item.get("Primary Quantity") or 1.0)
+        rate = float(item.get("Unit Base Rate") or 0.0)
+        disc = float(item.get("Discount Percent") or 0.0)
+        printed_taxable = float(item.get("Printed Taxable Amount") or 0.0)
+        
+        # Verify subtotal mathematically
+        expected_taxable = round(qty * rate * (1.0 - (disc / 100.0)), 2)
+        if printed_taxable == 0.0 and expected_taxable > 0:
+            item["Printed Taxable Amount"] = expected_taxable
+
+    st.session_state["ocr_file_hash_cache"][file_hash] = parsed_json
+    return parsed_json
 
 def process_single_item_tuple(item_tuple):
     file_bytes, mime_type = item_tuple
@@ -1152,38 +842,20 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
         
     buffer = BytesIO()
     doc = SimpleDocTemplate(
-        buffer, 
-        pagesize=letter, 
-        rightMargin=36, 
-        leftMargin=36, 
-        topMargin=36, 
-        bottomMargin=36
+        buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36
     )
     story = []
     styles = getSampleStyleSheet()
 
     title_style = ParagraphStyle(
-        'DocTitle', 
-        parent=styles['Heading1'], 
-        fontSize=20, 
-        leading=24, 
-        textColor=colors.HexColor('#1E3A8A'), 
-        fontName='Helvetica-Bold',
-        spaceAfter=4
+        'DocTitle', parent=styles['Heading1'], fontSize=20, leading=24,
+        textColor=colors.HexColor('#1E3A8A'), fontName='Helvetica-Bold', spaceAfter=4
     )
     subtitle_style = ParagraphStyle(
-        'DocSubtitle', 
-        parent=styles['Normal'], 
-        fontSize=9.5, 
-        leading=13, 
-        textColor=colors.HexColor('#4B5563')
+        'DocSubtitle', parent=styles['Normal'], fontSize=9.5, leading=13, textColor=colors.HexColor('#4B5563')
     )
     meta_label = ParagraphStyle(
-        'MetaLabel', 
-        parent=styles['Normal'], 
-        fontSize=9, 
-        leading=12, 
-        textColor=colors.HexColor('#374151')
+        'MetaLabel', parent=styles['Normal'], fontSize=9, leading=12, textColor=colors.HexColor('#374151')
     )
 
     story.append(Paragraph("OFFICIAL QUOTATION", title_style))
@@ -1217,14 +889,10 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     cell_right = ParagraphStyle('CellR', fontSize=8, leading=11, textColor=colors.HexColor('#111827'), alignment=2)
 
     table_data = [[
-        Paragraph("S.No", hdr_center), 
-        Paragraph("Item Description", hdr_left), 
-        Paragraph("Qty", hdr_center), 
-        Paragraph("Unit", hdr_center), 
-        Paragraph("MRP (Rs.)", hdr_right),
-        Paragraph("Disc (%)", hdr_center),
-        Paragraph("Final Rate (Rs.)", hdr_right), 
-        Paragraph("Total (Rs.)", hdr_right)
+        Paragraph("S.No", hdr_center), Paragraph("Item Description", hdr_left), 
+        Paragraph("Qty", hdr_center), Paragraph("Unit", hdr_center), 
+        Paragraph("MRP (Rs.)", hdr_right), Paragraph("Disc (%)", hdr_center),
+        Paragraph("Final Rate (Rs.)", hdr_right), Paragraph("Total (Rs.)", hdr_right)
     ]]
 
     for i, row in quote_df.iterrows():
@@ -1234,24 +902,17 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
         line_total = float(row['Total Value (₹)'])
         
         table_data.append([
-            Paragraph(str(i + 1), cell_center),
-            Paragraph(str(row["Item Name"]), cell_left),
-            Paragraph(f"{float(row['Quantity']):g}", cell_center),
-            Paragraph(str(row["Unit"]), cell_center),
-            Paragraph(f"Rs. {mrp_val:,.2f}", cell_right),
-            Paragraph(f"{disc_val:g}%" if disc_val > 0 else "-", cell_center),
-            Paragraph(f"Rs. {final_rate:,.2f}", cell_right),
-            Paragraph(f"Rs. {line_total:,.2f}", cell_right)
+            Paragraph(str(i + 1), cell_center), Paragraph(str(row["Item Name"]), cell_left),
+            Paragraph(f"{float(row['Quantity']):g}", cell_center), Paragraph(str(row["Unit"]), cell_center),
+            Paragraph(f"Rs. {mrp_val:,.2f}", cell_right), Paragraph(f"{disc_val:g}%" if disc_val > 0 else "-", cell_center),
+            Paragraph(f"Rs. {final_rate:,.2f}", cell_right), Paragraph(f"Rs. {line_total:,.2f}", cell_right)
         ])
 
     item_table = Table(table_data, colWidths=[25, 175, 35, 35, 70, 45, 75, 80])
     item_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, 0), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
-        ('TOPPADDING', (0, 1), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 5), ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E5E7EB')),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')])
     ]))
@@ -1259,13 +920,8 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     story.append(Spacer(1, 14))
 
     total_style = ParagraphStyle(
-        'GrandTotal', 
-        parent=styles['Heading2'], 
-        fontSize=13, 
-        leading=16, 
-        textColor=colors.HexColor('#1E3A8A'), 
-        fontName='Helvetica-Bold',
-        alignment=2
+        'GrandTotal', parent=styles['Heading2'], fontSize=13, leading=16,
+        textColor=colors.HexColor('#1E3A8A'), fontName='Helvetica-Bold', alignment=2
     )
     story.append(Paragraph(f"<b>Grand Total: Rs. {grand_total:,.2f}</b>", total_style))
 
@@ -1292,14 +948,12 @@ with tab_parser:
 
     st.divider()
 
-    # --- EASY STREAMLINED QUOTATION GENERATOR ---
     with st.expander("📄 Generate Customer Quotation (On-the-go)", expanded=False):
         st.caption("Create a professional PDF quote instantly either by manual quick entry or auto-calculating from an audited purchase bill.")
         
         saved_phone = st.session_state["user_store"].get("phone") or get_store_phone(selected_store_slug)
         q_tab_manual, q_tab_bill = st.tabs(["✍️ Quick Manual Entry", "📥 Auto-Quote from Parsed Bill"])
         
-        # --- MODE 1: MANUAL QUICK QUOTATION ---
         with q_tab_manual:
             col_m1, col_m2 = st.columns([2, 2])
             with col_m1:
@@ -1338,7 +992,6 @@ with tab_parser:
             )
             
             st.session_state["manual_quote_data"] = edited_manual_df.copy()
-            
             calc_manual_df = edited_manual_df.copy()
             calc_manual_df["Quantity"] = pd.to_numeric(calc_manual_df["Quantity"], errors='coerce').fillna(1.0)
             calc_manual_df["MRP (₹)"] = pd.to_numeric(calc_manual_df.get("MRP / Base Rate (₹)", 0.0), errors='coerce').fillna(0.0)
@@ -1346,7 +999,6 @@ with tab_parser:
             
             marked_up_mrp = (calc_manual_df["MRP (₹)"] * (1 + (manual_markup_pct / 100))).round(2)
             calc_manual_df["MRP (₹)"] = marked_up_mrp
-            
             calc_manual_df["Customer Unit Price (₹)"] = (calc_manual_df["MRP (₹)"] * (1 - (calc_manual_df["Discount (%)"] / 100))).round(2)
             calc_manual_df["Total Value (₹)"] = (calc_manual_df["Quantity"] * calc_manual_df["Customer Unit Price (₹)"]).round(2)
             
@@ -1374,10 +1026,7 @@ with tab_parser:
                             use_container_width=True,
                             key="dl_man_pdf"
                         )
-                    else:
-                        st.warning("⚠️ 'reportlab' library is missing in environment.")
 
-        # --- MODE 2: AUTO-QUOTATION FROM PARSED BILL ---
         with q_tab_bill:
             if "parsed_df" not in st.session_state or st.session_state["parsed_df"].empty:
                 st.info("ℹ️ No parsed bill found. Upload a bill below or use 'Quick Manual Entry' above.")
@@ -1460,12 +1109,10 @@ with tab_parser:
                     "Bill Tax Status:", 
                     ["Taxable GST Bill", "Non-GST / Net Rate Bill (0% Tax)"], 
                     horizontal=True,
-                    key="gst_bill_type_toggle",
-                    help="Non-GST overrides tax rate to 0% across all extracted items."
+                    key="gst_bill_type_toggle"
                 )
             
             staged_file_tuples = []
-            
             if upload_mode == "📸 Direct Camera Snap":
                 cam_photo = st.camera_input("Take a photo of the purchase bill", key="direct_cam_input")
                 if cam_photo is not None:
@@ -1492,7 +1139,6 @@ with tab_parser:
                 st.caption(f"Mode: **{tax_status_str}**")
             else:
                 st.info("No files staged.")
-                st.caption("Snap a photo or drop purchase bills to begin structured extraction.")
 
     if staged_file_tuples:
         st.write("")
@@ -1523,31 +1169,16 @@ with tab_parser:
                     supplier = parsed_json.get("Supplier Company Name", "Unknown Supplier")
                     inv_num = parsed_json.get("Invoice Number", "")
                     inv_date = parsed_json.get("Invoice Date", "")
-                    
-                    # Soft Duplicate Invoice Detection
-                    if inv_num:
-                        duplicate_key = f"{supplier.strip().upper()}_{inv_num.strip().upper()}"
-                        if duplicate_key in st.session_state.get("processed_invoice_keys", set()):
-                            st.warning(f"⚠️ Notice: Invoice '{inv_num}' from '{supplier}' was already ingested earlier.")
-                        else:
-                            if "processed_invoice_keys" not in st.session_state:
-                                st.session_state["processed_invoice_keys"] = set()
-                            st.session_state["processed_invoice_keys"].add(duplicate_key)
 
                     for row in parsed_json.get("Line Items", []):
                         qty = float(row.get("Primary Quantity") or 1.0)
                         if qty <= 0: qty = 1.0
                         
-                        if gst_bill_type == "Non-GST / Net Rate Bill (0% Tax)":
-                            gst_rate = 0.0
-                        else:
-                            gst_rate = float(row.get("GST Rate") or 18.0)
-                            
+                        gst_rate = 0.0 if gst_bill_type == "Non-GST / Net Rate Bill (0% Tax)" else float(row.get("GST Rate") or 18.0)
                         printed_taxable = float(row.get("Printed Taxable Amount") or 0.0)
                         hsn_sac = str(row.get("HSN Code") or "").strip()
                         
                         base_rate_per_pc = printed_taxable / qty if qty > 0 else 0.0
-                        
                         raw_item_name = str(row.get("Item Name", "")).strip()
                         matched_sku = match_sku(raw_item_name)
                         known_selling = get_known_selling_price(matched_sku)
@@ -1613,24 +1244,16 @@ with tab_parser:
         c_m2.metric("Stock Quantities by UOM", uom_summary_str)
         c_m3.metric("Taxable Base (Excl. GST)", f"₹{total_taxable:,.2f}")
         
-        round_off_val = st.sidebar.number_input("Bill Round-Off Adjustment (₹)", value=0.0, step=0.05, format="%.2f", help="Adjust to match paper invoice total exactly.")
+        round_off_val = st.sidebar.number_input("Bill Round-Off Adjustment (₹)", value=0.0, step=0.05, format="%.2f")
         final_bill_total = subtotal_incl_tax + round_off_val
         c_m4.metric("Grand Total (GST Paid)", f"₹{final_bill_total:,.2f}", delta=f"GST Tax: ₹{total_gst:,.2f}")
         
         st.write("")
         
         display_columns = [
-            "Raw Vendor Item",
-            "Official SKU",
-            "Current Quantity",
-            "Unit",
-            "HSN/SAC",
-            "Purchase Price",
-            "Line Total (Excl. GST)",
-            "GST Rate",
-            "Unit Cost (GST Paid) ₹",
-            "Line Total (Incl. GST)",
-            "Selling Price"
+            "Raw Vendor Item", "Official SKU", "Current Quantity", "Unit", "HSN/SAC",
+            "Purchase Price", "Line Total (Excl. GST)", "GST Rate",
+            "Unit Cost (GST Paid) ₹", "Line Total (Incl. GST)", "Selling Price"
         ]
         
         edited_display_df = st.data_editor(
@@ -1832,7 +1455,6 @@ with tab_master:
 
     col_add, col_list = st.columns([1, 2])
     
-    # --- INSTANT SINGLE SKU SAVER ---
     with col_add:
         with st.container(border=True):
             st.markdown("#### ➕ Add Single Master SKU")
@@ -1849,7 +1471,6 @@ with tab_master:
                     st.toast(f"⚡ Saved '{clean_sku}' instantly!")
                     st.rerun()
                     
-    # --- COMPACT CHECKBOX MULTI-DELETE TABLE WITH LIVE SEARCH ---
     with col_list:
         with st.container(border=True):
             st.markdown("#### 📋 Catalog Register")
@@ -1930,7 +1551,7 @@ with tab_guide:
         ### How to Process & Sync Invoices:
         1. **Select Store:** Choose your active store location in the left sidebar directory.
         2. **Upload Bills:** Drop images, PDFs, or click a photo directly with your camera in **Tab 1**. Select whether the bill is Taxable GST or Non-GST.
-        3. **Run AI Engine:** Click **Run AI Invoice Parsing Engine** to extract structured line items.
+        3. **Run AI Engine:** Click **Process Invoices with Fast AI Engine** to extract structured line items.
         4. **Audit Workspace:** Check quantities, HSN codes, landed purchase rates, and mapped SKUs.
         5. **Generate Quote (Optional):** Open the Quotation expander to quickly quote a customer with your Profit Markup (%).
         6. **Download Import File:** Generate the `.xlsx` spreadsheet.
