@@ -50,7 +50,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- GLOBAL SESSION STATE INITIALIZATION ---
+# --- GLOBAL SESSION STATE INITIALIZATION (DEFENSIVE TOP-LEVEL) ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "user_store" not in st.session_state:
@@ -62,7 +62,7 @@ if "processed_invoice_keys" not in st.session_state:
 if "catalog_df" not in st.session_state:
     st.session_state["catalog_df"] = None
 
-# --- DESIGN SYSTEM ---
+# --- UNIVERSAL OS — MODERN SAAS DESIGN SYSTEM ---
 st.markdown("""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1733,11 +1733,11 @@ with tab_parser:
             )
 
 # ==========================================
-# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (SIMPLIFIED & CLEAN)
+# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (PURE LOOKUP SPEC)
 # ==========================================
 with tab_catalog:
-    st.subheader(f"📚 B2B Supplier Price List Extractor ({ACTIVE_STORE_DISPLAY})")
-    st.caption("Extract raw dealer prices and product models directly from supplier PDF catalogs into an Excel spreadsheet.")
+    st.subheader(f"📚 Supplier Price List & Catalog Extractor ({ACTIVE_STORE_DISPLAY})")
+    st.caption("Extract raw model names and printed catalog rates directly from supplier price lists into a clean lookup spreadsheet.")
 
     col_cat_left, col_cat_right = st.columns([2, 1])
 
@@ -1749,22 +1749,22 @@ with tab_catalog:
         )
 
     with col_cat_right:
-        price_list_tax_status = st.radio(
-            "Price List Tax Status:",
+        catalog_tax_type = st.radio(
+            "Catalog Tax Status:",
             ["Taxable GST Rate", "Non-GST / Net Rate"],
             horizontal=True,
-            key="catalog_tax_status_toggle",
-            help="Select whether the printed rates on the catalog sheet are taxable GST or Net Non-GST rates."
+            key="cat_tax_status_radio",
+            help="Select whether the printed catalog prices include GST or are net rates."
         )
 
     if catalog_file is not None:
         file_bytes = catalog_file.read()
         mime_type = "application/pdf" if catalog_file.name.lower().endswith(".pdf") else "image/jpeg"
 
-        if st.button("🚀 Process Price Catalog with Vision AI Engine", type="primary", use_container_width=True, key="btn_run_catalog_ai"):
+        if st.button("🚀 Extract Price List with Vision AI", type="primary", use_container_width=True, key="btn_run_catalog_ai"):
             catalog_items = []
 
-            with st.status("Parsing visual catalog and extracting model numbers & prices...", expanded=True) as status_box:
+            with st.status("Parsing visual price list and extracting model names & rates...", expanded=True) as status_box:
                 try:
                     images_to_process = []
                     if "pdf" in mime_type and PYMUPDF_AVAILABLE:
@@ -1789,7 +1789,7 @@ with tab_catalog:
                     3. "Category": Product category (e.g. Door Skins, Laminates, Hardware). Default "General".
                     4. "Unit": PCS, BOX, SET, LTR, KG, SQFT, MTR. Default "PCS".
                     5. "GST Rate": GST percentage (0, 5, 12, 18, 28). Default 18.0.
-                    6. "Dealer Rate": Printed rate per piece or MRP as printed under RATE PER PCS / PARTICULARS column (e.g. 500, 650, 600).
+                    6. "Dealer Rate": Printed rate per piece or MRP as printed under RATE PER PCS / PRICE column (e.g. 500, 650, 600).
 
                     OUTPUT SCHEMA (STRICT JSON ONLY):
                     {
@@ -1876,22 +1876,22 @@ with tab_catalog:
                                 model_code = str(prod.get("Model Code", "")).strip()
                                 full_title = f"{item_name} {model_code}".strip() if model_code and model_code not in item_name else item_name
 
-                                printed_dealer_rate = float(prod.get("Dealer Rate") or 0.0)
-                                gst_rate_val = 0.0 if price_list_tax_status == "Non-GST / Net Rate" else float(prod.get("GST Rate") or 18.0)
+                                printed_rate = float(prod.get("Dealer Rate") or 0.0)
+                                gst_val = 0.0 if catalog_tax_type == "Non-GST / Net Rate" else float(prod.get("GST Rate") or 18.0)
 
-                                if full_title and printed_dealer_rate >= 0:
+                                if full_title and printed_rate >= 0:
                                     catalog_items.append({
                                         "Model Name / Description": full_title,
-                                        "Dealer Rate ₹": printed_dealer_rate,
-                                        "GST Rate %": gst_rate_val,
+                                        "Catalog Rate ₹": printed_rate,
+                                        "GST Rate %": gst_val,
                                         "Unit": str(prod.get("Unit", "PCS")).upper(),
                                         "Category": str(prod.get("Category", "General"))
                                     })
 
-                    status_box.update(label=f"✅ Extracted {len(catalog_items)} products from price list!", state="complete", expanded=False)
+                    status_box.update(label=f"✅ Extracted {len(catalog_items)} items from price list!", state="complete", expanded=False)
 
                 except Exception as cat_err:
-                    status_box.update(label=f"❌ Failed to parse catalog: {cat_err}", state="error")
+                    status_box.update(label=f"❌ Failed to parse price list: {cat_err}", state="error")
 
             if catalog_items:
                 st.session_state["catalog_df"] = pd.DataFrame(catalog_items)
@@ -1899,7 +1899,7 @@ with tab_catalog:
 
     if "catalog_df" in st.session_state and st.session_state["catalog_df"] is not None and not st.session_state["catalog_df"].empty:
         st.divider()
-        st.markdown("#### 📋 Parsed Catalog Products Preview")
+        st.markdown("#### 📋 Extracted Price List Preview")
         
         edited_cat_df = st.data_editor(
             st.session_state["catalog_df"],
@@ -1908,7 +1908,7 @@ with tab_catalog:
             key="catalog_editor",
             column_config={
                 "Model Name / Description": st.column_config.TextColumn("Model Name / Description", required=True),
-                "Dealer Rate ₹": st.column_config.NumberColumn("Dealer Rate ₹", format="₹%.2f"),
+                "Catalog Rate ₹": st.column_config.NumberColumn("Catalog Rate ₹", format="₹%.2f"),
                 "GST Rate %": st.column_config.NumberColumn("GST Rate %", format="%d%%"),
                 "Unit": st.column_config.TextColumn("Unit"),
                 "Category": st.column_config.TextColumn("Category"),
@@ -1928,7 +1928,7 @@ with tab_catalog:
                             "Category": str(row.get("Category", "General")),
                             "Default_Unit": str(row.get("Unit", "PCS")).upper(),
                             "GST_Rate": float(row.get("GST Rate %", 18.0)),
-                            "Selling_Price": float(row.get("Dealer Rate ₹", 0.0))
+                            "Selling_Price": float(row.get("Catalog Rate ₹", 0.0))
                         })
                 
                 if new_cat_records:
@@ -1948,7 +1948,7 @@ with tab_catalog:
             ws_cat.cell(row=2, column=1, value="Supplier Price List")
             ws_cat.cell(row=3, column=1, value=f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}")
 
-            exact_headers = ["S. No.", "Model Name / Description", "Dealer Rate ₹", "GST Rate %", "Unit", "Category"]
+            exact_headers = ["S. No.", "Model Name / Description", "Catalog Rate ₹", "GST Rate %", "Unit", "Category"]
 
             for col_num, header_title in enumerate(exact_headers, 1):
                 ws_cat.cell(row=5, column=col_num, value=header_title)
@@ -1957,7 +1957,7 @@ with tab_catalog:
                 row_idx = 6 + i
                 ws_cat.cell(row=row_idx, column=1, value=i + 1)
                 ws_cat.cell(row=row_idx, column=2, value=str(row["Model Name / Description"]).strip())
-                ws_cat.cell(row=row_idx, column=3, value=float(row.get("Dealer Rate ₹", 0.0)))
+                ws_cat.cell(row=row_idx, column=3, value=float(row.get("Catalog Rate ₹", 0.0)))
                 ws_cat.cell(row=row_idx, column=4, value=float(row.get("GST Rate %", 18.0)))
                 ws_cat.cell(row=row_idx, column=5, value=str(row.get("Unit", "PCS")).upper())
                 ws_cat.cell(row=row_idx, column=6, value=str(row.get("Category", "General")))
