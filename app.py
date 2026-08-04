@@ -50,7 +50,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- GLOBAL SESSION STATE INITIALIZATION (DEFENSIVE TOP-LEVEL) ---
+# --- GLOBAL SESSION STATE INITIALIZATION ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "user_store" not in st.session_state:
@@ -62,7 +62,7 @@ if "processed_invoice_keys" not in st.session_state:
 if "catalog_df" not in st.session_state:
     st.session_state["catalog_df"] = None
 
-# --- UNIVERSAL OS — MODERN SAAS DESIGN SYSTEM ---
+# --- DESIGN SYSTEM ---
 st.markdown("""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1129,6 +1129,132 @@ def process_single_item_tuple(item_tuple):
     except Exception as e:
         return {"ERROR": str(e)}
 
+# --- TAB 2 CATALOG PARSER HELPER (SINGLE FILE) ---
+def parse_single_catalog_file(file_tuple):
+    file_bytes, mime_type = file_tuple
+    catalog_items = []
+    try:
+        images_to_process = []
+        if "pdf" in mime_type.lower() and PYMUPDF_AVAILABLE:
+            pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
+            for page_idx in range(len(pdf_doc)):
+                page = pdf_doc[page_idx]
+                pix = page.get_pixmap(dpi=110)
+                img = Image.open(BytesIO(pix.tobytes("jpeg")))
+                images_to_process.append(img)
+            pdf_doc.close()
+        else:
+            img = Image.open(BytesIO(file_bytes))
+            images_to_process.append(img)
+
+        cat_prompt = """
+        You are an enterprise catalog OCR system for building materials, laminates, door skins, plywood, and hardware.
+        Extract the Supplier/Brand Company Name (e.g. DAARVI, GREENPLY, EBCO) from the page header, and every product row listed in the table or price list.
+
+        CRITICAL EXTRACTION RULES:
+        1. "Supplier Name": Brand or company name publishing this price list.
+        2. "Item Name": Full product title or description.
+        3. "Model Code": Model number or series code if present, else "".
+        4. "Unit": PCS, BOX, SET, LTR, KG, SQFT, MTR. Default "PCS".
+        5. "GST Rate": GST percentage (0, 5, 12, 18, 28). Default 18.0.
+        6. "Dealer Rate": Printed rate per piece or MRP as printed under RATE PER PCS / PRICE column.
+
+        OUTPUT SCHEMA (STRICT JSON ONLY):
+        {
+            "Supplier Name": "Brand Name",
+            "Products": [
+                {
+                    "Item Name": "",
+                    "Model Code": "",
+                    "Unit": "PCS",
+                    "GST Rate": 18.0,
+                    "Dealer Rate": 0.0
+                }
+            ]
+        }
+        """
+
+        config = types.GenerateContentConfig(response_mime_type="application/json")
+        candidate_models = ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']
+        shuffled_keys = list(API_KEYS_POOL)
+        random.shuffle(shuffled_keys)
+
+        for img_obj in images_to_process:
+            if img_obj.mode in ("RGBA", "P"):
+                img_obj = img_obj.convert("RGB")
+            img_obj.thumbnail((800, 800), Image.Resampling.BILINEAR)
+
+            buf = BytesIO()
+            img_obj.save(buf, format="JPEG", quality=75, optimize=True)
+            buf.seek(0)
+            raw_page_bytes = buf.getvalue()
+            
+            contents = [Image.open(BytesIO(raw_page_bytes)), cat_prompt]
+            parsed_page = None
+
+            for key in shuffled_keys:
+                try:
+                    client = genai.Client(api_key=key)
+                    for model_name in candidate_models:
+                        try:
+                            res = _call_gemini_with_retry(client, model_name, contents, config)
+                            text_res = res.text.strip()
+                            if text_res.startswith("```json"):
+                                text_res = text_res[7:-3].strip()
+                            elif text_res.startswith("```"):
+                                text_res = text_res[3:-3].strip()
+                            
+                            parsed_page = json.loads(text_res)
+                            break
+                        except Exception:
+                            continue
+                    if parsed_page:
+                        break
+                except Exception:
+                    continue
+
+            if not parsed_page and GROQ_AVAILABLE:
+                try:
+                    groq_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+                    if groq_key:
+                        base64_img = base64.b64encode(raw_page_bytes).decode('utf-8')
+                        groq_client = Groq(api_key=groq_key)
+                        comp = groq_client.chat.completions.create(
+                            model="llama-3.2-11b-vision-preview",
+                            response_format={"type": "json_object"},
+                            messages=[{
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": cat_prompt},
+                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
+                                ]
+                            }],
+                            temperature=0.1
+                        )
+                        parsed_page = json.loads(comp.choices[0].message.content.strip())
+                except Exception:
+                    pass
+
+            if parsed_page:
+                supplier_name = str(parsed_page.get("Supplier Name", "GENERIC VENDOR")).strip().upper()
+                for prod in parsed_page.get("Products", []):
+                    item_name = str(prod.get("Item Name", "")).strip()
+                    model_code = str(prod.get("Model Code", "")).strip()
+                    full_title = f"{item_name} {model_code}".strip() if model_code and model_code not in item_name else item_name
+
+                    printed_rate = float(prod.get("Dealer Rate") or 0.0)
+                    if full_title and printed_rate >= 0:
+                        catalog_items.append({
+                            "Supplier / Brand": supplier_name,
+                            "Model Name / Description": full_title,
+                            "Catalog Rate ₹": printed_rate,
+                            "GST Rate %": float(prod.get("GST Rate") or 18.0),
+                            "Unit": str(prod.get("Unit", "PCS")).upper()
+                        })
+    except Exception:
+        pass
+    return catalog_items
+
 # --- REPORTLAB PDF GENERATOR ---
 def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
     if not REPORTLAB_AVAILABLE:
@@ -1731,19 +1857,20 @@ with tab_parser:
             )
 
 # ==========================================
-# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (PURE LOOKUP SPEC)
+# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (BATCH CONCURRENT & GROUPED BY BRAND)
 # ==========================================
 with tab_catalog:
-    st.subheader(f"📚 Supplier Price List & Catalog Extractor ({ACTIVE_STORE_DISPLAY})")
-    st.caption("Extract raw model names and printed catalog rates directly from supplier price lists into a clean lookup spreadsheet.")
+    st.subheader(f"📚 Multi-Vendor Price List & Catalog Batch Extractor ({ACTIVE_STORE_DISPLAY})")
+    st.caption("Drop multiple supplier price lists/catalogs at once. The AI will extract and automatically group products together by company/brand name.")
 
     col_cat_left, col_cat_right = st.columns([2, 1])
 
     with col_cat_left:
-        catalog_file = st.file_uploader(
-            "Upload Supplier Price List Catalog (PDF or Image)",
+        catalog_files = st.file_uploader(
+            "Upload Multiple Supplier Price Lists (PDFs or Images)",
             type=["pdf", "png", "jpg", "jpeg"],
-            key="catalog_file_uploader"
+            accept_multiple_files=True,
+            key="catalog_file_uploader_batch"
         )
 
     with col_cat_right:
@@ -1755,147 +1882,41 @@ with tab_catalog:
             help="Select whether the printed catalog prices include GST or are net rates."
         )
 
-    if catalog_file is not None:
-        file_bytes = catalog_file.read()
-        mime_type = "application/pdf" if catalog_file.name.lower().endswith(".pdf") else "image/jpeg"
+    if catalog_files:
+        st_files_tuples = []
+        for f in catalog_files:
+            mtype = "application/pdf" if f.name.lower().endswith(".pdf") else "image/jpeg"
+            st_files_tuples.append((f.read(), mtype))
 
-        if st.button("🚀 Extract Price List with Vision AI", type="primary", use_container_width=True, key="btn_run_catalog_ai"):
-            catalog_items = []
+        if st.button("🚀 Process All Price Lists Concurrently", type="primary", use_container_width=True, key="btn_run_catalog_ai"):
+            all_extracted_catalog_items = []
 
-            with st.status("Parsing visual price list and extracting model names & rates...", expanded=True) as status_box:
+            with st.status(f"Parsing {len(st_files_tuples)} price catalog(s) simultaneously in parallel...", expanded=True) as status_box:
                 try:
-                    images_to_process = []
-                    if "pdf" in mime_type and PYMUPDF_AVAILABLE:
-                        pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
-                        for page_idx in range(len(pdf_doc)):
-                            page = pdf_doc[page_idx]
-                            pix = page.get_pixmap(dpi=110)
-                            img = Image.open(BytesIO(pix.tobytes("jpeg")))
-                            images_to_process.append(img)
-                        pdf_doc.close()
-                    else:
-                        img = Image.open(BytesIO(file_bytes))
-                        images_to_process.append(img)
-
-                    cat_prompt = """
-                    You are an enterprise catalog OCR system for building materials, laminates, door skins, plywood, and hardware.
-                    Extract every product row listed in the table or price list on this page.
-
-                    CRITICAL EXTRACTION RULES:
-                    1. "Item Name": Full product title or description (e.g. "DAARVI CD SERIES (7x3.25) 39\"").
-                    2. "Model Code": Model number, series code, or dimension code if present, else "".
-                    3. "Category": Product category (e.g. Door Skins, Laminates, Hardware). Default "General".
-                    4. "Unit": PCS, BOX, SET, LTR, KG, SQFT, MTR. Default "PCS".
-                    5. "GST Rate": GST percentage (0, 5, 12, 18, 28). Default 18.0.
-                    6. "Dealer Rate": Printed rate per piece or MRP as printed under RATE PER PCS / PRICE column (e.g. 500, 650, 600).
-
-                    OUTPUT SCHEMA (STRICT JSON ONLY):
-                    {
-                        "Products": [
-                            {
-                                "Item Name": "",
-                                "Model Code": "",
-                                "Category": "General",
-                                "Unit": "PCS",
-                                "GST Rate": 18.0,
-                                "Dealer Rate": 0.0
-                            }
-                        ]
-                    }
-                    """
-
-                    config = types.GenerateContentConfig(response_mime_type="application/json")
-                    candidate_models = ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']
-                    shuffled_keys = list(API_KEYS_POOL)
-                    random.shuffle(shuffled_keys)
-
-                    for img_obj in images_to_process:
-                        if img_obj.mode in ("RGBA", "P"):
-                            img_obj = img_obj.convert("RGB")
-
-                        img_obj.thumbnail((800, 800), Image.Resampling.BILINEAR)
-
-                        buf = BytesIO()
-                        img_obj.save(buf, format="JPEG", quality=75, optimize=True)
-                        buf.seek(0)
-                        raw_page_bytes = buf.getvalue()
+                    with ThreadPoolExecutor(max_workers=min(len(st_files_tuples), 6)) as executor:
+                        results = list(executor.map(parse_single_catalog_file, st_files_tuples))
                         
-                        contents = [Image.open(BytesIO(raw_page_bytes)), cat_prompt]
-                        parsed_page = None
+                    for file_items in results:
+                        for prod in file_items:
+                            gst_val = 0.0 if catalog_tax_type == "Non-GST / Net Rate" else float(prod.get("GST Rate %", 18.0))
+                            prod["GST Rate %"] = gst_val
+                            all_extracted_catalog_items.append(prod)
 
-                        for key in shuffled_keys:
-                            try:
-                                client = genai.Client(api_key=key)
-                                for model_name in candidate_models:
-                                    try:
-                                        res = _call_gemini_with_retry(client, model_name, contents, config)
-                                        text_res = res.text.strip()
-                                        if text_res.startswith("```json"):
-                                            text_res = text_res[7:-3].strip()
-                                        elif text_res.startswith("```"):
-                                            text_res = text_res[3:-3].strip()
-                                        
-                                        parsed_page = json.loads(text_res)
-                                        break
-                                    except Exception:
-                                        continue
-                                if parsed_page:
-                                    break
-                            except Exception:
-                                continue
-
-                        if not parsed_page and GROQ_AVAILABLE:
-                            try:
-                                groq_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
-                                if groq_key:
-                                    base64_img = base64.b64encode(raw_page_bytes).decode('utf-8')
-                                    groq_client = Groq(api_key=groq_key)
-                                    comp = groq_client.chat.completions.create(
-                                        model="llama-3.2-11b-vision-preview",
-                                        response_format={"type": "json_object"},
-                                        messages=[{
-                                            "role": "user",
-                                            "content": [
-                                                {"type": "text", "text": cat_prompt},
-                                                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
-                                            ]
-                                        }],
-                                        temperature=0.1
-                                    )
-                                    parsed_page = json.loads(comp.choices[0].message.content.strip())
-                            except Exception:
-                                pass
-
-                        if parsed_page:
-                            for prod in parsed_page.get("Products", []):
-                                item_name = str(prod.get("Item Name", "")).strip()
-                                model_code = str(prod.get("Model Code", "")).strip()
-                                full_title = f"{item_name} {model_code}".strip() if model_code and model_code not in item_name else item_name
-
-                                printed_rate = float(prod.get("Dealer Rate") or 0.0)
-                                gst_val = 0.0 if catalog_tax_type == "Non-GST / Net Rate" else float(prod.get("GST Rate") or 18.0)
-
-                                if full_title and printed_rate >= 0:
-                                    catalog_items.append({
-                                        "Model Name / Description": full_title,
-                                        "Catalog Rate ₹": printed_rate,
-                                        "GST Rate %": gst_val,
-                                        "Unit": str(prod.get("Unit", "PCS")).upper(),
-                                        "Category": str(prod.get("Category", "General"))
-                                    })
-
-                    status_box.update(label=f"✅ Extracted {len(catalog_items)} items from price list!", state="complete", expanded=False)
+                    status_box.update(label=f"✅ Successfully extracted & grouped {len(all_extracted_catalog_items)} total items!", state="complete", expanded=False)
 
                 except Exception as cat_err:
-                    status_box.update(label=f"❌ Failed to parse price list: {cat_err}", state="error")
+                    status_box.update(label=f"❌ Failed to parse price lists: {cat_err}", state="error")
 
-            if catalog_items:
-                st.session_state["catalog_df"] = pd.DataFrame(catalog_items)
+            if all_extracted_catalog_items:
+                df_raw_cat = pd.DataFrame(all_extracted_catalog_items)
+                # Sort cleanly by Supplier / Brand name so X company products stay together
+                df_sorted_cat = df_raw_cat.sort_values(by=["Supplier / Brand", "Model Name / Description"]).reset_index(drop=True)
+                st.session_state["catalog_df"] = df_sorted_cat
                 st.rerun()
 
     if "catalog_df" in st.session_state and st.session_state["catalog_df"] is not None and not st.session_state["catalog_df"].empty:
         st.divider()
-        st.markdown("#### 📋 Extracted Price List Preview")
+        st.markdown("#### 📋 Extracted & Brand-Grouped Price Lists Preview")
         
         edited_cat_df = st.data_editor(
             st.session_state["catalog_df"],
@@ -1903,25 +1924,25 @@ with tab_catalog:
             use_container_width=True,
             key="catalog_editor",
             column_config={
+                "Supplier / Brand": st.column_config.TextColumn("Supplier / Brand", required=True),
                 "Model Name / Description": st.column_config.TextColumn("Model Name / Description", required=True),
                 "Catalog Rate ₹": st.column_config.NumberColumn("Catalog Rate ₹", format="₹%.2f"),
                 "GST Rate %": st.column_config.NumberColumn("GST Rate %", format="%d%%"),
                 "Unit": st.column_config.TextColumn("Unit"),
-                "Category": st.column_config.TextColumn("Category"),
             }
         )
 
         c_cat1, c_cat2 = st.columns([1, 1])
 
         with c_cat1:
-            if st.button("📥 Import Extracted Items into Master Catalog", type="primary", use_container_width=True, key="btn_import_catalog_master"):
+            if st.button("📥 Import Grouped Items into Master Catalog", type="primary", use_container_width=True, key="btn_import_catalog_master"):
                 new_cat_records = []
                 for _, row in edited_cat_df.iterrows():
-                    sku_name = str(row["Model Name / Description"]).strip()
+                    sku_name = f"[{row.get('Supplier / Brand', 'GENERIC')}] {row['Model Name / Description']}".strip()
                     if sku_name:
                         new_cat_records.append({
                             "Official_SKU_Name": sku_name,
-                            "Category": str(row.get("Category", "General")),
+                            "Category": str(row.get("Supplier / Brand", "General")),
                             "Default_Unit": str(row.get("Unit", "PCS")).upper(),
                             "GST_Rate": float(row.get("GST Rate %", 18.0)),
                             "Selling_Price": float(row.get("Catalog Rate ₹", 0.0))
@@ -1938,13 +1959,13 @@ with tab_catalog:
         with c_cat2:
             wb_cat = openpyxl.Workbook()
             ws_cat = wb_cat.active
-            ws_cat.title = "Price List"
+            ws_cat.title = "Price Lists"
 
             ws_cat.cell(row=1, column=1, value=ACTIVE_STORE_DISPLAY)
-            ws_cat.cell(row=2, column=1, value="Supplier Price List")
+            ws_cat.cell(row=2, column=1, value="Consolidated Supplier Price Lists")
             ws_cat.cell(row=3, column=1, value=f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}")
 
-            exact_headers = ["S. No.", "Model Name / Description", "Catalog Rate ₹", "GST Rate %", "Unit", "Category"]
+            exact_headers = ["S. No.", "Supplier / Brand", "Model Name / Description", "Catalog Rate ₹", "GST Rate %", "Unit"]
 
             for col_num, header_title in enumerate(exact_headers, 1):
                 ws_cat.cell(row=5, column=col_num, value=header_title)
@@ -1952,20 +1973,20 @@ with tab_catalog:
             for i, row in edited_cat_df.iterrows():
                 row_idx = 6 + i
                 ws_cat.cell(row=row_idx, column=1, value=i + 1)
-                ws_cat.cell(row=row_idx, column=2, value=str(row["Model Name / Description"]).strip())
-                ws_cat.cell(row=row_idx, column=3, value=float(row.get("Catalog Rate ₹", 0.0)))
-                ws_cat.cell(row=row_idx, column=4, value=float(row.get("GST Rate %", 18.0)))
-                ws_cat.cell(row=row_idx, column=5, value=str(row.get("Unit", "PCS")).upper())
-                ws_cat.cell(row=row_idx, column=6, value=str(row.get("Category", "General")))
+                ws_cat.cell(row=row_idx, column=2, value=str(row.get("Supplier / Brand", "")).strip())
+                ws_cat.cell(row=row_idx, column=3, value=str(row["Model Name / Description"]).strip())
+                ws_cat.cell(row=row_idx, column=4, value=float(row.get("Catalog Rate ₹", 0.0)))
+                ws_cat.cell(row=row_idx, column=5, value=float(row.get("GST Rate %", 18.0)))
+                ws_cat.cell(row=row_idx, column=6, value=str(row.get("Unit", "PCS")).upper())
 
             buf_cat = BytesIO()
             wb_cat.save(buf_cat)
             buf_cat.seek(0)
 
             st.download_button(
-                label="📥 Download Price List Excel File",
+                label="📥 Download Grouped Price List Excel File",
                 data=buf_cat.getvalue(),
-                file_name=f"{selected_store_slug}_Price_List.xlsx",
+                file_name=f"{selected_store_slug}_Grouped_Price_Lists.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
                 key="btn_dl_catalog_excel"
