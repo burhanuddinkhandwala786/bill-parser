@@ -646,7 +646,7 @@ def reset_user_password(email: str, new_password: str):
             text("UPDATE stores SET password = :password WHERE email = :email"),
             {"password": hashed_pwd, "email": email.strip().lower()}
         )
-    return True, "Password updated successfully! Please log in with your new password."
+    return True, "Password updated successfully!"
 
 # --- FAST SESSION & AUTO-LOGIN RESOLUTION ---
 if not st.session_state["authenticated"]:
@@ -688,7 +688,6 @@ if not st.session_state["authenticated"]:
                             st.session_state["authenticated"] = True
                             st.session_state["user_store"] = store_data
                             st.query_params["session"] = store_data["slug"]
-                            st.success(f"Welcome back, {store_data['display_name']}!")
                             st.rerun()
                         else:
                             st.error("Invalid email or password.")
@@ -707,7 +706,8 @@ if not st.session_state["authenticated"]:
                         success, msg = register_user(reg_store, reg_email, reg_password)
                         if success: st.success(msg)
                         else: st.error(msg)
-                    else: st.warning("All fields are required.")
+                    else:
+                        st.warning("All fields are required.")
 
         with auth_tab3:
             with st.form("reset_password_form"):
@@ -1050,11 +1050,12 @@ def process_single_item_tuple(item_tuple):
     try: return extract_invoice_data_multiformat(file_bytes, mime_type)
     except Exception as e: return {"ERROR": str(e)}
 
-# --- TAB 2 CATALOG PARSER HELPER (CHUNKED PDF OCR FOR 100+ PAGE SHEETS) ---
+# --- TAB 2 CATALOG PARSER HELPER (FIXED FOR BOTH PDF & IMAGES) ---
 def parse_single_catalog_file(file_tuple):
     file_bytes, mime_type = file_tuple
     catalog_items = []
     try:
+        images_to_process = []
         if "pdf" in mime_type.lower() and PYMUPDF_AVAILABLE:
             pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
             total_pages = min(len(pdf_doc), 150)
@@ -1062,137 +1063,126 @@ def parse_single_catalog_file(file_tuple):
             chunk_size = 5
             for start_idx in range(0, total_pages, chunk_size):
                 end_idx = min(start_idx + chunk_size, total_pages)
-                images_to_process = []
                 
                 for page_idx in range(start_idx, end_idx):
                     page = pdf_doc[page_idx]
                     pix = page.get_pixmap(dpi=120)
                     img = Image.open(BytesIO(pix.tobytes("jpeg")))
                     images_to_process.append(img)
-
-                cat_prompt = """
-                You are an enterprise catalog OCR system for building materials, laminates, door skins, plywood, and hardware.
-                Extract the Supplier/Brand Company Name (e.g. DAARVI, GODREJ, GREENPLY) from the page header, and EVERY SINGLE product model and price row listed in the table.
-
-                CRITICAL EXTRACTION RULES:
-                1. "Supplier Name": Exact brand or company name publishing this price list. Standardize variations (e.g. "DA ARVI" -> "DAARVI").
-                2. "Item Name": Full product title or description.
-                3. "Model Code": Model number, item code, or series code if present, else "".
-                4. "Unit": PCS, BOX, SET, LTR, KG, SQFT, MTR. Default "PCS".
-                5. "GST Rate": GST percentage (0, 5, 12, 18, 28). Default 18.0.
-                6. "Dealer Rate": Printed price/rate per piece as printed under RATE / PRICE column.
-
-                OUTPUT SCHEMA (STRICT JSON ONLY):
-                {
-                    "Supplier Name": "Brand Name",
-                    "Products": [
-                        {
-                            "Item Name": "",
-                            "Model Code": "",
-                            "Unit": "PCS",
-                            "GST Rate": 18.0,
-                            "Dealer Rate": 0.0
-                        }
-                    ]
-                }
-                """
-
-                config = types.GenerateContentConfig(response_mime_type="application/json")
-                candidate_models = ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']
-                shuffled_keys = list(API_KEYS_POOL)
-                random.shuffle(shuffled_keys)
-
-                for img_obj in images_to_process:
-                    if img_obj.mode in ("RGBA", "P"): img_obj = img_obj.convert("RGB")
-                    img_obj.thumbnail((900, 900), Image.Resampling.BILINEAR)
-
-                    buf = BytesIO()
-                    img_obj.save(buf, format="JPEG", quality=80, optimize=True)
-                    buf.seek(0)
-                    raw_page_bytes = buf.getvalue()
-                    
-                    contents = [Image.open(BytesIO(raw_page_bytes)), cat_prompt]
-                    parsed_page = None
-
-                    for key in shuffled_keys:
-                        try:
-                            client = genai.Client(api_key=key)
-                            for model_name in candidate_models:
-                                try:
-                                    res = _call_gemini_with_retry(client, model_name, contents, config)
-                                    text_res = res.text.strip()
-                                    if text_res.startswith("```json"): text_res = text_res[7:-3].strip()
-                                    elif text_res.startswith("```"): text_res = text_res[3:-3].strip()
-                                    parsed_page = json.loads(text_res)
-                                    break
-                                except Exception: continue
-                            if parsed_page: break
-                        except Exception: continue
-
-                    if parsed_page:
-                        raw_supplier = str(parsed_page.get("Supplier Name", "GENERIC VENDOR")).strip().upper()
-                        supplier_name = "DAARVI" if "DA" in raw_supplier and "ARVI" in raw_supplier else raw_supplier
-                        
-                        for prod in parsed_page.get("Products", []):
-                            item_name = str(prod.get("Item Name", "")).strip()
-                            model_code = str(prod.get("Model Code", "")).strip()
-                            full_title = f"{item_name} {model_code}".strip() if model_code and model_code not in item_name else item_name
-                            printed_rate = float(prod.get("Dealer Rate") or 0.0)
-                            if full_title and printed_rate >= 0:
-                                catalog_items.append({
-                                    "Supplier / Brand": supplier_name,
-                                    "Model Name / Description": full_title,
-                                    "Catalog Rate ₹": printed_rate,
-                                    "GST Rate %": float(prod.get("GST Rate") or 18.0),
-                                    "Unit": str(prod.get("Unit", "PCS")).upper()
-                                })
-                del images_to_process
-                gc.collect()
             pdf_doc.close()
         else:
+            # Direct Image Handling (.jpg, .png, .jpeg)
             img = Image.open(BytesIO(file_bytes))
-            if img.mode in ("RGBA", "P"): img = img.convert("RGB")
-            img.thumbnail((900, 900), Image.Resampling.BILINEAR)
+            images_to_process.append(img)
 
-            buf = BytesIO()
-            img.save(buf, format="JPEG", quality=80, optimize=True)
-            buf.seek(0)
-            raw_page_bytes = buf.getvalue()
-            
-            cat_prompt = """Extract Supplier Name and product table rows. JSON ONLY: {"Supplier Name": "", "Products": [{"Item Name": "", "Model Code": "", "Unit": "PCS", "GST Rate": 18.0, "Dealer Rate": 0.0}]}"""
-            contents = [Image.open(BytesIO(raw_page_bytes)), cat_prompt]
-            config = types.GenerateContentConfig(response_mime_type="application/json")
-            
-            parsed_page = None
-            for key in API_KEYS_POOL:
-                try:
-                    client = genai.Client(api_key=key)
-                    res = _call_gemini_with_retry(client, 'gemini-2.5-flash', contents, config)
-                    text_res = res.text.strip()
-                    if text_res.startswith("```json"): text_res = text_res[7:-3].strip()
-                    elif text_res.startswith("```"): text_res = text_res[3:-3].strip()
-                    parsed_page = json.loads(text_res)
-                    break
-                except Exception: continue
+        cat_prompt = """
+        You are an enterprise catalog OCR system for building materials, laminates, door skins, plywood, and hardware.
+        Extract the Supplier/Brand Company Name (e.g. DAARVI, GODREJ, GREENPLY) from the header, and EVERY SINGLE product model and price row listed in the table or image.
 
-            if parsed_page:
-                raw_supplier = str(parsed_page.get("Supplier Name", "GENERIC VENDOR")).strip().upper()
-                supplier_name = "DAARVI" if "DA" in raw_supplier and "ARVI" in raw_supplier else raw_supplier
-                for prod in parsed_page.get("Products", []):
-                    item_name = str(prod.get("Item Name", "")).strip()
-                    model_code = str(prod.get("Model Code", "")).strip()
-                    full_title = f"{item_name} {model_code}".strip() if model_code and model_code not in item_name else item_name
-                    printed_rate = float(prod.get("Dealer Rate") or 0.0)
-                    if full_title and printed_rate >= 0:
-                        catalog_items.append({
-                            "Supplier / Brand": supplier_name,
-                            "Model Name / Description": full_title,
-                            "Catalog Rate ₹": printed_rate,
-                            "GST Rate %": float(prod.get("GST Rate") or 18.0),
-                            "Unit": str(prod.get("Unit", "PCS")).upper()
-                        })
+        CRITICAL EXTRACTION RULES:
+        1. "Supplier Name": Exact brand or company name publishing this price list. Standardize variations (e.g. "DA ARVI" -> "DAARVI").
+        2. "Item Name": Full product title or description.
+        3. "Model Code": Model number, item code, or series code if present, else "".
+        4. "Unit": PCS, BOX, SET, LTR, KG, SQFT, MTR. Default "PCS".
+        5. "GST Rate": GST percentage (0, 5, 12, 18, 28). Default 18.0.
+        6. "Dealer Rate": Printed price/rate per piece as printed under RATE / PRICE / AMOUNT column.
+
+        OUTPUT SCHEMA (STRICT JSON ONLY):
+        {
+            "Supplier Name": "Brand Name",
+            "Products": [
+                {
+                    "Item Name": "Product Description",
+                    "Model Code": "Code",
+                    "Unit": "PCS",
+                    "GST Rate": 18.0,
+                    "Dealer Rate": 0.0
+                }
+            ]
+        }
+        """
+
+        config = types.GenerateContentConfig(response_mime_type="application/json")
+        candidate_models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.5-flash-lite']
+        shuffled_keys = list(API_KEYS_POOL)
+        random.shuffle(shuffled_keys)
+
+        for img_obj in images_to_process:
+            try:
+                if img_obj.mode in ("RGBA", "P"): img_obj = img_obj.convert("RGB")
+                img_obj.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
+
+                buf = BytesIO()
+                img_obj.save(buf, format="JPEG", quality=85, optimize=True)
+                buf.seek(0)
+                raw_page_bytes = buf.getvalue()
+                
+                contents = [Image.open(BytesIO(raw_page_bytes)), cat_prompt]
+                parsed_page = None
+
+                for key in shuffled_keys:
+                    try:
+                        client = genai.Client(api_key=key)
+                        for model_name in candidate_models:
+                            try:
+                                res = _call_gemini_with_retry(client, model_name, contents, config)
+                                text_res = res.text.strip()
+                                if text_res.startswith("```json"): text_res = text_res[7:-3].strip()
+                                elif text_res.startswith("```"): text_res = text_res[3:-3].strip()
+                                parsed_page = json.loads(text_res)
+                                break
+                            except Exception: continue
+                        if parsed_page: break
+                    except Exception: continue
+
+                if not parsed_page and GROQ_AVAILABLE:
+                    try:
+                        groq_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+                        if groq_key:
+                            base64_img = base64.b64encode(raw_page_bytes).decode('utf-8')
+                            groq_client = Groq(api_key=groq_key)
+                            comp = groq_client.chat.completions.create(
+                                model="llama-3.2-11b-vision-preview",
+                                response_format={"type": "json_object"},
+                                messages=[{
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "text", "text": cat_prompt},
+                                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
+                                    ]
+                                }],
+                                temperature=0.1
+                            )
+                            parsed_page = json.loads(comp.choices[0].message.content.strip())
+                    except Exception:
+                        pass
+
+                if parsed_page:
+                    raw_supplier = str(parsed_page.get("Supplier Name", "GENERIC VENDOR")).strip().upper()
+                    supplier_name = "DAARVI" if ("DA" in raw_supplier and "ARVI" in raw_supplier) else raw_supplier
+                    
+                    for prod in parsed_page.get("Products", []):
+                        item_name = str(prod.get("Item Name", "")).strip()
+                        model_code = str(prod.get("Model Code", "")).strip()
+                        full_title = f"{item_name} {model_code}".strip() if model_code and model_code not in item_name else item_name
+                        printed_rate = float(prod.get("Dealer Rate") or 0.0)
+                        if full_title and printed_rate >= 0:
+                            catalog_items.append({
+                                "Supplier / Brand": supplier_name,
+                                "Model Name / Description": full_title,
+                                "Catalog Rate ₹": printed_rate,
+                                "GST Rate %": float(prod.get("GST Rate") or 18.0),
+                                "Unit": str(prod.get("Unit", "PCS")).upper()
+                            })
+            except Exception:
+                continue
+            finally:
+                del img_obj
+                gc.collect()
+
     except Exception:
         pass
+
     return catalog_items
 
 # --- REPORTLAB PDF GENERATOR ---
