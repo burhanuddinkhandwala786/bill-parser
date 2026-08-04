@@ -1766,7 +1766,7 @@ with tab_parser:
             )
 
 # ==========================================
-# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (ULTRA-FASTPURE &LOOKUP B2B ENTERPRISE SPEC)
+# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (PURE LOOKUP SPEC)
 # ==========================================
 with tab_catalog:
     st.subheader(f"📚 Supplier Price List & Catalog Extractor ({ACTIVE_STORE_DISPLAY})")
@@ -1794,10 +1794,10 @@ with tab_catalog:
         file_bytes = catalog_file.read()
         mime_type = "application/pdf" if catalog_file.name.lower().endswith(".pdf") else "image/jpeg"
 
-        if st.button("🚀 ProcessExtract Price CatalogList with Vision AI Engine", type="primary", use_container_width=True, key="btn_run_catalog_ai"):
+        if st.button("🚀 Extract Price List with Vision AI", type="primary", use_container_width=True, key="btn_run_catalog_ai"):
             catalog_items = []
 
-            with st.status("Parsing visual catalogprice list and extracting model numbersnames & pricesrates...", expanded=True) as status_box:
+            with st.status("Parsing visual price list and extracting model names & rates...", expanded=True) as status_box:
                 try:
                     images_to_process = []
                     if "pdf" in mime_type and PYMUPDF_AVAILABLE:
@@ -1822,7 +1822,7 @@ with tab_catalog:
                     3. "Category": Product category (e.g. Door Skins, Laminates, Hardware). Default "General".
                     4. "Unit": PCS, BOX, SET, LTR, KG, SQFT, MTR. Default "PCS".
                     5. "GST Rate": GST percentage (0, 5, 12, 18, 28). Default 18.0.
-                    6. "GrossDealer Catalog Rate": Printed rate per piece or MRP as printed under RATE PER PCS / PARTICULARSPRICE column (e.g. 500, 650, 600).
+                    6. "Dealer Rate": Printed rate per piece or MRP as printed under RATE PER PCS / PRICE column (e.g. 500, 650, 600).
 
                     OUTPUT SCHEMA (STRICT JSON ONLY):
                     {
@@ -1833,7 +1833,7 @@ with tab_catalog:
                                 "Category": "General",
                                 "Unit": "PCS",
                                 "GST Rate": 18.0,
-                                "GrossDealer Catalog Rate": 0.0
+                                "Dealer Rate": 0.0
                             }
                         ]
                     }
@@ -1909,25 +1909,22 @@ with tab_catalog:
                                 model_code = str(prod.get("Model Code", "")).strip()
                                 full_title = f"{item_name} {model_code}".strip() if model_code and model_code not in item_name else item_name
 
-                                gross_rateprinted_rate = float(prod.get("GrossDealer Catalog Rate") or 0.0)
-                                net_dealer_costgst_val = round(gross_rate0.0 *if (1catalog_tax_type == "Non-GST (trade_discount_pct / 100)),Net 2)Rate" else selling_price = roundfloat(net_dealer_cost * prod.get(1"GST +Rate") (retail_markup_pctor / 10018.0)),
-2)
-                                                                if full_title and gross_rateprinted_rate >= 0:
+                                printed_rate = float(prod.get("Dealer Rate") or 0.0)
+                                gst_val = 0.0 if catalog_tax_type == "Non-GST / Net Rate" else float(prod.get("GST Rate") or 18.0)
+
+                                if full_title and printed_rate >= 0:
                                     catalog_items.append({
                                         "Model Name / Description": full_title,
-                                        "CategoryCatalog Rate ₹": str(prod.get("Category"printed_rate,
-                                        "GeneralGST Rate %")): gst_val,
+                                        "Catalog Rate ₹": printed_rate,
+                                        "GST Rate %": gst_val,
                                         "Unit": str(prod.get("Unit", "PCS")).upper(),
-                                        "GST RateCategory": floatstr(prod.get("GST RateCategory") or 18.0),                                         "Printed List Rate ₹General": gross_rate,
-                                        "Dealer Purchase Price (Cost) ₹": net_dealer_cost,
-                                        "Retail Selling Price (SP)
-₹":                                    selling_price
+                                        "Category": str(prod.get("Category", "General"))
                                     })
 
-                    status_box.update(label=f"✅ Extracted {len(catalog_items)} productsitems from price list!", state="complete", expanded=False)
+                    status_box.update(label=f"✅ Extracted {len(catalog_items)} items from price list!", state="complete", expanded=False)
 
                 except Exception as cat_err:
-                    status_box.update(label=f"❌ Failed to parse catalogprice list: {cat_err}", state="error")
+                    status_box.update(label=f"❌ Failed to parse price list: {cat_err}", state="error")
 
             if catalog_items:
                 st.session_state["catalog_df"] = pd.DataFrame(catalog_items)
@@ -1935,7 +1932,7 @@ with tab_catalog:
 
     if "catalog_df" in st.session_state and st.session_state["catalog_df"] is not None and not st.session_state["catalog_df"].empty:
         st.divider()
-        st.markdown("#### 📋 ParsedExtracted CatalogPrice ProductsList Preview")
+        st.markdown("#### 📋 Extracted Price List Preview")
         
         edited_cat_df = st.data_editor(
             st.session_state["catalog_df"],
@@ -1943,18 +1940,18 @@ with tab_catalog:
             use_container_width=True,
             key="catalog_editor",
             column_config={
-                "Model Name / Description": st.column_config.TextColumn("ProductModel Name / Model TitleDescription", required=True),
-                "Category":Catalog st.column_config.TextColumn("Category"),Rate                 ₹"Unit": st.column_config.TextColumnNumberColumn("Unit"),Catalog                 "GST Rate": st.column_config.NumberColumn(₹"GST %", format="%d%%₹%.2f"),
-                "PrintedGST List Rate ₹%": st.column_config.NumberColumn("PrintedGST List Rate ₹%", format="₹%.2f%d%%"),
-                "Dealer Purchase Price (Cost) ₹Unit": st.column_config.NumberColumnTextColumn("Dealer Purchase Price (Cost) ₹Unit", format="₹%.2f"),
-                "Retail Selling Price (SP) ₹Category": st.column_config.NumberColumnTextColumn("Retail Selling Price (SP) ₹Category", format="₹%.2f"),
+                "Model Name / Description": st.column_config.TextColumn("Model Name / Description", required=True),
+                "Catalog Rate ₹": st.column_config.NumberColumn("Catalog Rate ₹", format="₹%.2f"),
+                "GST Rate %": st.column_config.NumberColumn("GST Rate %", format="%d%%"),
+                "Unit": st.column_config.TextColumn("Unit"),
+                "Category": st.column_config.TextColumn("Category"),
             }
         )
 
         c_cat1, c_cat2 = st.columns([1, 1])
 
         with c_cat1:
-            if st.button("📥 Import All Extracted Items into Master Catalog", type="primary", use_container_width=True, key="btn_import_catalog_master"):
+            if st.button("📥 Import Extracted Items into Master Catalog", type="primary", use_container_width=True, key="btn_import_catalog_master"):
                 new_cat_records = []
                 for _, row in edited_cat_df.iterrows():
                     sku_name = str(row["Model Name / Description"]).strip()
@@ -1964,7 +1961,7 @@ with tab_catalog:
                             "Category": str(row.get("Category", "General")),
                             "Default_Unit": str(row.get("Unit", "PCS")).upper(),
                             "GST_Rate": float(row.get("GST Rate %", 18.0)),
-                            "Selling_Price": float(row.get("RetailCatalog SellingRate Price (SP) ₹", 0.0))
+                            "Selling_Price": float(row.get("Catalog Rate ₹", 0.0))
                         })
                 
                 if new_cat_records:
@@ -1978,16 +1975,13 @@ with tab_catalog:
         with c_cat2:
             wb_cat = openpyxl.Workbook()
             ws_cat = wb_cat.active
-            ws_cat.title = "ItemsPrice List"
+            ws_cat.title = "Price List"
 
             ws_cat.cell(row=1, column=1, value=ACTIVE_STORE_DISPLAY)
-            ws_cat.cell(row=2, column=1, value="ItemsSupplier Price List")
+            ws_cat.cell(row=2, column=1, value="Supplier Price List")
             ws_cat.cell(row=3, column=1, value=f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}")
 
-            exact_headers = [
-                "S. No.", "Model Name", "Current/ QuantityDescription", "Unit",Catalog "HSN/SAC",Rate                 ₹"Category", "GST Rate", %"Selling Price", "Selling Price (Secondary)",
-                "Purchase Price", "Purchase Price (Secondary)", "Secondary Unit", "RatioCategory"
-            ]
+            exact_headers = ["S. No.", "Model Name / Description", "Catalog Rate ₹", "GST Rate %", "Unit", "Category"]
 
             for col_num, header_title in enumerate(exact_headers, 1):
                 ws_cat.cell(row=5, column=col_num, value=header_title)
@@ -1996,22 +1990,19 @@ with tab_catalog:
                 row_idx = 6 + i
                 ws_cat.cell(row=row_idx, column=1, value=i + 1)
                 ws_cat.cell(row=row_idx, column=2, value=str(row["Model Name / Description"]).strip())
-                ws_cat.cell(row=row_idx, column=3, value=0.0)
-                ws_cat.cellfloat(row=row_idx, column=4, value=str(row.get("Unit",Catalog "PCS")).upper())Rate                 ws_cat.cell(row=row_idx, column=5, value=₹"")
-                ws_cat.cell(row=row_idx, column=6, value=str(row0.get("Category", "General"0)))
-                ws_cat.cell(row=row_idx, column=74, value=float(row.get("GST Rate %", 18.0)))
-                ws_cat.cell(row=row_idx, column=85, value=floatstr(row.get("Retail Selling Price (SP) ₹Unit", 0.0"PCS")))
-                ws_cat.cellupper(row=row_idx, column=9, value=""))
-                ws_cat.cell(row=row_idx, column=106, value=floatstr(row.get("Dealer Purchase Price (Cost) ₹Category", 0.0"General")))
+                ws_cat.cell(row=row_idx, column=3, value=float(row.get("Catalog Rate ₹", 0.0)))
+                ws_cat.cell(row=row_idx, column=4, value=float(row.get("GST Rate %", 18.0)))
+                ws_cat.cell(row=row_idx, column=5, value=str(row.get("Unit", "PCS")).upper())
+                ws_cat.cell(row=row_idx, column=6, value=str(row.get("Category", "General")))
 
             buf_cat = BytesIO()
             wb_cat.save(buf_cat)
             buf_cat.seek(0)
 
             st.download_button(
-                label="📥 Download CatalogPrice List Excel Import File",
+                label="📥 Download Price List Excel File",
                 data=buf_cat.getvalue(),
-                file_name=f"{selected_store_slug}_Catalog_PriceList_Price_List.xlsx",
+                file_name=f"{selected_store_slug}_Price_List.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
                 key="btn_dl_catalog_excel"
