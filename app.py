@@ -1022,30 +1022,32 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         pass
 
     try:
-        if "pdf" in mime_type.lower():
-            file_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
-            contents = [file_part]
+        # LIGHTWEIGHT COMPRESSION FOR MAXIMUM UPTIME SPEED
+        if "pdf" in mime_type.lower() and PYMUPDF_AVAILABLE:
+            # Render first page quickly at a lower, optimized DPI for instant OCR
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            page = doc[0]
+            pix = page.get_pixmap(dpi=110) # Optimized DPI for speed
+            img = Image.open(BytesIO(pix.tobytes("jpeg")))
+            doc.close()
         else:
             img = Image.open(BytesIO(file_bytes))
-            img_copy = img.copy()
-            if img_copy.mode in ("RGBA", "P"):
-                img_copy = img_copy.convert("RGB")
-            
-            enhancer = ImageEnhance.Contrast(img_copy)
-            img_copy = enhancer.enhance(1.2)
-            sharpness = ImageEnhance.Sharpness(img_copy)
-            img_copy = sharpness.enhance(1.5)
-            
-            img_copy.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
-            
-            buffer = BytesIO()
-            img_copy.save(buffer, format="JPEG", quality=85, optimize=True)
-            buffer.seek(0)
-            contents = [Image.open(buffer)]
-            
-            del img_copy
-            del img
-            gc.collect()
+
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        
+        # Aggressive downscaling for lightning-fast payload delivery
+        img.thumbnail((800, 800), Image.Resampling.BILINEAR)
+        
+        buffer = BytesIO()
+        img.save(buffer, format="JPEG", quality=75, optimize=True)
+        buffer.seek(0)
+        optimized_bytes = buffer.getvalue()
+        
+        del img
+        gc.collect()
+
+        contents = [Image.open(BytesIO(optimized_bytes))]
 
         prompt = """
         You are an enterprise financial OCR system for wholesale, retail, plywood, hardware, and building material invoices.
@@ -1082,7 +1084,7 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         
         contents.append(prompt)
         config = types.GenerateContentConfig(response_mime_type="application/json")
-        candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
+        candidate_models = ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']
         
         shuffled_keys = list(API_KEYS_POOL)
         random.shuffle(shuffled_keys)
@@ -1114,7 +1116,6 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
 
     except Exception as gemini_err:
         try:
-            st.toast("⚡ Gemini quota limit reached. Auto-switching to Groq Llama Vision Engine...")
             parsed_res = extract_invoice_data_with_groq(file_bytes, mime_type)
             try:
                 st.session_state["ocr_file_hash_cache"][file_hash] = parsed_res
@@ -1123,6 +1124,7 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
             return parsed_res
         except Exception as groq_err:
             raise Exception(f"All Primary (Gemini) and Secondary (Groq) AI services failed: {groq_err}")
+
 
 def process_single_item_tuple(item_tuple):
     file_bytes, mime_type = item_tuple
