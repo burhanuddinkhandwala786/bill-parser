@@ -18,13 +18,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import create_engine, text
 
-# Optional PyMuPDF (fitz) Import for Catalog Extraction
-try:
-    import fitz  # PyMuPDF
-    PYMUPDF_AVAILABLE = True
-except ImportError:
-    PYMUPDF_AVAILABLE = False
-
 # Optional Groq SDK Import for Secondary Failover
 try:
     from groq import Groq
@@ -50,7 +43,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- GLOBAL SESSION STATE INITIALIZATION ---
+# --- GLOBAL SESSION STATE INITIALIZATION (DEFENSIVE TOP-LEVEL) ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "user_store" not in st.session_state:
@@ -59,10 +52,8 @@ if "ocr_file_hash_cache" not in st.session_state:
     st.session_state["ocr_file_hash_cache"] = {}
 if "processed_invoice_keys" not in st.session_state:
     st.session_state["processed_invoice_keys"] = set()
-if "catalog_df" not in st.session_state:
-    st.session_state["catalog_df"] = None
 
-# --- DESIGN SYSTEM ---
+# --- UNIVERSAL OS — MODERN SAAS DESIGN SYSTEM ---
 st.markdown("""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -110,6 +101,7 @@ st.markdown("""
         --uos-focus-ring: 0 0 0 3px rgba(79, 70, 229, 0.20);
     }
 
+    /* Force Clean Canvas & Text Legibility Everywhere */
     html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"] {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
         -webkit-font-smoothing: antialiased;
@@ -128,6 +120,7 @@ st.markdown("""
     }
     div[data-testid="InputInstructions"] { display: none !important; }
 
+    /* Crisp Heading System */
     h1, h2, h3, h4, h5, h6, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4 {
         font-family: 'Inter', sans-serif !important;
         color: var(--uos-text) !important;
@@ -149,6 +142,7 @@ st.markdown("""
         opacity: 1 !important;
     }
 
+    /* Sidebar Interface */
     [data-testid="stSidebar"] {
         background: var(--uos-surface) !important;
         border-right: 1px solid var(--uos-border);
@@ -208,6 +202,7 @@ st.markdown("""
         background: var(--uos-danger-50) !important;
     }
 
+    /* Active Store Header Pill */
     .uos-store-pill {
         display: inline-flex; align-items: center; gap: 8px;
         padding: 6px 14px 6px 10px;
@@ -231,6 +226,7 @@ st.markdown("""
     }
     @keyframes uos-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
 
+    /* Navigation Tabs */
     .stTabs [data-baseweb="tab-list"] {
         gap: 4px;
         border-bottom: 1px solid var(--uos-border);
@@ -256,6 +252,7 @@ st.markdown("""
     .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
     .stTabs [data-baseweb="tab-panel"] { padding-top: 1.25rem; }
 
+    /* Metric Cards */
     [data-testid="stMetric"] {
         background: var(--uos-surface) !important;
         border: 1px solid var(--uos-border) !important;
@@ -282,6 +279,7 @@ st.markdown("""
     }
     [data-testid="stMetricValue"] div { color: var(--uos-text) !important; }
 
+    /* Bordered Section Wrapper & Form Cards */
     [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stForm"], [data-testid="stExpander"] {
         border: 1px solid var(--uos-border) !important;
         border-radius: var(--uos-radius-lg) !important;
@@ -293,6 +291,7 @@ st.markdown("""
     div[data-testid="stColumn"] > div { flex: 1; }
     div[data-testid="stColumn"] div[data-testid="stVerticalBlockBorderWrapper"] { height: 100% !important; }
 
+    /* Buttons */
     .stButton > button, .stDownloadButton > button, .stFormSubmitButton > button {
         font-family: 'Inter', sans-serif !important;
         font-weight: 600 !important;
@@ -326,6 +325,7 @@ st.markdown("""
         border-color: var(--uos-primary-600) !important;
     }
 
+    /* Input Controls & Spin Buttons */
     .stTextInput input, .stNumberInput input, .stTextArea textarea,
     div[data-baseweb="input"] input, div[data-baseweb="select"] > div {
         background: var(--uos-surface) !important;
@@ -355,6 +355,7 @@ st.markdown("""
         border-color: var(--uos-border) !important;
     }
 
+    /* Radio Segmented Control Pills */
     [data-testid="stRadio"] > div[role="radiogroup"] {
         display: inline-flex;
         gap: 4px;
@@ -384,6 +385,7 @@ st.markdown("""
     }
     [data-testid="stRadio"] label:has(input:checked) p { color: var(--uos-primary) !important; font-weight: 600 !important; }
 
+    /* Dropzone Upload Box */
     [data-testid="stFileUploaderDropzone"], section[data-testid="stFileUploadDropzone"] {
         background: var(--uos-surface-2) !important;
         border: 1.5px dashed var(--uos-border-strong) !important;
@@ -394,6 +396,7 @@ st.markdown("""
         color: var(--uos-text-muted) !important;
     }
 
+    /* Expander Container */
     [data-testid="stExpander"] summary, [data-testid="stExpander"] > details > summary {
         padding: 14px 18px !important;
         font-weight: 600 !important;
@@ -402,6 +405,7 @@ st.markdown("""
     }
     [data-testid="stExpander"] summary:hover { background: var(--uos-surface-2) !important; }
 
+    /* Data Editor & DataFrame Override (Forces Clean White Table Surface) */
     [data-testid="stDataFrame"], [data-testid="stDataEditor"] {
         border: 1px solid var(--uos-border) !important;
         border-radius: var(--uos-radius) !important;
@@ -418,6 +422,7 @@ st.markdown("""
         color: var(--uos-text) !important;
     }
 
+    /* Section Number Badge */
     .uos-num-badge {
         display: inline-flex; align-items: center; justify-content: center;
         width: 26px; height: 26px; border-radius: 8px;
@@ -425,6 +430,7 @@ st.markdown("""
         font-weight: 700; font-size: 0.82rem; margin-right: 10px; vertical-align: -3px;
     }
 
+    /* Auth Screen Lockup */
     .uos-auth-hero { text-align: center; padding: 20px 0 24px 0; }
     .uos-auth-mark {
         display: inline-flex; align-items: center; justify-content: center;
@@ -438,6 +444,7 @@ st.markdown("""
 
     [data-testid="stProgress"] > div > div > div { background: var(--uos-primary) !important; }
 
+    /* MOBILE SPECIFIC RESPONSIVE OVERRIDES */
     @media (max-width: 768px) {
         .block-container {
             padding-left: 0.75rem !important;
@@ -1013,6 +1020,7 @@ def extract_invoice_data_with_groq(file_bytes, mime_type="image/jpeg"):
     return json.loads(text_res)
 
 def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
+    # Defensive, Thread-Safe Session File Hash Cache Check
     file_hash = hashlib.md5(file_bytes).hexdigest()
     try:
         cache = getattr(st.session_state, "ocr_file_hash_cache", {})
@@ -1021,30 +1029,33 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
     except Exception:
         pass
 
+    # -------------------------------------------------------------
+    # TRY 1: PRIMARY GEMINI POOL (Shuffled API Keys for Load Balancing)
+    # -------------------------------------------------------------
     try:
-        if "pdf" in mime_type.lower() and PYMUPDF_AVAILABLE:
-            doc = fitz.open(stream=file_bytes, filetype="pdf")
-            page = doc[0]
-            pix = page.get_pixmap(dpi=110)
-            img = Image.open(BytesIO(pix.tobytes("jpeg")))
-            doc.close()
+        if "pdf" in mime_type.lower():
+            file_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
+            contents = [file_part]
         else:
             img = Image.open(BytesIO(file_bytes))
-
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-        
-        img.thumbnail((800, 800), Image.Resampling.BILINEAR)
-        
-        buffer = BytesIO()
-        img.save(buffer, format="JPEG", quality=75, optimize=True)
-        buffer.seek(0)
-        optimized_bytes = buffer.getvalue()
-        
-        del img
-        gc.collect()
-
-        contents = [Image.open(BytesIO(optimized_bytes))]
+            img_copy = img.copy()
+            if img_copy.mode in ("RGBA", "P"):
+                img_copy = img_copy.convert("RGB")
+            
+            # FAST PRE-PROCESSING FOR BLURRY/DARK IMAGES
+            # Enhance contrast and sharpness slightly to speed up OCR parsing accuracy
+            enhancer = ImageEnhance.Contrast(img_copy)
+            img_copy = enhancer.enhance(1.2)
+            sharpness = ImageEnhance.Sharpness(img_copy)
+            img_copy = sharpness.enhance(1.5)
+            
+            # Optimized Thumbnail Downsizing for lightning-fast inference
+            img_copy.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
+            
+            buffer = BytesIO()
+            img_copy.save(buffer, format="JPEG", quality=85, optimize=True)
+            buffer.seek(0)
+            contents = [Image.open(buffer)]
 
         prompt = """
         You are an enterprise financial OCR system for wholesale, retail, plywood, hardware, and building material invoices.
@@ -1081,8 +1092,9 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         
         contents.append(prompt)
         config = types.GenerateContentConfig(response_mime_type="application/json")
-        candidate_models = ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']
+        candidate_models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash']
         
+        # Load Balance Gemini Keys Randomly Per Execution Request
         shuffled_keys = list(API_KEYS_POOL)
         random.shuffle(shuffled_keys)
 
@@ -1111,8 +1123,12 @@ def extract_invoice_data_multiformat(file_bytes, mime_type="image/jpeg"):
         
         raise Exception("All Gemini API keys failed or quota exhausted.")
 
+    # -------------------------------------------------------------
+    # TRY 2: FAIL-SAFE FALLBACK TO GROQ LLAMA 3.2 VISION
+    # -------------------------------------------------------------
     except Exception as gemini_err:
         try:
+            st.toast("⚡ Gemini quota limit reached. Auto-switching to Groq Llama Vision Engine...")
             parsed_res = extract_invoice_data_with_groq(file_bytes, mime_type)
             try:
                 st.session_state["ocr_file_hash_cache"][file_hash] = parsed_res
@@ -1128,132 +1144,6 @@ def process_single_item_tuple(item_tuple):
         return extract_invoice_data_multiformat(file_bytes, mime_type)
     except Exception as e:
         return {"ERROR": str(e)}
-
-# --- TAB 2 CATALOG PARSER HELPER (SINGLE FILE) ---
-def parse_single_catalog_file(file_tuple):
-    file_bytes, mime_type = file_tuple
-    catalog_items = []
-    try:
-        images_to_process = []
-        if "pdf" in mime_type.lower() and PYMUPDF_AVAILABLE:
-            pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
-            for page_idx in range(len(pdf_doc)):
-                page = pdf_doc[page_idx]
-                pix = page.get_pixmap(dpi=110)
-                img = Image.open(BytesIO(pix.tobytes("jpeg")))
-                images_to_process.append(img)
-            pdf_doc.close()
-        else:
-            img = Image.open(BytesIO(file_bytes))
-            images_to_process.append(img)
-
-        cat_prompt = """
-        You are an enterprise catalog OCR system for building materials, laminates, door skins, plywood, and hardware.
-        Extract the Supplier/Brand Company Name (e.g. DAARVI, GREENPLY, EBCO) from the page header, and every product row listed in the table or price list.
-
-        CRITICAL EXTRACTION RULES:
-        1. "Supplier Name": Brand or company name publishing this price list.
-        2. "Item Name": Full product title or description.
-        3. "Model Code": Model number or series code if present, else "".
-        4. "Unit": PCS, BOX, SET, LTR, KG, SQFT, MTR. Default "PCS".
-        5. "GST Rate": GST percentage (0, 5, 12, 18, 28). Default 18.0.
-        6. "Dealer Rate": Printed rate per piece or MRP as printed under RATE PER PCS / PRICE column.
-
-        OUTPUT SCHEMA (STRICT JSON ONLY):
-        {
-            "Supplier Name": "Brand Name",
-            "Products": [
-                {
-                    "Item Name": "",
-                    "Model Code": "",
-                    "Unit": "PCS",
-                    "GST Rate": 18.0,
-                    "Dealer Rate": 0.0
-                }
-            ]
-        }
-        """
-
-        config = types.GenerateContentConfig(response_mime_type="application/json")
-        candidate_models = ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']
-        shuffled_keys = list(API_KEYS_POOL)
-        random.shuffle(shuffled_keys)
-
-        for img_obj in images_to_process:
-            if img_obj.mode in ("RGBA", "P"):
-                img_obj = img_obj.convert("RGB")
-            img_obj.thumbnail((800, 800), Image.Resampling.BILINEAR)
-
-            buf = BytesIO()
-            img_obj.save(buf, format="JPEG", quality=75, optimize=True)
-            buf.seek(0)
-            raw_page_bytes = buf.getvalue()
-            
-            contents = [Image.open(BytesIO(raw_page_bytes)), cat_prompt]
-            parsed_page = None
-
-            for key in shuffled_keys:
-                try:
-                    client = genai.Client(api_key=key)
-                    for model_name in candidate_models:
-                        try:
-                            res = _call_gemini_with_retry(client, model_name, contents, config)
-                            text_res = res.text.strip()
-                            if text_res.startswith("```json"):
-                                text_res = text_res[7:-3].strip()
-                            elif text_res.startswith("```"):
-                                text_res = text_res[3:-3].strip()
-                            
-                            parsed_page = json.loads(text_res)
-                            break
-                        except Exception:
-                            continue
-                    if parsed_page:
-                        break
-                except Exception:
-                    continue
-
-            if not parsed_page and GROQ_AVAILABLE:
-                try:
-                    groq_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
-                    if groq_key:
-                        base64_img = base64.b64encode(raw_page_bytes).decode('utf-8')
-                        groq_client = Groq(api_key=groq_key)
-                        comp = groq_client.chat.completions.create(
-                            model="llama-3.2-11b-vision-preview",
-                            response_format={"type": "json_object"},
-                            messages=[{
-                                "role": "user",
-                                "content": [
-                                    {"type": "text", "text": cat_prompt},
-                                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
-                                ]
-                            }],
-                            temperature=0.1
-                        )
-                        parsed_page = json.loads(comp.choices[0].message.content.strip())
-                except Exception:
-                    pass
-
-            if parsed_page:
-                supplier_name = str(parsed_page.get("Supplier Name", "GENERIC VENDOR")).strip().upper()
-                for prod in parsed_page.get("Products", []):
-                    item_name = str(prod.get("Item Name", "")).strip()
-                    model_code = str(prod.get("Model Code", "")).strip()
-                    full_title = f"{item_name} {model_code}".strip() if model_code and model_code not in item_name else item_name
-
-                    printed_rate = float(prod.get("Dealer Rate") or 0.0)
-                    if full_title and printed_rate >= 0:
-                        catalog_items.append({
-                            "Supplier / Brand": supplier_name,
-                            "Model Name / Description": full_title,
-                            "Catalog Rate ₹": printed_rate,
-                            "GST Rate %": float(prod.get("GST Rate") or 18.0),
-                            "Unit": str(prod.get("Unit", "PCS")).upper()
-                        })
-    except Exception:
-        pass
-    return catalog_items
 
 # --- REPORTLAB PDF GENERATOR ---
 def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, quote_df: pd.DataFrame, grand_total: float) -> bytes:
@@ -1384,9 +1274,8 @@ def generate_quotation_pdf(store_name: str, phone_str: str, customer_name: str, 
     return buffer.getvalue()
 
 # --- WORKSPACE TABS ---
-tab_parser, tab_catalog, tab_master, tab_memory, tab_guide = st.tabs([
+tab_parser, tab_master, tab_memory, tab_guide = st.tabs([
     "📥 Batch Invoice Parser", 
-    "📚 Price Catalog Extractor",
     "⚙️ Master Catalog",
     "📋 Vendor Memory", 
     "📖 Operating Guide"
@@ -1403,12 +1292,14 @@ with tab_parser:
 
     st.divider()
 
+    # --- EASY STREAMLINED QUOTATION GENERATOR ---
     with st.expander("📄 Generate Customer Quotation (On-the-go)", expanded=False):
         st.caption("Create a professional PDF quote instantly either by manual quick entry or auto-calculating from an audited purchase bill.")
         
         saved_phone = st.session_state["user_store"].get("phone") or get_store_phone(selected_store_slug)
         q_tab_manual, q_tab_bill = st.tabs(["✍️ Quick Manual Entry", "📥 Auto-Quote from Parsed Bill"])
         
+        # --- MODE 1: MANUAL QUICK QUOTATION ---
         with q_tab_manual:
             col_m1, col_m2 = st.columns([2, 2])
             with col_m1:
@@ -1486,6 +1377,7 @@ with tab_parser:
                     else:
                         st.warning("⚠️ 'reportlab' library is missing in environment.")
 
+        # --- MODE 2: AUTO-QUOTATION FROM PARSED BILL ---
         with q_tab_bill:
             if "parsed_df" not in st.session_state or st.session_state["parsed_df"].empty:
                 st.info("ℹ️ No parsed bill found. Upload a bill below or use 'Quick Manual Entry' above.")
@@ -1547,6 +1439,7 @@ with tab_parser:
 
     st.divider()
 
+    # --- INGESTION DROPZONE ---
     col_upload, col_info = st.columns([2, 1])
     
     with col_upload:
@@ -1631,6 +1524,7 @@ with tab_parser:
                     inv_num = parsed_json.get("Invoice Number", "")
                     inv_date = parsed_json.get("Invoice Date", "")
                     
+                    # Soft Duplicate Invoice Detection
                     if inv_num:
                         duplicate_key = f"{supplier.strip().upper()}_{inv_num.strip().upper()}"
                         if duplicate_key in st.session_state.get("processed_invoice_keys", set()):
@@ -1681,6 +1575,7 @@ with tab_parser:
                 gc.collect()
                 st.rerun()
 
+    # --- REVIEW & EDIT WORKSPACE ---
     if "parsed_df" in st.session_state:
         st.divider()
         st.markdown('<h3><span class="uos-num-badge">2</span>Live Inventory Audit Workspace</h3>', unsafe_allow_html=True)
@@ -1780,7 +1675,7 @@ with tab_parser:
                 raw = str(row.get("Raw Vendor Item", "")).strip().upper()
                 official = str(row.get("Official SKU", "")).replace("⚠️ Needs Review: ", "").strip()
                 cat_val = str(row.get("Category", "General"))
-                unit_val = str(row.get("Unit", "PCS")).upper()
+                unit_val = str(row.get("Unit", "PCS"))
                 gst_val = float(row.get("GST Rate", 18.0))
                 sp_val = float(row.get("Selling Price", 0.0))
                 
@@ -1828,13 +1723,12 @@ with tab_parser:
                 raw_selling = row.get("Selling Price", 0.0)
                 selling_val = float(raw_selling) if pd.notnull(raw_selling) and float(raw_selling) > 0 else ""
                 purchase_val = float(row.get("Purchase Price", 0.0)) if pd.notnull(row.get("Purchase Price")) else 0.0
-                clean_sku_name = str(row["Official SKU"]).replace("⚠️ Needs Review: ", "").strip()
                 
                 ws.cell(row=row_idx, column=1, value=i + 1)
-                ws.cell(row=row_idx, column=2, value=clean_sku_name)
+                ws.cell(row=row_idx, column=2, value=str(row["Official SKU"]).replace("⚠️ Needs Review: ", ""))
                 ws.cell(row=row_idx, column=3, value=float(row["Current Quantity"]))
-                ws.cell(row=row_idx, column=4, value=str(row["Unit"]).upper())
-                ws.cell(row=row_idx, column=5, value=str(row.get("HSN/SAC", "")))
+                ws.cell(row=row_idx, column=4, value=str(row["Unit"]))
+                ws.cell(row=row_idx, column=5, value=str(row["HSN/SAC"]))
                 ws.cell(row=row_idx, column=6, value=str(row.get("Category", "General")))
                 ws.cell(row=row_idx, column=7, value=float(row["GST Rate"]))
                 ws.cell(row=row_idx, column=8, value=selling_val)
@@ -1849,151 +1743,15 @@ with tab_parser:
             buffer.seek(0)
             
             st.download_button(
-                label=f"📥 Download ERP Bulk Import File for {ACTIVE_STORE_DISPLAY}",
+                label=f"📥 Download Bulk Import Spreadsheet for {ACTIVE_STORE_DISPLAY}",
                 data=buffer.getvalue(),
-                file_name=f"{selected_store_slug}_ERP_Stock_Import.xlsx",
+                file_name=f"{selected_store_slug}_Inventory_Import.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
 
 # ==========================================
-# TAB 2: PRICE CATALOG & MODEL EXTRACTOR (BATCH CONCURRENT & GROUPED BY BRAND)
-# ==========================================
-with tab_catalog:
-    st.subheader(f"📚 Multi-Vendor Price List & Catalog Batch Extractor ({ACTIVE_STORE_DISPLAY})")
-    st.caption("Drop multiple supplier price lists/catalogs at once. The AI will extract and automatically group products together by company/brand name.")
-
-    col_cat_left, col_cat_right = st.columns([2, 1])
-
-    with col_cat_left:
-        catalog_files = st.file_uploader(
-            "Upload Multiple Supplier Price Lists (PDFs or Images)",
-            type=["pdf", "png", "jpg", "jpeg"],
-            accept_multiple_files=True,
-            key="catalog_file_uploader_batch"
-        )
-
-    with col_cat_right:
-        catalog_tax_type = st.radio(
-            "Catalog Tax Status:",
-            ["Taxable GST Rate", "Non-GST / Net Rate"],
-            horizontal=True,
-            key="cat_tax_status_radio",
-            help="Select whether the printed catalog prices include GST or are net rates."
-        )
-
-    if catalog_files:
-        st_files_tuples = []
-        for f in catalog_files:
-            mtype = "application/pdf" if f.name.lower().endswith(".pdf") else "image/jpeg"
-            st_files_tuples.append((f.read(), mtype))
-
-        if st.button("🚀 Process All Price Lists Concurrently", type="primary", use_container_width=True, key="btn_run_catalog_ai"):
-            all_extracted_catalog_items = []
-
-            with st.status(f"Parsing {len(st_files_tuples)} price catalog(s) simultaneously in parallel...", expanded=True) as status_box:
-                try:
-                    with ThreadPoolExecutor(max_workers=min(len(st_files_tuples), 6)) as executor:
-                        results = list(executor.map(parse_single_catalog_file, st_files_tuples))
-                        
-                    for file_items in results:
-                        for prod in file_items:
-                            gst_val = 0.0 if catalog_tax_type == "Non-GST / Net Rate" else float(prod.get("GST Rate %", 18.0))
-                            prod["GST Rate %"] = gst_val
-                            all_extracted_catalog_items.append(prod)
-
-                    status_box.update(label=f"✅ Successfully extracted & grouped {len(all_extracted_catalog_items)} total items!", state="complete", expanded=False)
-
-                except Exception as cat_err:
-                    status_box.update(label=f"❌ Failed to parse price lists: {cat_err}", state="error")
-
-            if all_extracted_catalog_items:
-                df_raw_cat = pd.DataFrame(all_extracted_catalog_items)
-                # Sort cleanly by Supplier / Brand name so X company products stay together
-                df_sorted_cat = df_raw_cat.sort_values(by=["Supplier / Brand", "Model Name / Description"]).reset_index(drop=True)
-                st.session_state["catalog_df"] = df_sorted_cat
-                st.rerun()
-
-    if "catalog_df" in st.session_state and st.session_state["catalog_df"] is not None and not st.session_state["catalog_df"].empty:
-        st.divider()
-        st.markdown("#### 📋 Extracted & Brand-Grouped Price Lists Preview")
-        
-        edited_cat_df = st.data_editor(
-            st.session_state["catalog_df"],
-            num_rows="dynamic",
-            use_container_width=True,
-            key="catalog_editor",
-            column_config={
-                "Supplier / Brand": st.column_config.TextColumn("Supplier / Brand", required=True),
-                "Model Name / Description": st.column_config.TextColumn("Model Name / Description", required=True),
-                "Catalog Rate ₹": st.column_config.NumberColumn("Catalog Rate ₹", format="₹%.2f"),
-                "GST Rate %": st.column_config.NumberColumn("GST Rate %", format="%d%%"),
-                "Unit": st.column_config.TextColumn("Unit"),
-            }
-        )
-
-        c_cat1, c_cat2 = st.columns([1, 1])
-
-        with c_cat1:
-            if st.button("📥 Import Grouped Items into Master Catalog", type="primary", use_container_width=True, key="btn_import_catalog_master"):
-                new_cat_records = []
-                for _, row in edited_cat_df.iterrows():
-                    sku_name = f"[{row.get('Supplier / Brand', 'GENERIC')}] {row['Model Name / Description']}".strip()
-                    if sku_name:
-                        new_cat_records.append({
-                            "Official_SKU_Name": sku_name,
-                            "Category": str(row.get("Supplier / Brand", "General")),
-                            "Default_Unit": str(row.get("Unit", "PCS")).upper(),
-                            "GST_Rate": float(row.get("GST Rate %", 18.0)),
-                            "Selling_Price": float(row.get("Catalog Rate ₹", 0.0))
-                        })
-                
-                if new_cat_records:
-                    bulk_df = pd.DataFrame(new_cat_records)
-                    combined = pd.concat([master_df, bulk_df], ignore_index=True)
-                    combined = combined.drop_duplicates(subset=["Official_SKU_Name"], keep="last")
-                    save_master(combined, selected_store_slug)
-                    st.toast(f"Imported {len(new_cat_records)} items to Master Catalog!")
-                    st.rerun()
-
-        with c_cat2:
-            wb_cat = openpyxl.Workbook()
-            ws_cat = wb_cat.active
-            ws_cat.title = "Price Lists"
-
-            ws_cat.cell(row=1, column=1, value=ACTIVE_STORE_DISPLAY)
-            ws_cat.cell(row=2, column=1, value="Consolidated Supplier Price Lists")
-            ws_cat.cell(row=3, column=1, value=f"Generated On: {time.strftime('%d-%m-%Y %H:%M:%S')}")
-
-            exact_headers = ["S. No.", "Supplier / Brand", "Model Name / Description", "Catalog Rate ₹", "GST Rate %", "Unit"]
-
-            for col_num, header_title in enumerate(exact_headers, 1):
-                ws_cat.cell(row=5, column=col_num, value=header_title)
-
-            for i, row in edited_cat_df.iterrows():
-                row_idx = 6 + i
-                ws_cat.cell(row=row_idx, column=1, value=i + 1)
-                ws_cat.cell(row=row_idx, column=2, value=str(row.get("Supplier / Brand", "")).strip())
-                ws_cat.cell(row=row_idx, column=3, value=str(row["Model Name / Description"]).strip())
-                ws_cat.cell(row=row_idx, column=4, value=float(row.get("Catalog Rate ₹", 0.0)))
-                ws_cat.cell(row=row_idx, column=5, value=float(row.get("GST Rate %", 18.0)))
-                ws_cat.cell(row=row_idx, column=6, value=str(row.get("Unit", "PCS")).upper())
-
-            buf_cat = BytesIO()
-            wb_cat.save(buf_cat)
-            buf_cat.seek(0)
-
-            st.download_button(
-                label="📥 Download Grouped Price List Excel File",
-                data=buf_cat.getvalue(),
-                file_name=f"{selected_store_slug}_Grouped_Price_Lists.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key="btn_dl_catalog_excel"
-            )
-
-# ==========================================
-# TAB 3: STORE MASTER CATALOG MANAGER
+# TAB 2: STORE MASTER CATALOG MANAGER
 # ==========================================
 with tab_master:
     st.subheader(f"⚙️ Master Inventory Catalog ({ACTIVE_STORE_DISPLAY})")
@@ -2074,6 +1832,7 @@ with tab_master:
 
     col_add, col_list = st.columns([1, 2])
     
+    # --- INSTANT SINGLE SKU SAVER ---
     with col_add:
         with st.container(border=True):
             st.markdown("#### ➕ Add Single Master SKU")
@@ -2090,6 +1849,7 @@ with tab_master:
                     st.toast(f"⚡ Saved '{clean_sku}' instantly!")
                     st.rerun()
                     
+    # --- COMPACT CHECKBOX MULTI-DELETE TABLE WITH LIVE SEARCH ---
     with col_list:
         with st.container(border=True):
             st.markdown("#### 📋 Catalog Register")
@@ -2135,7 +1895,7 @@ with tab_master:
                 st.info("Master catalog for this store is currently empty.")
 
 # ==========================================
-# TAB 4: VENDOR SKU MEMORY WORKSPACE
+# TAB 3: VENDOR SKU MEMORY WORKSPACE
 # ==========================================
 with tab_memory:
     st.subheader(f"🧠 Learned AI Vendor Memory ({ACTIVE_STORE_DISPLAY})")
@@ -2161,7 +1921,7 @@ with tab_memory:
         st.info("No learned vendor mappings recorded yet for this store location.")
 
 # ==========================================
-# TAB 5: IMPORT GUIDE
+# TAB 4: IMPORT GUIDE
 # ==========================================
 with tab_guide:
     st.subheader("📖 Standard Operating Procedure")
